@@ -58,6 +58,9 @@ CREATE TABLE organizations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
 
+    -- 조직 컨텍스트 프롬프트 (Layer 1)
+    context_prompt TEXT,  -- 회사 비전, 핵심 가치, 전사 규칙
+
     -- 리소스 제한
     max_concurrent_holons INTEGER DEFAULT 10,
     max_total_holons INTEGER DEFAULT 100,
@@ -179,6 +182,9 @@ CREATE TABLE teams (
     name VARCHAR(100) NOT NULL,
     description TEXT,
 
+    -- 팀 컨텍스트 프롬프트 (Layer 2)
+    context_prompt TEXT,  -- 팀 목표, 협업 규칙, 커뮤니케이션 스타일
+
     -- 팀 계층
     parent_team_id UUID REFERENCES teams(id) ON DELETE SET NULL,
     leader_holon_id UUID,
@@ -220,8 +226,8 @@ CREATE TABLE hollons (
     status VARCHAR(20) NOT NULL DEFAULT 'idle'
         CHECK (status IN ('idle', 'running', 'waiting', 'terminated', 'error')),
 
-    -- 개별 설정 (Role 오버라이드)
-    custom_prompt_suffix TEXT,
+    -- 개별 설정 (Role 오버라이드) - Layer 4
+    custom_prompt TEXT,  -- 홀론 커스텀 프롬프트 (성격, 특화 영역, 학습된 선호도)
     custom_capabilities JSONB,
     custom_allowed_paths JSONB,
 
@@ -701,7 +707,7 @@ CREATE INDEX idx_channel_messages_channel ON channel_messages(channel_id);
 CREATE INDEX idx_channel_messages_created ON channel_messages(created_at DESC);
 ```
 
-#### documents
+#### documents (Memory 시스템 통합)
 ```sql
 CREATE TABLE documents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -712,10 +718,44 @@ CREATE TABLE documents (
     name VARCHAR(255) NOT NULL,
     slug VARCHAR(255),
     content TEXT,
+    summary TEXT,  -- 문서 요약 (프롬프트 주입 시 사용)
 
+    -- 문서 타입 확장 (Memory 역할 포함)
     doc_type VARCHAR(20) NOT NULL DEFAULT 'document'
-        CHECK (doc_type IN ('folder', 'document')),
+        CHECK (doc_type IN (
+            'folder',     -- 폴더
+            'spec',       -- 기술 명세서
+            'adr',        -- 아키텍처 결정 기록
+            'guide',      -- 가이드/매뉴얼
+            'runbook',    -- 운영 절차서
+            'memory',     -- 학습된 패턴, 선호도 (자동 생성)
+            'postmortem', -- 장애/실패 분석
+            'meeting',    -- 회의/논의 기록
+            'changelog'   -- 변경 이력
+        )),
 
+    -- Memory 스코프 (문서 적용 범위)
+    scope VARCHAR(20) NOT NULL DEFAULT 'project'
+        CHECK (scope IN ('organization', 'team', 'project', 'hollon')),
+    scope_id UUID,  -- scope에 따라 org_id, team_id, project_id, hollon_id 참조
+
+    -- 검색/매칭용 메타데이터
+    keywords TEXT[] DEFAULT '{}',
+    importance INTEGER DEFAULT 5 CHECK (importance BETWEEN 1 AND 10),
+
+    -- 자동 생성 관련
+    auto_generated BOOLEAN DEFAULT false,
+    source_task_id UUID REFERENCES tasks(id) ON DELETE SET NULL,
+    source_hollon_id UUID REFERENCES hollons(id) ON DELETE SET NULL,
+
+    -- 접근 통계 (Memory 주입 우선순위 결정)
+    access_count INTEGER DEFAULT 0,
+    last_accessed_at TIMESTAMP WITH TIME ZONE,
+
+    -- 만료 (임시 메모리용)
+    expires_at TIMESTAMP WITH TIME ZONE,
+
+    -- 기존 연결 (하위 호환)
     project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
     team_id UUID REFERENCES teams(id) ON DELETE SET NULL,
     task_id UUID REFERENCES tasks(id) ON DELETE SET NULL,
@@ -730,6 +770,14 @@ CREATE TABLE documents (
 
     UNIQUE(organization_id, parent_id, name)
 );
+
+-- Memory 검색 최적화 인덱스
+CREATE INDEX idx_documents_scope ON documents(scope, scope_id);
+CREATE INDEX idx_documents_type ON documents(doc_type);
+CREATE INDEX idx_documents_keywords ON documents USING GIN(keywords);
+CREATE INDEX idx_documents_importance ON documents(importance DESC);
+CREATE INDEX idx_documents_auto_generated ON documents(auto_generated) WHERE auto_generated = true;
+CREATE INDEX idx_documents_expires ON documents(expires_at) WHERE expires_at IS NOT NULL;
 
 CREATE TABLE document_versions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -942,6 +990,7 @@ interface BrainProviderMeta {
 interface Organization {
   id: string;
   name: string;
+  contextPrompt?: string;  // Layer 1 프롬프트
   maxConcurrentHolons: number;
   maxTotalHolons: number;
   costLimitDailyCents?: number;
@@ -988,7 +1037,7 @@ interface Hollon {
   parentId: string | null;
   lifecycle: 'permanent' | 'temporary';
   status: 'idle' | 'running' | 'waiting' | 'terminated' | 'error';
-  customPromptSuffix?: string;
+  customPrompt?: string;  // Layer 4 프롬프트
   customCapabilities?: string[];
   customAllowedPaths?: string[];
   brainProviderConfigId?: string;
@@ -1006,6 +1055,7 @@ interface Team {
   organizationId: string;
   name: string;
   description?: string;
+  contextPrompt?: string;  // Layer 2 프롬프트
   parentTeamId?: string;
   leaderHolonId?: string;
   createdAt: Date;
@@ -1051,6 +1101,49 @@ interface Task {
   startedAt?: Date;
   completedAt?: Date;
   cancelledAt?: Date;
+  updatedAt: Date;
+}
+
+// === Document (Memory 통합) ===
+
+type DocumentType =
+  | 'folder'
+  | 'spec'
+  | 'adr'
+  | 'guide'
+  | 'runbook'
+  | 'memory'
+  | 'postmortem'
+  | 'meeting'
+  | 'changelog';
+
+type DocumentScope = 'organization' | 'team' | 'project' | 'hollon';
+
+interface Document {
+  id: string;
+  organizationId: string;
+  parentId?: string;
+  name: string;
+  slug?: string;
+  content?: string;
+  summary?: string;
+  docType: DocumentType;
+  scope: DocumentScope;
+  scopeId?: string;
+  keywords: string[];
+  importance: number;  // 1-10
+  autoGenerated: boolean;
+  sourceTaskId?: string;
+  sourceHollonId?: string;
+  accessCount: number;
+  lastAccessedAt?: Date;
+  expiresAt?: Date;
+  projectId?: string;
+  teamId?: string;
+  taskId?: string;
+  createdBy?: string;
+  lastEditedBy?: string;
+  createdAt: Date;
   updatedAt: Date;
 }
 
@@ -1667,8 +1760,1829 @@ async function listenForMessages(holonId: string) {
 
 ---
 
+## 6. 프롬프트 계층 합성
+
+### 6.1 프롬프트 합성 서비스
+
+```typescript
+// NestJS Service
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+
+@Injectable()
+export class PromptComposerService {
+  constructor(
+    @InjectRepository(Organization)
+    private orgRepo: Repository<Organization>,
+    @InjectRepository(Team)
+    private teamRepo: Repository<Team>,
+    @InjectRepository(Role)
+    private roleRepo: Repository<Role>,
+    @InjectRepository(Hollon)
+    private hollonRepo: Repository<Hollon>,
+    @InjectRepository(Document)
+    private documentRepo: Repository<Document>,
+  ) {}
+
+  /**
+   * 6계층 프롬프트 합성
+   * Layer 1: Organization Context
+   * Layer 2: Team Context
+   * Layer 3: Role Prompt
+   * Layer 4: Hollon Custom Prompt
+   * Layer 5: Long-term Memory (Documents)
+   * Layer 6: Current Task Context
+   */
+  async composePrompt(
+    hollonId: string,
+    taskId?: string,
+  ): Promise<ComposedPrompt> {
+    const hollon = await this.hollonRepo.findOne({
+      where: { id: hollonId },
+      relations: ['role', 'team', 'organization'],
+    });
+
+    if (!hollon) throw new Error(`Hollon not found: ${hollonId}`);
+
+    const layers: PromptLayer[] = [];
+
+    // Layer 1: Organization Context
+    if (hollon.organization?.contextPrompt) {
+      layers.push({
+        layer: 1,
+        name: 'Organization Context',
+        content: hollon.organization.contextPrompt,
+      });
+    }
+
+    // Layer 2: Team Context (상위 팀 포함)
+    const teamContexts = await this.getTeamContextChain(hollon.teamId);
+    teamContexts.forEach((ctx, idx) => {
+      layers.push({
+        layer: 2,
+        name: `Team Context (${ctx.teamName})`,
+        content: ctx.contextPrompt,
+      });
+    });
+
+    // Layer 3: Role Prompt
+    if (hollon.role?.systemPrompt) {
+      layers.push({
+        layer: 3,
+        name: 'Role Prompt',
+        content: hollon.role.systemPrompt,
+      });
+    }
+
+    // Layer 4: Hollon Custom Prompt
+    if (hollon.customPrompt) {
+      layers.push({
+        layer: 4,
+        name: 'Hollon Custom',
+        content: hollon.customPrompt,
+      });
+    }
+
+    // Layer 5: Relevant Memory (Documents)
+    const memories = await this.getRelevantMemories(hollon, taskId);
+    if (memories.length > 0) {
+      layers.push({
+        layer: 5,
+        name: 'Long-term Memory',
+        content: this.formatMemories(memories),
+      });
+    }
+
+    // Layer 6: Task Context
+    if (taskId) {
+      const taskContext = await this.getTaskContext(taskId);
+      layers.push({
+        layer: 6,
+        name: 'Current Task',
+        content: taskContext,
+      });
+    }
+
+    return {
+      systemPrompt: this.mergeLayers(layers),
+      layers,
+      metadata: {
+        hollonId,
+        taskId,
+        composedAt: new Date(),
+      },
+    };
+  }
+
+  private async getTeamContextChain(teamId?: string): Promise<TeamContext[]> {
+    if (!teamId) return [];
+
+    const contexts: TeamContext[] = [];
+    let currentTeamId: string | null = teamId;
+
+    while (currentTeamId) {
+      const team = await this.teamRepo.findOne({
+        where: { id: currentTeamId },
+      });
+      if (!team) break;
+
+      if (team.contextPrompt) {
+        contexts.unshift({
+          teamId: team.id,
+          teamName: team.name,
+          contextPrompt: team.contextPrompt,
+        });
+      }
+      currentTeamId = team.parentTeamId;
+    }
+
+    return contexts;
+  }
+
+  private async getRelevantMemories(
+    hollon: Hollon,
+    taskId?: string,
+  ): Promise<Document[]> {
+    // 태스크에서 키워드 추출
+    const keywords = taskId
+      ? await this.extractTaskKeywords(taskId)
+      : [];
+
+    // 스코프 우선순위: hollon → team → project → organization
+    const scopeConditions = [
+      { scope: 'hollon', scopeId: hollon.id },
+      { scope: 'team', scopeId: hollon.teamId },
+      { scope: 'organization', scopeId: hollon.organizationId },
+    ].filter(s => s.scopeId);
+
+    const documents = await this.documentRepo
+      .createQueryBuilder('doc')
+      .where('doc.organization_id = :orgId', { orgId: hollon.organizationId })
+      .andWhere('doc.doc_type != :folder', { folder: 'folder' })
+      .andWhere('(doc.expires_at IS NULL OR doc.expires_at > NOW())')
+      .andWhere(
+        new Brackets(qb => {
+          scopeConditions.forEach((cond, idx) => {
+            if (idx === 0) {
+              qb.where('(doc.scope = :scope0 AND doc.scope_id = :scopeId0)', {
+                scope0: cond.scope,
+                scopeId0: cond.scopeId,
+              });
+            } else {
+              qb.orWhere(`(doc.scope = :scope${idx} AND doc.scope_id = :scopeId${idx})`, {
+                [`scope${idx}`]: cond.scope,
+                [`scopeId${idx}`]: cond.scopeId,
+              });
+            }
+          });
+        }),
+      )
+      .orderBy('doc.importance', 'DESC')
+      .addOrderBy('doc.last_accessed_at', 'DESC')
+      .limit(10)
+      .getMany();
+
+    // 접근 횟수 업데이트
+    if (documents.length > 0) {
+      await this.documentRepo.update(
+        documents.map(d => d.id),
+        {
+          accessCount: () => 'access_count + 1',
+          lastAccessedAt: new Date(),
+        },
+      );
+    }
+
+    return documents;
+  }
+
+  private formatMemories(documents: Document[]): string {
+    return documents
+      .map(doc => `## ${doc.name}\n${doc.summary || doc.content}`)
+      .join('\n\n---\n\n');
+  }
+
+  private mergeLayers(layers: PromptLayer[]): string {
+    return layers.map(l => l.content).join('\n\n');
+  }
+}
+
+interface PromptLayer {
+  layer: number;
+  name: string;
+  content: string;
+}
+
+interface ComposedPrompt {
+  systemPrompt: string;
+  layers: PromptLayer[];
+  metadata: {
+    hollonId: string;
+    taskId?: string;
+    composedAt: Date;
+  };
+}
+
+interface TeamContext {
+  teamId: string;
+  teamName: string;
+  contextPrompt: string;
+}
+```
+
+---
+
+## 7. Task 선택 알고리즘
+
+### 7.1 Task Pool 서비스
+
+```typescript
+@Injectable()
+export class TaskPoolService {
+  constructor(
+    @InjectRepository(Task)
+    private taskRepo: Repository<Task>,
+    @InjectRepository(Hollon)
+    private hollonRepo: Repository<Hollon>,
+  ) {}
+
+  /**
+   * 홀론이 처리할 다음 태스크를 선택
+   * 우선순위:
+   * 1. 홀론에게 직접 할당된 태스크
+   * 2. 홀론 팀의 미할당 태스크 (우선순위 높은 순)
+   * 3. 홀론 Role과 매칭되는 태스크
+   */
+  async pullNextTask(hollonId: string): Promise<Task | null> {
+    const hollon = await this.hollonRepo.findOne({
+      where: { id: hollonId },
+      relations: ['role', 'team'],
+    });
+
+    if (!hollon) throw new Error(`Hollon not found: ${hollonId}`);
+
+    // 1. 직접 할당된 태스크
+    const assignedTask = await this.taskRepo.findOne({
+      where: {
+        assignedHolonId: hollonId,
+        status: In(['todo', 'in_progress']),
+      },
+      order: {
+        priority: 'DESC',
+        createdAt: 'ASC',
+      },
+    });
+
+    if (assignedTask) {
+      return this.claimTask(assignedTask, hollonId);
+    }
+
+    // 2. 팀의 미할당 태스크
+    if (hollon.teamId) {
+      const teamTask = await this.taskRepo
+        .createQueryBuilder('task')
+        .innerJoin('projects', 'p', 'p.id = task.project_id')
+        .where('p.team_id = :teamId', { teamId: hollon.teamId })
+        .andWhere('task.assigned_holon_id IS NULL')
+        .andWhere('task.status = :status', { status: 'todo' })
+        .andWhere(this.buildDependencyCheck())
+        .orderBy(this.buildPriorityOrder())
+        .getOne();
+
+      if (teamTask) {
+        return this.claimTask(teamTask, hollonId);
+      }
+    }
+
+    // 3. Role 매칭 태스크 (라벨 기반)
+    const roleLabels = hollon.role?.capabilities || [];
+    if (roleLabels.length > 0) {
+      const labelTask = await this.taskRepo
+        .createQueryBuilder('task')
+        .innerJoin('task_label_assignments', 'tla', 'tla.task_id = task.id')
+        .innerJoin('task_labels', 'tl', 'tl.id = tla.label_id')
+        .where('task.assigned_holon_id IS NULL')
+        .andWhere('task.status = :status', { status: 'todo' })
+        .andWhere('tl.name IN (:...labels)', { labels: roleLabels })
+        .andWhere(this.buildDependencyCheck())
+        .orderBy(this.buildPriorityOrder())
+        .getOne();
+
+      if (labelTask) {
+        return this.claimTask(labelTask, hollonId);
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * 태스크 할당 (원자적 연산)
+   */
+  private async claimTask(task: Task, hollonId: string): Promise<Task> {
+    const result = await this.taskRepo
+      .createQueryBuilder()
+      .update(Task)
+      .set({
+        assignedHolonId: hollonId,
+        status: 'in_progress',
+        startedAt: new Date(),
+      })
+      .where('id = :id', { id: task.id })
+      .andWhere('(assigned_holon_id IS NULL OR assigned_holon_id = :hollonId)', {
+        hollonId,
+      })
+      .execute();
+
+    if (result.affected === 0) {
+      // 다른 홀론이 먼저 가져감 - 재시도
+      return this.pullNextTask(hollonId);
+    }
+
+    return this.taskRepo.findOne({ where: { id: task.id } });
+  }
+
+  /**
+   * 의존성 체크 서브쿼리
+   * 블로킹 태스크가 모두 완료되어야 함
+   */
+  private buildDependencyCheck(): string {
+    return `NOT EXISTS (
+      SELECT 1 FROM task_dependencies td
+      INNER JOIN tasks blocker ON blocker.id = td.depends_on_task_id
+      WHERE td.task_id = task.id
+        AND td.dependency_type = 'blocks'
+        AND blocker.status NOT IN ('done', 'cancelled')
+    )`;
+  }
+
+  /**
+   * 우선순위 정렬
+   */
+  private buildPriorityOrder(): { [key: string]: 'ASC' | 'DESC' } {
+    return {
+      'CASE task.priority WHEN \'urgent\' THEN 1 WHEN \'high\' THEN 2 WHEN \'medium\' THEN 3 WHEN \'low\' THEN 4 ELSE 5 END':
+        'ASC',
+      'task.due_date': 'ASC',
+      'task.created_at': 'ASC',
+    };
+  }
+
+  /**
+   * 태스크 완료 및 Memory 자동 생성
+   */
+  async completeTask(
+    taskId: string,
+    hollonId: string,
+    result: TaskResult,
+  ): Promise<void> {
+    await this.taskRepo.update(taskId, {
+      status: 'done',
+      completedAt: new Date(),
+    });
+
+    // 복잡도가 높은 태스크는 자동으로 Memory 생성
+    if (result.complexity >= 7 || result.learnings) {
+      await this.createTaskMemory(taskId, hollonId, result);
+    }
+  }
+
+  private async createTaskMemory(
+    taskId: string,
+    hollonId: string,
+    result: TaskResult,
+  ): Promise<void> {
+    const task = await this.taskRepo.findOne({
+      where: { id: taskId },
+      relations: ['project'],
+    });
+
+    const document = this.documentRepo.create({
+      organizationId: task.project.organizationId,
+      name: `Task #${task.number} 완료 기록`,
+      content: result.summary,
+      summary: result.learnings,
+      docType: 'memory',
+      scope: 'hollon',
+      scopeId: hollonId,
+      keywords: result.keywords || [],
+      importance: Math.min(result.complexity, 10),
+      autoGenerated: true,
+      sourceTaskId: taskId,
+      sourceHollonId: hollonId,
+    });
+
+    await this.documentRepo.save(document);
+  }
+}
+
+interface TaskResult {
+  summary: string;
+  learnings?: string;
+  keywords?: string[];
+  complexity: number;
+}
+```
+
+---
+
+## 8. 홀론 오케스트레이션
+
+### 8.1 홀론 실행 사이클 (SSOT 5.1 구현)
+
+홀론의 핵심 실행 사이클을 관리하는 오케스트레이터:
+
+```typescript
+@Injectable()
+export class HollonOrchestratorService {
+  constructor(
+    private readonly taskPoolService: TaskPoolService,
+    private readonly promptComposer: PromptComposerService,
+    private readonly brainFactory: BrainProviderFactory,
+    private readonly taskAnalyzer: TaskAnalyzerService,
+    private readonly qualityGate: QualityGateService,
+    private readonly escalationService: EscalationService,
+    private readonly costService: CostService,
+    private readonly hollonRepo: Repository<Hollon>,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
+
+  /**
+   * 홀론 실행 사이클 시작
+   * Single Context 원칙: 하나의 컨텍스트에서 하나의 태스크 완료
+   */
+  async startHollonCycle(hollonId: string): Promise<void> {
+    const hollon = await this.hollonRepo.findOne({
+      where: { id: hollonId },
+      relations: ['role', 'team', 'organization'],
+    });
+
+    if (!hollon) throw new Error(`Hollon not found: ${hollonId}`);
+
+    // 상태를 running으로 변경
+    await this.updateHollonStatus(hollonId, 'running');
+
+    try {
+      // 메인 실행 루프
+      await this.runCycleLoop(hollon);
+    } catch (error) {
+      await this.handleCycleError(hollon, error);
+    }
+  }
+
+  /**
+   * 메인 실행 루프
+   * Task Pull → Context 시작 → 작업 수행 → 결과 저장 → Context 종료 → 반복
+   */
+  private async runCycleLoop(hollon: Hollon): Promise<void> {
+    while (true) {
+      // 1. Task Pull
+      const task = await this.taskPoolService.pullNextTask(hollon.id);
+
+      if (!task) {
+        // 할 일 없음 → idle 상태로 전환
+        await this.updateHollonStatus(hollon.id, 'idle');
+        this.eventEmitter.emit('hollon.idle', { hollonId: hollon.id });
+        break;
+      }
+
+      // 2. 태스크 실행
+      const result = await this.executeTask(hollon, task);
+
+      // 3. 결과에 따른 분기
+      if (result.status === 'completed') {
+        await this.handleTaskCompletion(hollon, task, result);
+      } else if (result.status === 'needs_subtasks') {
+        await this.handleSubtaskCreation(hollon, task, result);
+      } else if (result.status === 'needs_escalation') {
+        await this.escalationService.escalate(hollon, task, result.escalationReason);
+      } else if (result.status === 'failed') {
+        await this.handleTaskFailure(hollon, task, result);
+      }
+
+      // 4. 다음 사이클로 (Context 종료 후 새 Context 시작)
+    }
+  }
+
+  /**
+   * 단일 태스크 실행
+   */
+  private async executeTask(hollon: Hollon, task: Task): Promise<TaskExecutionResult> {
+    // 1. 복잡도 분석 (서브태스크 분할 필요 여부)
+    const analysis = await this.taskAnalyzer.analyze(task, hollon);
+
+    if (analysis.shouldSplit) {
+      return {
+        status: 'needs_subtasks',
+        subtasks: analysis.suggestedSubtasks,
+      };
+    }
+
+    // 2. 프롬프트 합성 (6계층)
+    const composedPrompt = await this.promptComposer.composePrompt(hollon.id, task.id);
+
+    // 3. Brain Provider 획득 및 실행
+    const brain = await this.brainFactory.getProviderForHollon(hollon);
+
+    const response = await brain.execute({
+      systemPrompt: composedPrompt.systemPrompt,
+      messages: [
+        { role: 'user', content: this.buildTaskPrompt(task) },
+      ],
+      workingDirectory: hollon.role?.allowedPaths?.[0],
+      timeout: this.calculateTimeout(analysis.estimatedComplexity),
+    });
+
+    // 4. 비용 기록
+    await this.costService.recordCost({
+      hollonId: hollon.id,
+      taskId: task.id,
+      brainProviderType: brain.meta.type,
+      usage: response.usage,
+      costCents: response.costCents,
+    });
+
+    // 5. 품질 검증
+    const validation = await this.qualityGate.validate(task, response);
+
+    if (!validation.passed) {
+      if (validation.canRetry) {
+        // 재시도 가능 → 다시 실행
+        return this.retryTask(hollon, task, validation.feedback);
+      }
+      return {
+        status: 'needs_escalation',
+        escalationReason: validation.reason,
+      };
+    }
+
+    return {
+      status: 'completed',
+      output: response.content,
+      usage: response.usage,
+      learnings: this.extractLearnings(response),
+    };
+  }
+
+  /**
+   * 태스크 완료 처리
+   */
+  private async handleTaskCompletion(
+    hollon: Hollon,
+    task: Task,
+    result: TaskExecutionResult,
+  ): Promise<void> {
+    // 태스크 상태 업데이트
+    await this.taskPoolService.completeTask(task.id, hollon.id, {
+      summary: result.output,
+      learnings: result.learnings,
+      complexity: result.complexity || 5,
+    });
+
+    // 이벤트 발행
+    this.eventEmitter.emit('task.completed', {
+      taskId: task.id,
+      hollonId: hollon.id,
+      result,
+    });
+  }
+
+  /**
+   * 서브태스크 생성 처리
+   */
+  private async handleSubtaskCreation(
+    hollon: Hollon,
+    parentTask: Task,
+    result: TaskExecutionResult,
+  ): Promise<void> {
+    for (const subtask of result.subtasks) {
+      await this.taskPoolService.createSubtask(parentTask.id, {
+        title: subtask.title,
+        description: subtask.description,
+        priority: subtask.priority || parentTask.priority,
+      });
+    }
+
+    // 부모 태스크는 대기 상태로
+    await this.taskPoolService.updateTaskStatus(parentTask.id, 'waiting');
+  }
+
+  /**
+   * 태스크 실패 처리
+   */
+  private async handleTaskFailure(
+    hollon: Hollon,
+    task: Task,
+    result: TaskExecutionResult,
+  ): Promise<void> {
+    // 에스컬레이션 시도
+    const escalationResult = await this.escalationService.escalate(
+      hollon,
+      task,
+      result.error,
+    );
+
+    if (!escalationResult.handled) {
+      // 최종 실패 → 인간 개입 요청
+      await this.requestHumanIntervention(hollon, task, result);
+    }
+  }
+
+  /**
+   * 홀론 상태 업데이트
+   */
+  private async updateHollonStatus(
+    hollonId: string,
+    status: Hollon['status'],
+  ): Promise<void> {
+    await this.hollonRepo.update(hollonId, { status });
+    this.eventEmitter.emit('hollon.status_changed', { hollonId, status });
+  }
+
+  private buildTaskPrompt(task: Task): string {
+    return `
+## 현재 태스크
+
+**Task #${task.number}**: ${task.title}
+
+### 설명
+${task.description || '설명 없음'}
+
+### 우선순위
+${task.priority}
+
+### 기한
+${task.dueDate ? task.dueDate.toISOString().split('T')[0] : '없음'}
+
+---
+
+위 태스크를 수행해주세요. 완료 후 결과를 상세히 보고해주세요.
+`.trim();
+  }
+
+  private calculateTimeout(complexity: number): number {
+    // 복잡도에 따른 타임아웃 (분 단위)
+    const baseMinutes = 5;
+    const maxMinutes = 30;
+    return Math.min(baseMinutes + complexity * 2, maxMinutes) * 60 * 1000;
+  }
+
+  private extractLearnings(response: BrainResponse): string | undefined {
+    // 응답에서 학습 내용 추출 (패턴 기반)
+    const learningPatterns = [
+      /학습한 내용:(.+?)(?=\n\n|$)/s,
+      /배운 점:(.+?)(?=\n\n|$)/s,
+      /향후 참고:(.+?)(?=\n\n|$)/s,
+    ];
+
+    for (const pattern of learningPatterns) {
+      const match = response.content.match(pattern);
+      if (match) return match[1].trim();
+    }
+    return undefined;
+  }
+}
+
+interface TaskExecutionResult {
+  status: 'completed' | 'needs_subtasks' | 'needs_escalation' | 'failed';
+  output?: string;
+  usage?: { inputTokens: number; outputTokens: number };
+  learnings?: string;
+  complexity?: number;
+  subtasks?: Array<{ title: string; description: string; priority?: string }>;
+  escalationReason?: string;
+  error?: string;
+}
+```
+
+### 8.2 태스크 분석 서비스 (SSOT 5.2 구현)
+
+태스크 복잡도 분석 및 분할 결정:
+
+```typescript
+@Injectable()
+export class TaskAnalyzerService {
+  constructor(
+    private readonly brainFactory: BrainProviderFactory,
+    @InjectRepository(Task)
+    private readonly taskRepo: Repository<Task>,
+  ) {}
+
+  /**
+   * 태스크 복잡도 분석
+   */
+  async analyze(task: Task, hollon: Hollon): Promise<TaskAnalysis> {
+    // 1. 기본 휴리스틱 분석
+    const heuristicScore = this.calculateHeuristicComplexity(task);
+
+    // 단순한 태스크는 LLM 호출 없이 바로 처리
+    if (heuristicScore < 3) {
+      return {
+        shouldSplit: false,
+        estimatedComplexity: heuristicScore,
+        estimatedTokens: this.estimateTokens(task),
+        estimatedMinutes: heuristicScore * 5,
+      };
+    }
+
+    // 2. LLM 기반 심층 분석
+    const brain = await this.brainFactory.getAnalyzerBrain();
+    const analysisPrompt = this.buildAnalysisPrompt(task, hollon);
+
+    const response = await brain.execute({
+      systemPrompt: TASK_ANALYZER_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: analysisPrompt }],
+    });
+
+    return this.parseAnalysisResponse(response.content, heuristicScore);
+  }
+
+  /**
+   * 휴리스틱 복잡도 계산
+   */
+  private calculateHeuristicComplexity(task: Task): number {
+    let score = 1;
+
+    // 설명 길이
+    const descLength = task.description?.length || 0;
+    if (descLength > 1000) score += 2;
+    else if (descLength > 500) score += 1;
+
+    // 우선순위
+    if (task.priority === 'urgent') score += 2;
+    else if (task.priority === 'high') score += 1;
+
+    // 기존 서브태스크 여부
+    const hasSubtasks = task.parentTaskId === null; // 부모 태스크인 경우
+    if (hasSubtasks) score += 1;
+
+    // 키워드 기반 복잡도
+    const complexKeywords = ['refactor', 'migrate', 'architecture', 'integration', 'security'];
+    const titleLower = task.title.toLowerCase();
+    const descLower = (task.description || '').toLowerCase();
+
+    for (const keyword of complexKeywords) {
+      if (titleLower.includes(keyword) || descLower.includes(keyword)) {
+        score += 1;
+      }
+    }
+
+    return Math.min(score, 10);
+  }
+
+  private estimateTokens(task: Task): number {
+    const baseTokens = 1000;
+    const descTokens = Math.ceil((task.description?.length || 0) / 4);
+    return baseTokens + descTokens;
+  }
+
+  private buildAnalysisPrompt(task: Task, hollon: Hollon): string {
+    return `
+## 태스크 분석 요청
+
+**태스크**: ${task.title}
+**설명**: ${task.description || '없음'}
+**우선순위**: ${task.priority}
+
+**수행 홀론 역할**: ${hollon.role?.name}
+**홀론 capabilities**: ${hollon.role?.capabilities?.join(', ') || '없음'}
+
+---
+
+이 태스크를 분석하여 다음을 판단해주세요:
+
+1. **복잡도** (1-10): 예상 난이도
+2. **분할 필요 여부**: 서브태스크로 나눠야 하는가?
+3. **예상 토큰**: 완료에 필요한 예상 토큰 수
+4. **예상 시간**: 완료에 필요한 예상 시간 (분)
+5. **필요 도메인**: 필요한 전문 지식 영역
+6. **서브태스크 제안** (분할 필요 시): 구체적인 서브태스크 목록
+
+JSON 형식으로 응답해주세요.
+`.trim();
+  }
+
+  private parseAnalysisResponse(content: string, fallbackScore: number): TaskAnalysis {
+    try {
+      // JSON 블록 추출
+      const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) ||
+                        content.match(/\{[\s\S]*\}/);
+
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+        return {
+          shouldSplit: parsed.shouldSplit || parsed.splitRequired || false,
+          estimatedComplexity: parsed.complexity || parsed.estimatedComplexity || fallbackScore,
+          estimatedTokens: parsed.estimatedTokens || 2000,
+          estimatedMinutes: parsed.estimatedMinutes || parsed.estimatedTime || 15,
+          requiredDomains: parsed.requiredDomains || parsed.domains || [],
+          suggestedSubtasks: parsed.subtasks || parsed.suggestedSubtasks || [],
+        };
+      }
+    } catch (e) {
+      // 파싱 실패 시 기본값
+    }
+
+    return {
+      shouldSplit: false,
+      estimatedComplexity: fallbackScore,
+      estimatedTokens: 2000,
+      estimatedMinutes: 15,
+    };
+  }
+}
+
+interface TaskAnalysis {
+  shouldSplit: boolean;
+  estimatedComplexity: number;
+  estimatedTokens: number;
+  estimatedMinutes: number;
+  requiredDomains?: string[];
+  suggestedSubtasks?: Array<{
+    title: string;
+    description: string;
+    priority?: string;
+  }>;
+}
+
+const TASK_ANALYZER_SYSTEM_PROMPT = `
+당신은 태스크 분석 전문가입니다. 주어진 태스크의 복잡도를 분석하고,
+필요시 서브태스크로 분할하는 것을 권장합니다.
+
+분할 기준:
+- 복잡도 7 이상: 분할 권장
+- 서로 다른 도메인 지식 필요: 분할 권장
+- 예상 시간 30분 이상: 분할 고려
+- 명확히 독립적인 단계가 있음: 분할 권장
+
+응답은 반드시 JSON 형식으로 해주세요.
+`.trim();
+```
+
+### 8.3 에스컬레이션 서비스 (SSOT 8.3 구현)
+
+5단계 에스컬레이션 계층 구현:
+
+```typescript
+@Injectable()
+export class EscalationService {
+  constructor(
+    @InjectRepository(Hollon)
+    private readonly hollonRepo: Repository<Hollon>,
+    @InjectRepository(Team)
+    private readonly teamRepo: Repository<Team>,
+    @InjectRepository(ApprovalRequest)
+    private readonly approvalRepo: Repository<ApprovalRequest>,
+    private readonly messageService: MessageService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
+
+  /**
+   * 에스컬레이션 실행
+   * Level 1: 자기 해결 → Level 2: 팀 내 협업 → Level 3: 팀 리더 →
+   * Level 4: 상위 팀 → Level 5: 인간 개입
+   */
+  async escalate(
+    hollon: Hollon,
+    task: Task,
+    reason: string,
+    startLevel: EscalationLevel = EscalationLevel.SELF,
+  ): Promise<EscalationResult> {
+    let currentLevel = startLevel;
+
+    while (currentLevel <= EscalationLevel.HUMAN) {
+      const result = await this.tryLevel(currentLevel, hollon, task, reason);
+
+      if (result.handled) {
+        this.eventEmitter.emit('escalation.resolved', {
+          hollonId: hollon.id,
+          taskId: task.id,
+          level: currentLevel,
+          resolution: result.resolution,
+        });
+        return result;
+      }
+
+      // 다음 레벨로 에스컬레이션
+      currentLevel++;
+
+      this.eventEmitter.emit('escalation.elevated', {
+        hollonId: hollon.id,
+        taskId: task.id,
+        fromLevel: currentLevel - 1,
+        toLevel: currentLevel,
+        reason,
+      });
+    }
+
+    // 모든 레벨 실패 → 인간 개입 대기
+    return {
+      handled: false,
+      level: EscalationLevel.HUMAN,
+      pendingApprovalId: await this.createHumanApprovalRequest(hollon, task, reason),
+    };
+  }
+
+  /**
+   * 각 레벨별 에스컬레이션 시도
+   */
+  private async tryLevel(
+    level: EscalationLevel,
+    hollon: Hollon,
+    task: Task,
+    reason: string,
+  ): Promise<EscalationResult> {
+    switch (level) {
+      case EscalationLevel.SELF:
+        return this.trySelfResolution(hollon, task, reason);
+
+      case EscalationLevel.TEAM_COLLABORATION:
+        return this.tryTeamCollaboration(hollon, task, reason);
+
+      case EscalationLevel.TEAM_LEADER:
+        return this.tryTeamLeader(hollon, task, reason);
+
+      case EscalationLevel.UPPER_TEAM:
+        return this.tryUpperTeam(hollon, task, reason);
+
+      case EscalationLevel.HUMAN:
+        return this.requestHumanIntervention(hollon, task, reason);
+
+      default:
+        return { handled: false, level };
+    }
+  }
+
+  /**
+   * Level 1: 자기 해결
+   * 재시도, 대안 탐색
+   */
+  private async trySelfResolution(
+    hollon: Hollon,
+    task: Task,
+    reason: string,
+  ): Promise<EscalationResult> {
+    // 재시도 횟수 확인
+    const retryCount = await this.getRetryCount(hollon.id, task.id);
+
+    if (retryCount < 3) {
+      // 재시도 가능
+      return {
+        handled: true,
+        level: EscalationLevel.SELF,
+        resolution: 'retry',
+        action: { type: 'retry', attempt: retryCount + 1 },
+      };
+    }
+
+    // 재시도 한도 초과
+    return { handled: false, level: EscalationLevel.SELF };
+  }
+
+  /**
+   * Level 2: 팀 내 협업
+   * 같은 팀 홀론에게 도움 요청
+   */
+  private async tryTeamCollaboration(
+    hollon: Hollon,
+    task: Task,
+    reason: string,
+  ): Promise<EscalationResult> {
+    if (!hollon.teamId) {
+      return { handled: false, level: EscalationLevel.TEAM_COLLABORATION };
+    }
+
+    // 같은 팀의 idle 상태 홀론 찾기
+    const availableTeammates = await this.hollonRepo.find({
+      where: {
+        teamId: hollon.teamId,
+        status: 'idle',
+        id: Not(hollon.id),
+      },
+      relations: ['role'],
+    });
+
+    if (availableTeammates.length === 0) {
+      return { handled: false, level: EscalationLevel.TEAM_COLLABORATION };
+    }
+
+    // 가장 적합한 팀원 선택 (역할 기반)
+    const helper = this.selectBestHelper(availableTeammates, task);
+
+    if (helper) {
+      // 도움 요청 메시지 전송
+      await this.messageService.send({
+        fromHollonId: hollon.id,
+        toHollonId: helper.id,
+        messageType: 'collaboration_request',
+        content: `
+도움 요청: ${task.title}
+
+문제 상황:
+${reason}
+
+원래 담당 홀론: ${hollon.name}
+
+도움이 필요합니다.
+        `.trim(),
+        relatedTaskId: task.id,
+      });
+
+      return {
+        handled: true,
+        level: EscalationLevel.TEAM_COLLABORATION,
+        resolution: 'collaboration_requested',
+        action: { type: 'collaborate', helperId: helper.id },
+      };
+    }
+
+    return { handled: false, level: EscalationLevel.TEAM_COLLABORATION };
+  }
+
+  /**
+   * Level 3: 팀 리더 판단
+   * 팀 리더 홀론에게 판단 요청
+   */
+  private async tryTeamLeader(
+    hollon: Hollon,
+    task: Task,
+    reason: string,
+  ): Promise<EscalationResult> {
+    if (!hollon.teamId) {
+      return { handled: false, level: EscalationLevel.TEAM_LEADER };
+    }
+
+    const team = await this.teamRepo.findOne({
+      where: { id: hollon.teamId },
+      relations: ['leaderHollon'],
+    });
+
+    if (!team?.leaderHollonId || team.leaderHollonId === hollon.id) {
+      // 리더가 없거나 자신이 리더
+      return { handled: false, level: EscalationLevel.TEAM_LEADER };
+    }
+
+    // 팀 리더에게 판단 요청
+    await this.messageService.send({
+      fromHollonId: hollon.id,
+      toHollonId: team.leaderHollonId,
+      messageType: 'escalation_request',
+      content: `
+에스컬레이션 요청: ${task.title}
+
+문제 상황:
+${reason}
+
+요청 홀론: ${hollon.name}
+현재 상태: 팀 내 협업으로 해결 불가
+
+팀 리더로서 판단이 필요합니다:
+1. 우선순위 조정
+2. 리소스 재배치
+3. 태스크 재할당
+4. 상위 에스컬레이션
+      `.trim(),
+      relatedTaskId: task.id,
+      requiresResponse: true,
+    });
+
+    return {
+      handled: true,
+      level: EscalationLevel.TEAM_LEADER,
+      resolution: 'escalated_to_leader',
+      action: { type: 'leader_decision', leaderId: team.leaderHollonId },
+    };
+  }
+
+  /**
+   * Level 4: 상위 팀/조직 레벨
+   */
+  private async tryUpperTeam(
+    hollon: Hollon,
+    task: Task,
+    reason: string,
+  ): Promise<EscalationResult> {
+    if (!hollon.teamId) {
+      return { handled: false, level: EscalationLevel.UPPER_TEAM };
+    }
+
+    const team = await this.teamRepo.findOne({
+      where: { id: hollon.teamId },
+    });
+
+    if (!team?.parentTeamId) {
+      // 상위 팀이 없음
+      return { handled: false, level: EscalationLevel.UPPER_TEAM };
+    }
+
+    const parentTeam = await this.teamRepo.findOne({
+      where: { id: team.parentTeamId },
+      relations: ['leaderHollon'],
+    });
+
+    if (!parentTeam?.leaderHollonId) {
+      return { handled: false, level: EscalationLevel.UPPER_TEAM };
+    }
+
+    // 상위 팀 리더에게 에스컬레이션
+    await this.messageService.send({
+      fromHollonId: hollon.id,
+      toHollonId: parentTeam.leaderHollonId,
+      messageType: 'escalation_request',
+      content: `
+상위 에스컬레이션: ${task.title}
+
+원래 팀: ${team.name}
+문제 상황:
+${reason}
+
+팀 레벨에서 해결 불가하여 상위 팀에 에스컬레이션합니다.
+조직 차원의 판단이 필요합니다.
+      `.trim(),
+      relatedTaskId: task.id,
+      requiresResponse: true,
+    });
+
+    return {
+      handled: true,
+      level: EscalationLevel.UPPER_TEAM,
+      resolution: 'escalated_to_upper_team',
+      action: { type: 'upper_team_decision', teamId: parentTeam.id },
+    };
+  }
+
+  /**
+   * Level 5: 인간 개입 요청
+   */
+  private async requestHumanIntervention(
+    hollon: Hollon,
+    task: Task,
+    reason: string,
+  ): Promise<EscalationResult> {
+    const approvalId = await this.createHumanApprovalRequest(hollon, task, reason);
+
+    return {
+      handled: true, // 요청은 생성됨
+      level: EscalationLevel.HUMAN,
+      resolution: 'human_intervention_requested',
+      action: { type: 'await_human', approvalId },
+    };
+  }
+
+  private async createHumanApprovalRequest(
+    hollon: Hollon,
+    task: Task,
+    reason: string,
+  ): Promise<string> {
+    const approval = this.approvalRepo.create({
+      hollonId: hollon.id,
+      requestType: 'escalation',
+      description: `태스크 에스컬레이션: ${task.title}`,
+      reasoning: reason,
+      riskLevel: 'high',
+      affectedEntities: [{ type: 'task', id: task.id }],
+      escalated: true,
+      escalatedAt: new Date(),
+    });
+
+    const saved = await this.approvalRepo.save(approval);
+
+    this.eventEmitter.emit('approval.requested', {
+      approvalId: saved.id,
+      type: 'escalation',
+      hollonId: hollon.id,
+      taskId: task.id,
+    });
+
+    return saved.id;
+  }
+
+  private selectBestHelper(candidates: Hollon[], task: Task): Hollon | null {
+    // 태스크 라벨과 역할 capabilities 매칭
+    // 간단한 구현: 첫 번째 가능한 홀론 반환
+    return candidates[0] || null;
+  }
+
+  private async getRetryCount(hollonId: string, taskId: string): Promise<number> {
+    // 태스크 로그에서 재시도 횟수 조회
+    // 실제 구현 시 task_logs 테이블 활용
+    return 0;
+  }
+}
+
+enum EscalationLevel {
+  SELF = 1,
+  TEAM_COLLABORATION = 2,
+  TEAM_LEADER = 3,
+  UPPER_TEAM = 4,
+  HUMAN = 5,
+}
+
+interface EscalationResult {
+  handled: boolean;
+  level: EscalationLevel;
+  resolution?: string;
+  action?: {
+    type: string;
+    [key: string]: any;
+  };
+  pendingApprovalId?: string;
+}
+```
+
+### 8.4 품질 게이트 서비스 (SSOT 8.4 구현)
+
+자율 운영의 품질 검증:
+
+```typescript
+@Injectable()
+export class QualityGateService {
+  constructor(
+    @InjectRepository(Task)
+    private readonly taskRepo: Repository<Task>,
+    private readonly costService: CostService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  /**
+   * 태스크 완료 품질 검증
+   */
+  async validate(task: Task, response: BrainResponse): Promise<ValidationResult> {
+    const gates: GateCheck[] = [
+      this.checkOutputExists(response),
+      this.checkOutputFormat(task, response),
+      await this.checkCostBudget(task, response),
+      await this.checkTimeLimit(task),
+      await this.checkDependencies(task),
+    ];
+
+    const failedGates = gates.filter(g => !g.passed);
+
+    if (failedGates.length === 0) {
+      return { passed: true };
+    }
+
+    // 실패한 게이트 분석
+    const canRetry = failedGates.some(g => g.canRetry);
+    const reasons = failedGates.map(g => g.reason).join('; ');
+
+    return {
+      passed: false,
+      canRetry,
+      reason: reasons,
+      feedback: this.generateFeedback(failedGates),
+      failedGates: failedGates.map(g => g.name),
+    };
+  }
+
+  /**
+   * Gate 1: 결과물 존재 검증
+   */
+  private checkOutputExists(response: BrainResponse): GateCheck {
+    const hasContent = response.content && response.content.trim().length > 0;
+
+    return {
+      name: 'output_exists',
+      passed: hasContent,
+      canRetry: true,
+      reason: hasContent ? '' : '결과물이 비어있습니다',
+    };
+  }
+
+  /**
+   * Gate 2: 결과물 포맷 검증
+   */
+  private checkOutputFormat(task: Task, response: BrainResponse): GateCheck {
+    // 태스크 유형에 따른 포맷 검증
+    const content = response.content;
+
+    // 코드 태스크: 코드 블록 포함 여부
+    const isCodeTask = this.isCodeRelatedTask(task);
+    if (isCodeTask) {
+      const hasCodeBlock = /```[\s\S]*```/.test(content);
+      if (!hasCodeBlock) {
+        return {
+          name: 'output_format',
+          passed: false,
+          canRetry: true,
+          reason: '코드 태스크이나 코드 블록이 없습니다',
+        };
+      }
+    }
+
+    // 분석 태스크: 섹션 구조 여부
+    const isAnalysisTask = this.isAnalysisTask(task);
+    if (isAnalysisTask) {
+      const hasSections = /^##?\s/m.test(content);
+      if (!hasSections) {
+        return {
+          name: 'output_format',
+          passed: false,
+          canRetry: true,
+          reason: '분석 태스크이나 구조화된 섹션이 없습니다',
+        };
+      }
+    }
+
+    return { name: 'output_format', passed: true, canRetry: false, reason: '' };
+  }
+
+  /**
+   * Gate 3: 비용 예산 검증
+   */
+  private async checkCostBudget(task: Task, response: BrainResponse): Promise<GateCheck> {
+    if (!response.costCents) {
+      return { name: 'cost_budget', passed: true, canRetry: false, reason: '' };
+    }
+
+    // 태스크별 비용 한도 확인
+    const project = await this.taskRepo.findOne({
+      where: { id: task.id },
+      relations: ['project', 'project.team', 'project.team.organization'],
+    });
+
+    const dailyLimit = project?.project?.team?.organization?.costLimitDailyCents;
+    if (!dailyLimit) {
+      return { name: 'cost_budget', passed: true, canRetry: false, reason: '' };
+    }
+
+    const todayUsage = await this.costService.getTodayUsage(
+      project.project.team.organization.id,
+    );
+
+    if (todayUsage + response.costCents > dailyLimit) {
+      return {
+        name: 'cost_budget',
+        passed: false,
+        canRetry: false, // 비용 초과는 재시도로 해결 불가
+        reason: `일일 비용 한도 초과 (${todayUsage}/${dailyLimit} cents)`,
+      };
+    }
+
+    return { name: 'cost_budget', passed: true, canRetry: false, reason: '' };
+  }
+
+  /**
+   * Gate 4: 시간 제한 검증 (SLA)
+   */
+  private async checkTimeLimit(task: Task): Promise<GateCheck> {
+    if (!task.dueDate) {
+      return { name: 'time_limit', passed: true, canRetry: false, reason: '' };
+    }
+
+    const now = new Date();
+    const dueDate = new Date(task.dueDate);
+
+    if (now > dueDate) {
+      return {
+        name: 'time_limit',
+        passed: false,
+        canRetry: false,
+        reason: `기한 초과: ${dueDate.toISOString().split('T')[0]}`,
+      };
+    }
+
+    // 기한 임박 경고 (24시간 이내)
+    const hoursRemaining = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+    if (hoursRemaining < 24) {
+      // 경고만, 실패 아님
+      return {
+        name: 'time_limit',
+        passed: true,
+        canRetry: false,
+        reason: '',
+        warning: `기한 임박: ${Math.round(hoursRemaining)}시간 남음`,
+      };
+    }
+
+    return { name: 'time_limit', passed: true, canRetry: false, reason: '' };
+  }
+
+  /**
+   * Gate 5: 의존성 검증
+   */
+  private async checkDependencies(task: Task): Promise<GateCheck> {
+    const blockers = await this.taskRepo
+      .createQueryBuilder('t')
+      .innerJoin('task_dependencies', 'td', 'td.depends_on_task_id = t.id')
+      .where('td.task_id = :taskId', { taskId: task.id })
+      .andWhere('td.dependency_type = :type', { type: 'blocks' })
+      .andWhere('t.status NOT IN (:...doneStatuses)', { doneStatuses: ['done', 'cancelled'] })
+      .getMany();
+
+    if (blockers.length > 0) {
+      return {
+        name: 'dependencies',
+        passed: false,
+        canRetry: false,
+        reason: `블로킹 태스크 미완료: ${blockers.map(b => `#${b.number}`).join(', ')}`,
+      };
+    }
+
+    return { name: 'dependencies', passed: true, canRetry: false, reason: '' };
+  }
+
+  /**
+   * 실패 피드백 생성
+   */
+  private generateFeedback(failedGates: GateCheck[]): string {
+    const feedbackParts = failedGates.map(gate => {
+      switch (gate.name) {
+        case 'output_exists':
+          return '결과물을 생성해주세요.';
+        case 'output_format':
+          return '결과물 형식을 확인해주세요. ' + gate.reason;
+        case 'cost_budget':
+          return '비용 한도를 초과했습니다. 더 효율적인 방법을 찾아주세요.';
+        case 'time_limit':
+          return '기한이 지났습니다. 우선순위를 조정해주세요.';
+        case 'dependencies':
+          return '의존하는 태스크가 완료되지 않았습니다.';
+        default:
+          return gate.reason;
+      }
+    });
+
+    return feedbackParts.join('\n');
+  }
+
+  private isCodeRelatedTask(task: Task): boolean {
+    const codeKeywords = ['구현', 'implement', '개발', 'develop', '코드', 'code', 'fix', '수정', 'refactor'];
+    const text = `${task.title} ${task.description || ''}`.toLowerCase();
+    return codeKeywords.some(k => text.includes(k));
+  }
+
+  private isAnalysisTask(task: Task): boolean {
+    const analysisKeywords = ['분석', 'analysis', '조사', 'research', '검토', 'review', '설계', 'design'];
+    const text = `${task.title} ${task.description || ''}`.toLowerCase();
+    return analysisKeywords.some(k => text.includes(k));
+  }
+}
+
+interface GateCheck {
+  name: string;
+  passed: boolean;
+  canRetry: boolean;
+  reason: string;
+  warning?: string;
+}
+
+interface ValidationResult {
+  passed: boolean;
+  canRetry?: boolean;
+  reason?: string;
+  feedback?: string;
+  failedGates?: string[];
+}
+```
+
+---
+
+## 9. NestJS 프로젝트 구조
+
+### 9.1 디렉토리 구조
+
+```
+apps/
+├── web/                          # Next.js 프론트엔드
+│   ├── app/
+│   │   ├── (dashboard)/
+│   │   │   ├── org/[orgId]/
+│   │   │   │   ├── page.tsx     # 조직도 뷰
+│   │   │   │   ├── hollons/
+│   │   │   │   ├── projects/
+│   │   │   │   └── documents/
+│   │   │   └── layout.tsx
+│   │   └── api/                  # Next.js API Routes (BFF)
+│   ├── components/
+│   └── lib/
+│
+└── server/                       # NestJS 백엔드
+    ├── src/
+    │   ├── main.ts
+    │   ├── app.module.ts
+    │   │
+    │   ├── common/
+    │   │   ├── decorators/
+    │   │   ├── filters/
+    │   │   ├── guards/
+    │   │   └── interceptors/
+    │   │
+    │   ├── config/
+    │   │   ├── database.config.ts
+    │   │   └── brain-provider.config.ts
+    │   │
+    │   ├── modules/
+    │   │   ├── organization/
+    │   │   │   ├── organization.module.ts
+    │   │   │   ├── organization.controller.ts
+    │   │   │   ├── organization.service.ts
+    │   │   │   └── entities/
+    │   │   │       └── organization.entity.ts
+    │   │   │
+    │   │   ├── hollon/
+    │   │   │   ├── hollon.module.ts
+    │   │   │   ├── hollon.controller.ts
+    │   │   │   ├── hollon.service.ts
+    │   │   │   ├── hollon-lifecycle.service.ts
+    │   │   │   └── entities/
+    │   │   │       └── hollon.entity.ts
+    │   │   │
+    │   │   ├── brain-provider/
+    │   │   │   ├── brain-provider.module.ts
+    │   │   │   ├── brain-provider.factory.ts
+    │   │   │   ├── providers/
+    │   │   │   │   ├── claude-code.provider.ts
+    │   │   │   │   ├── claude-api.provider.ts
+    │   │   │   │   └── base.provider.ts
+    │   │   │   └── interfaces/
+    │   │   │       └── brain-provider.interface.ts
+    │   │   │
+    │   │   ├── task/
+    │   │   │   ├── task.module.ts
+    │   │   │   ├── task.controller.ts
+    │   │   │   ├── task.service.ts
+    │   │   │   ├── task-pool.service.ts
+    │   │   │   ├── task-analyzer.service.ts
+    │   │   │   └── entities/
+    │   │   │
+    │   │   ├── orchestration/
+    │   │   │   ├── orchestration.module.ts
+    │   │   │   ├── hollon-orchestrator.service.ts
+    │   │   │   └── interfaces/
+    │   │   │       └── execution-result.interface.ts
+    │   │   │
+    │   │   ├── escalation/
+    │   │   │   ├── escalation.module.ts
+    │   │   │   ├── escalation.service.ts
+    │   │   │   └── interfaces/
+    │   │   │       └── escalation-request.interface.ts
+    │   │   │
+    │   │   ├── quality-gate/
+    │   │   │   ├── quality-gate.module.ts
+    │   │   │   ├── quality-gate.service.ts
+    │   │   │   └── interfaces/
+    │   │   │       └── gate-check.interface.ts
+    │   │   │
+    │   │   ├── document/
+    │   │   │   ├── document.module.ts
+    │   │   │   ├── document.controller.ts
+    │   │   │   ├── document.service.ts
+    │   │   │   ├── memory.service.ts
+    │   │   │   └── entities/
+    │   │   │
+    │   │   ├── prompt/
+    │   │   │   ├── prompt.module.ts
+    │   │   │   └── prompt-composer.service.ts
+    │   │   │
+    │   │   ├── message/
+    │   │   │   ├── message.module.ts
+    │   │   │   ├── message.controller.ts
+    │   │   │   ├── message.service.ts
+    │   │   │   └── message.gateway.ts  # WebSocket
+    │   │   │
+    │   │   └── realtime/
+    │   │       ├── realtime.module.ts
+    │   │       ├── pg-notify.service.ts
+    │   │       └── websocket.gateway.ts
+    │   │
+    │   └── database/
+    │       ├── migrations/
+    │       └── seeds/
+    │
+    └── test/
+```
+
+### 9.2 TypeORM Entity 예시
+
+```typescript
+// hollon.entity.ts
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  OneToMany,
+  JoinColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+
+@Entity('hollons')
+export class Hollon {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column({ name: 'organization_id' })
+  organizationId: string;
+
+  @ManyToOne(() => Organization)
+  @JoinColumn({ name: 'organization_id' })
+  organization: Organization;
+
+  @Column({ name: 'role_id' })
+  roleId: string;
+
+  @ManyToOne(() => Role)
+  @JoinColumn({ name: 'role_id' })
+  role: Role;
+
+  @Column({ name: 'team_id', nullable: true })
+  teamId?: string;
+
+  @ManyToOne(() => Team, { nullable: true })
+  @JoinColumn({ name: 'team_id' })
+  team?: Team;
+
+  @Column({ length: 100 })
+  name: string;
+
+  @Column({ name: 'parent_id', nullable: true })
+  parentId?: string;
+
+  @ManyToOne(() => Hollon, { nullable: true })
+  @JoinColumn({ name: 'parent_id' })
+  parent?: Hollon;
+
+  @OneToMany(() => Hollon, hollon => hollon.parent)
+  children: Hollon[];
+
+  @Column({
+    type: 'enum',
+    enum: ['permanent', 'temporary'],
+  })
+  lifecycle: 'permanent' | 'temporary';
+
+  @Column({
+    type: 'enum',
+    enum: ['idle', 'running', 'waiting', 'terminated', 'error'],
+    default: 'idle',
+  })
+  status: 'idle' | 'running' | 'waiting' | 'terminated' | 'error';
+
+  @Column({ name: 'custom_prompt', type: 'text', nullable: true })
+  customPrompt?: string;
+
+  @Column({ name: 'custom_capabilities', type: 'jsonb', nullable: true })
+  customCapabilities?: string[];
+
+  @Column({ name: 'brain_provider_config_id', nullable: true })
+  brainProviderConfigId?: string;
+
+  @Column({ nullable: true })
+  pid?: number;
+
+  @Column({ name: 'process_started_at', type: 'timestamptz', nullable: true })
+  processStartedAt?: Date;
+
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt: Date;
+}
+```
+
+### 9.3 Prisma Schema 예시 (대안)
+
+```prisma
+// schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id                          String   @id @default(uuid())
+  name                        String
+  contextPrompt               String?  @map("context_prompt")
+  maxConcurrentHolons         Int      @default(10) @map("max_concurrent_holons")
+  maxTotalHolons              Int      @default(100) @map("max_total_holons")
+  costLimitDailyCents         Int?     @map("cost_limit_daily_cents")
+  costLimitMonthlyCents       Int?     @map("cost_limit_monthly_cents")
+  defaultBrainProviderConfigId String? @map("default_brain_provider_config_id")
+  createdAt                   DateTime @default(now()) @map("created_at")
+  updatedAt                   DateTime @updatedAt @map("updated_at")
+
+  hollons  Hollon[]
+  teams    Team[]
+  roles    Role[]
+  projects Project[]
+  documents Document[]
+
+  @@map("organizations")
+}
+
+model Hollon {
+  id             String  @id @default(uuid())
+  organizationId String  @map("organization_id")
+  roleId         String  @map("role_id")
+  teamId         String? @map("team_id")
+  name           String
+  parentId       String? @map("parent_id")
+
+  lifecycle HollonLifecycle
+  status    HollonStatus    @default(idle)
+
+  customPrompt       String?  @map("custom_prompt")
+  customCapabilities Json?    @map("custom_capabilities")
+  brainProviderConfigId String? @map("brain_provider_config_id")
+
+  pid              Int?
+  processStartedAt DateTime? @map("process_started_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  role         Role         @relation(fields: [roleId], references: [id])
+  team         Team?        @relation(fields: [teamId], references: [id])
+  parent       Hollon?      @relation("HollonHierarchy", fields: [parentId], references: [id])
+  children     Hollon[]     @relation("HollonHierarchy")
+
+  assignedTasks Task[] @relation("AssignedTasks")
+  createdTasks  Task[] @relation("CreatedTasks")
+
+  @@map("hollons")
+}
+
+model Document {
+  id             String  @id @default(uuid())
+  organizationId String  @map("organization_id")
+  parentId       String? @map("parent_id")
+
+  name    String
+  content String?
+  summary String?
+
+  docType    DocumentType @default(spec) @map("doc_type")
+  scope      DocumentScope @default(project)
+  scopeId    String?       @map("scope_id")
+
+  keywords      String[]  @default([])
+  importance    Int       @default(5)
+  autoGenerated Boolean   @default(false) @map("auto_generated")
+  sourceTaskId  String?   @map("source_task_id")
+  sourceHollonId String?  @map("source_hollon_id")
+
+  accessCount    Int       @default(0) @map("access_count")
+  lastAccessedAt DateTime? @map("last_accessed_at")
+  expiresAt      DateTime? @map("expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  parent       Document?    @relation("DocumentHierarchy", fields: [parentId], references: [id])
+  children     Document[]   @relation("DocumentHierarchy")
+
+  @@map("documents")
+}
+
+enum HollonLifecycle {
+  permanent
+  temporary
+}
+
+enum HollonStatus {
+  idle
+  running
+  waiting
+  terminated
+  error
+}
+
+enum DocumentType {
+  folder
+  spec
+  adr
+  guide
+  runbook
+  memory
+  postmortem
+  meeting
+  changelog
+}
+
+enum DocumentScope {
+  organization
+  team
+  project
+  hollon
+}
+```
+
+---
+
 ## 변경 이력
 
 | 날짜 | 버전 | 변경 내용 |
 |------|------|----------|
 | 2024-12-04 | 1.0.0 | ssot.md에서 분리하여 초기 문서 작성 |
+| 2024-12-04 | 1.1.0 | 자율 운영 지원: Document-Memory 통합, 프롬프트 계층 합성, Task Pool, NestJS 구조 |
+| 2024-12-04 | 1.2.0 | 홀론 오케스트레이션: HollonOrchestratorService, TaskAnalyzerService, EscalationService, QualityGateService 추가 |
