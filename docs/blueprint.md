@@ -444,6 +444,12 @@ CREATE TABLE tasks (
     estimate_points INTEGER,
     due_date DATE,
 
+    -- 안전장치: 서브태스크 재귀 제한
+    depth INTEGER DEFAULT 0 CHECK (depth <= 3),  -- 최대 3단계
+
+    -- 안전장치: 파일 충돌 방지
+    affected_files TEXT[] DEFAULT '{}',  -- 예상 수정 파일 목록
+
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     started_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
@@ -452,6 +458,9 @@ CREATE TABLE tasks (
 
     UNIQUE(project_id, number)
 );
+
+-- 파일 충돌 감지용 인덱스
+CREATE INDEX idx_tasks_affected_files ON tasks USING GIN(affected_files);
 
 CREATE TABLE task_dependencies (
     task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -2297,6 +2306,46 @@ export class TaskPoolService {
   }
 
   /**
+   * 파일 충돌 체크
+   * 동일 파일을 수정하는 진행 중인 태스크가 있으면 제외
+   */
+  private buildFileConflictCheck(): string {
+    return `NOT EXISTS (
+      SELECT 1 FROM tasks t2
+      WHERE t2.id != task.id
+        AND t2.status = 'in_progress'
+        AND t2.affected_files && task.affected_files
+    )`;
+  }
+
+  /**
+   * 동일 파일 작업 시 같은 홀론에게 우선 배정
+   */
+  async findTaskWithSameFiles(hollonId: string): Promise<Task | null> {
+    // 이 홀론이 최근 작업한 파일 목록
+    const recentFiles = await this.taskRepo
+      .createQueryBuilder('task')
+      .select('UNNEST(task.affected_files)', 'file')
+      .where('task.assigned_holon_id = :hollonId', { hollonId })
+      .andWhere('task.completed_at > NOW() - INTERVAL \'1 day\'')
+      .getRawMany();
+
+    if (recentFiles.length === 0) return null;
+
+    const files = recentFiles.map(r => r.file);
+
+    // 같은 파일을 수정하는 대기 중인 태스크
+    return this.taskRepo
+      .createQueryBuilder('task')
+      .where('task.status = :status', { status: 'todo' })
+      .andWhere('task.assigned_holon_id IS NULL')
+      .andWhere('task.affected_files && :files', { files })
+      .andWhere(this.buildDependencyCheck())
+      .orderBy(this.buildPriorityOrder())
+      .getOne();
+  }
+
+  /**
    * 우선순위 정렬
    */
   private buildPriorityOrder(): { [key: string]: 'ASC' | 'DESC' } {
@@ -2797,6 +2846,78 @@ const TASK_ANALYZER_SYSTEM_PROMPT = `
 
 응답은 반드시 JSON 형식으로 해주세요.
 `.trim();
+
+/**
+ * 서브태스크 생성 서비스 (안전장치 포함)
+ */
+@Injectable()
+export class SubtaskCreationService {
+  private readonly MAX_DEPTH = 3;
+  private readonly MAX_SUBTASKS_PER_TASK = 10;
+
+  constructor(
+    @InjectRepository(Task)
+    private readonly taskRepo: Repository<Task>,
+    private readonly escalationService: EscalationService,
+  ) {}
+
+  /**
+   * 서브태스크 생성 (depth 체크 포함)
+   */
+  async createSubtasks(
+    parentTask: Task,
+    subtasks: Array<{ title: string; description: string }>,
+    hollonId: string,
+  ): Promise<Task[]> {
+    // 안전장치 1: 최대 깊이 체크
+    if (parentTask.depth >= this.MAX_DEPTH) {
+      await this.escalationService.escalate({
+        type: 'subtask_depth_exceeded',
+        taskId: parentTask.id,
+        hollonId,
+        message: `서브태스크 깊이 제한(${this.MAX_DEPTH}) 초과. 태스크 재설계 필요.`,
+        level: 3,
+      });
+      throw new Error(`Maximum subtask depth (${this.MAX_DEPTH}) exceeded`);
+    }
+
+    // 안전장치 2: 서브태스크 개수 체크
+    if (subtasks.length > this.MAX_SUBTASKS_PER_TASK) {
+      await this.escalationService.escalate({
+        type: 'subtask_count_exceeded',
+        taskId: parentTask.id,
+        hollonId,
+        message: `서브태스크 개수 제한(${this.MAX_SUBTASKS_PER_TASK}) 초과. 분할 재검토 필요.`,
+        level: 2,
+      });
+      // 최대 개수만 생성
+      subtasks = subtasks.slice(0, this.MAX_SUBTASKS_PER_TASK);
+    }
+
+    const createdTasks: Task[] = [];
+    const newDepth = parentTask.depth + 1;
+
+    for (const subtask of subtasks) {
+      const task = await this.taskRepo.save({
+        projectId: parentTask.projectId,
+        parentTaskId: parentTask.id,
+        cycleId: parentTask.cycleId,
+        title: subtask.title,
+        description: subtask.description,
+        priority: parentTask.priority,
+        depth: newDepth,
+        status: 'todo',
+        creatorHollonId: hollonId,
+      });
+      createdTasks.push(task);
+    }
+
+    // 부모 태스크를 blocked 상태로 변경
+    await this.taskRepo.update(parentTask.id, { status: 'blocked' });
+
+    return createdTasks;
+  }
+}
 ```
 
 ### 8.3 에스컬레이션 서비스 (SSOT 8.3 구현)
@@ -5350,3 +5471,4 @@ interface CollaborationMetrics {
 | 2024-12-04 | 1.4.0 | 목차 업데이트 (섹션 6-12 추가) |
 | 2024-12-04 | 1.5.0 | Task-PR 연결 테이블, 기술 부채 테이블, CodeReviewService, TechDebtService 추가 |
 | 2024-12-04 | 1.6.0 | 하이브리드 RAG (document_embeddings, document_relationships 테이블, DocumentRetrievalService, EmbeddingService), PerformanceEvaluationService 추가 |
+| 2024-12-04 | 1.7.0 | 안전장치 구현: tasks 테이블에 depth/affected_files 추가, TaskPoolService 파일 충돌 방지, SubtaskCreationService depth 제한 |
