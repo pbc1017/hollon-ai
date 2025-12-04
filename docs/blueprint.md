@@ -3579,6 +3579,391 @@ enum DocumentScope {
 
 ---
 
+## 10. 구현 로드맵
+
+### Phase 1: MVP 코어 (자율 실행 엔진) - 6주
+
+핵심 목표: **홀론이 태스크를 자율적으로 Pull → 실행 → 완료하는 사이클 구현**
+
+```
+Week 1-2: 인프라 및 데이터 계층
+├── 모노레포 설정 (pnpm workspace + Turborepo)
+├── Docker Compose (PostgreSQL 16)
+├── NestJS 프로젝트 구조
+├── TypeORM Entity 정의 (Organization, Team, Role, Hollon, Task)
+└── 기본 CRUD API
+
+Week 3-4: Brain Provider 및 오케스트레이션
+├── IBrainProvider 인터페이스
+├── ClaudeCodeProvider 구현
+├── HollonOrchestratorService (태스크 사이클)
+├── TaskPoolService (Pull 방식 태스크 할당)
+└── PromptComposerService (6계층 프롬프트 합성)
+
+Week 5-6: 품질 및 안전장치
+├── QualityGateService (5가지 검증)
+├── EscalationService (5단계 에스컬레이션)
+├── TaskAnalyzerService (복잡도 분석, 서브태스크 분할)
+├── FactCheckService (할루시네이션 방지)
+├── DecisionLogService (일관성 보장)
+├── ConsistencyEnforcer (스타일 일관성)
+├── UncertaintyDecisionService (불확실성 의사결정)
+├── 비용 추적 및 제한
+└── Human Approval 플로우
+```
+
+**MVP 완료 기준**:
+- 단일 홀론이 태스크를 Pull하여 Brain Provider로 실행
+- 결과물 품질 검증 및 실패 시 재시도/에스컬레이션
+- 비용 한도 초과 시 작업 중단
+- 생성된 코드 컴파일/테스트 검증 통과
+
+---
+
+### Phase 2: 협업 시스템 - 6주
+
+핵심 목표: **다수 홀론이 협업하여 프로젝트를 진행하는 메커니즘**
+
+```
+Week 7-8: 실시간 통신
+├── PostgreSQL LISTEN/NOTIFY 연동
+├── WebSocket Gateway
+├── Message 시스템 (1:1, Channel)
+└── 실시간 상태 동기화
+
+Week 9-10: 정기 회의 자동화
+├── MeetingScheduler (Cron 기반)
+├── StandupService (일일 스탠드업)
+├── SprintPlanningService
+└── RetrospectiveService
+
+Week 11-12: 협업 패턴
+├── CollaborationService (페어 프로그래밍, 코드 리뷰)
+├── CrossTeamCollaborationService (팀 간 Contract)
+├── IncidentResponseService (P1-P4 긴급 대응)
+└── ConflictResolutionService
+```
+
+**Phase 2 완료 기준**:
+- 3+ 홀론이 동시에 프로젝트 진행
+- 일일 스탠드업 리포트 자동 생성
+- 팀 간 의존성 요청 및 계약 체결
+
+---
+
+### Phase 3: 전략-실행 연결 - 6주
+
+핵심 목표: **고수준 목표가 실행 가능한 태스크로 자동 분해**
+
+```
+Week 13-14: 목표 관리 시스템
+├── Goal Entity (OKR 구조)
+├── GoalTrackingService
+└── GoalReviewService
+
+Week 15-16: 목표 → 태스크 분해
+├── GoalDecompositionService
+├── DependencyAnalyzer
+└── ResourcePlanner
+
+Week 17-18: 동적 우선순위 및 전략 변경 대응
+├── PriorityRebalancerService
+├── PivotResponseService (피벗 대응)
+└── StrategyAdaptationService
+```
+
+**Phase 3 완료 기준**:
+- 목표 입력 → 프로젝트/마일스톤/태스크 자동 생성
+- 피벗 선언 시 영향 분석 자동화
+
+---
+
+### Phase 4: 학습 및 성장 - 6주
+
+핵심 목표: **홀론과 조직이 경험에서 학습하여 지속 개선**
+
+```
+Week 19-20: 온보딩 시스템
+├── OnboardingService
+└── SkillMatrixService
+
+Week 21-22: 지식 관리 고도화
+├── KnowledgeExtractionService
+├── KnowledgeGraphService
+├── ExternalKnowledgeService
+└── BestPracticeService
+
+Week 23-24: 자기 개선 시스템
+├── PerformanceAnalyzer
+├── PromptOptimizer
+└── ProcessImprovementService
+```
+
+---
+
+### Phase 5: 웹 UI 및 외부 연동 - 6주
+
+핵심 목표: **인간이 시스템을 모니터링하고 전략적 개입을 수행하는 인터페이스**
+
+```
+Week 25-26: 대시보드
+├── Next.js 14 앱 설정
+├── 조직도 뷰 (React Flow)
+├── 프로젝트 대시보드
+└── 홀론 상세 뷰
+
+Week 27-28: 상호작용 인터페이스
+├── 대화 인터페이스
+├── 승인 센터
+└── 목표 설정 UI
+
+Week 29-30: 외부 연동
+├── GitHubIntegrationService
+├── SlackIntegrationService
+└── WebhookService
+```
+
+---
+
+### 로드맵 요약
+
+| Phase | 기간 | 핵심 결과물 |
+|-------|------|------------|
+| **Phase 1** | 6주 | 자율 실행 엔진 |
+| **Phase 2** | 6주 | 협업 시스템 |
+| **Phase 3** | 6주 | 전략-실행 연결 |
+| **Phase 4** | 6주 | 학습 및 성장 |
+| **Phase 5** | 6주 | UI 및 외부 연동 |
+
+**총 예상 기간**: 30주 (약 7-8개월)
+
+---
+
+### 마일스톤별 검증 시나리오
+
+**M1 (Phase 1)**: "README 작성" 태스크를 홀론이 자율 수행
+**M2 (Phase 2)**: 3명의 홀론이 "블로그 포스트 시리즈" 협업 완료
+**M3 (Phase 3)**: "신규 API 엔드포인트 3개 추가" 목표 입력 → 자동 실행
+**M4 (Phase 4)**: 동일 유형 태스크 5회 수행 후 효율성 20% 향상
+**M5 (Phase 5)**: 인간이 대시보드에서 전략만 설정하면 팀이 자율 운영
+
+---
+
+## 11. LLM 한계 극복 서비스 상세
+
+### 11.1 DecisionLogService
+
+모든 중요 결정을 강제 기록하고, 동일 맥락에서 자동 참조합니다.
+
+```typescript
+@Injectable()
+export class DecisionLogService {
+  async recordDecision(decision: {
+    hollonId: string;
+    taskId?: string;
+    projectId?: string;
+    type: 'architecture' | 'naming' | 'process' | 'priority';
+    question: string;
+    options: string[];
+    chosen: string;
+    rationale: string;
+  }): Promise<DecisionLog> {
+    return this.decisionLogRepo.save(decision);
+  }
+
+  async findRelevantDecisions(context: {
+    projectId?: string;
+    keywords: string[];
+    type?: string;
+  }): Promise<DecisionLog[]> {
+    // 동일 프로젝트/맥락의 기존 결정 검색
+    // 프롬프트에 자동 주입
+  }
+}
+```
+
+### 11.2 FactCheckService
+
+```typescript
+@Injectable()
+export class FactCheckService {
+  async verify(result: TaskResult): Promise<VerificationResult> {
+    const checks = [];
+
+    // Level 1: 구문 검증
+    checks.push(await this.verifySyntax(result));
+
+    // Level 2: 실행 검증
+    checks.push(await this.verifyExecution(result));
+
+    // Level 3: 참조 검증 (패키지, API 등)
+    checks.push(await this.verifyReferences(result));
+
+    // Level 4: 의미 검증 (선택적)
+    if (result.requiresSemanticCheck) {
+      checks.push(await this.verifySemantics(result));
+    }
+
+    return this.aggregateResults(checks);
+  }
+}
+```
+
+### 11.3 ConsistencyEnforcer
+
+```typescript
+@Injectable()
+export class ConsistencyEnforcer {
+  async enforce(result: TaskResult, projectId: string): Promise<EnforcementResult> {
+    const styleGuide = await this.getStyleGuide(projectId);
+    const violations = await this.detectViolations(result, styleGuide);
+
+    if (violations.autoFixable.length > 0) {
+      return this.autoFix(result, violations.autoFixable);
+    }
+
+    if (violations.manual.length > 0) {
+      return { status: 'needs_rework', violations: violations.manual };
+    }
+
+    return { status: 'passed' };
+  }
+}
+```
+
+---
+
+## 12. 협업 서비스 상세
+
+### 12.1 StandupService
+
+```typescript
+@Injectable()
+export class StandupService {
+  @Cron('0 9 * * 1-5') // 평일 09:00
+  async runDailyStandup(): Promise<void> {
+    const teams = await this.teamRepo.find();
+
+    for (const team of teams) {
+      const hollons = await this.getTeamHollons(team.id);
+      const responses = await Promise.all(
+        hollons.map(h => this.collectStatus(h))
+      );
+
+      const summary = await this.generateSummary(team, responses);
+      await this.documentService.create({
+        name: `standup-${team.name}-${today()}`,
+        docType: 'meeting',
+        content: summary,
+        scope: 'team',
+        scopeId: team.id,
+      });
+    }
+  }
+}
+```
+
+### 12.2 IncidentResponseService
+
+```typescript
+@Injectable()
+export class IncidentResponseService {
+  async handleIncident(incident: Incident): Promise<void> {
+    // 1. 심각도 분류
+    const severity = this.classifySeverity(incident);
+
+    // 2. 자동 대응
+    if (severity <= 2) { // P1, P2
+      await this.pauseNonEssentialTasks();
+      await this.notifyHumans(incident);
+    }
+
+    // 3. Owner 할당
+    const owner = await this.assignOwner(incident);
+
+    // 4. 영향 분석
+    const impact = await this.analyzeImpact(incident);
+
+    // 5. Postmortem 준비
+    await this.preparePostmortem(incident, impact);
+  }
+}
+```
+
+### 12.3 PivotResponseService
+
+```typescript
+@Injectable()
+export class PivotResponseService {
+  async handlePivot(pivot: PivotDecision): Promise<PivotAnalysis> {
+    // 1. 영향 분석
+    const affectedTasks = await this.findAffectedTasks(pivot.oldGoalId);
+    const affectedProjects = await this.findAffectedProjects(pivot.oldGoalId);
+    const estimatedLoss = await this.calculateLoss(affectedTasks);
+
+    // 2. 작업 중단
+    await this.suspendTasks(affectedTasks);
+
+    // 3. 자산 분류
+    const assets = await this.classifyAssets(affectedTasks, pivot.newDirection);
+
+    // 4. 리포트 생성 (인간 검토용)
+    return {
+      affectedTasks,
+      affectedProjects,
+      estimatedLoss,
+      assets: {
+        reusable: assets.filter(a => a.classification === 'reusable'),
+        archive: assets.filter(a => a.classification === 'archive'),
+        discard: assets.filter(a => a.classification === 'discard'),
+      },
+      newTaskProposal: await this.proposeNewTasks(pivot.newGoalId),
+    };
+  }
+}
+```
+
+### 12.4 UncertaintyDecisionService
+
+```typescript
+@Injectable()
+export class UncertaintyDecisionService {
+  async decide(context: DecisionContext): Promise<DecisionResult> {
+    // 에스컬레이션 체크
+    if (!context.isReversible) {
+      return { action: 'escalate', reason: 'irreversible_decision' };
+    }
+
+    if (context.estimatedCost > context.costThreshold) {
+      return { action: 'escalate', reason: 'cost_exceeded' };
+    }
+
+    if (context.hasExternalImpact) {
+      return { action: 'escalate', reason: 'external_impact' };
+    }
+
+    // 자율 결정
+    const decision = await this.makeDecision(context);
+    await this.decisionLogService.recordDecision(decision);
+
+    return { action: 'proceed', decision };
+  }
+
+  async createSpike(spikeConfig: SpikeConfig): Promise<Task> {
+    return this.taskService.create({
+      title: `[Spike] ${spikeConfig.objective}`,
+      description: spikeConfig.description,
+      timeBoxMinutes: spikeConfig.timeLimit,
+      costLimitCents: spikeConfig.costLimit,
+      successCriteria: spikeConfig.successCriteria,
+      labels: ['spike', 'experiment'],
+    });
+  }
+}
+```
+
+---
+
 ## 변경 이력
 
 | 날짜 | 버전 | 변경 내용 |
@@ -3586,3 +3971,4 @@ enum DocumentScope {
 | 2024-12-04 | 1.0.0 | ssot.md에서 분리하여 초기 문서 작성 |
 | 2024-12-04 | 1.1.0 | 자율 운영 지원: Document-Memory 통합, 프롬프트 계층 합성, Task Pool, NestJS 구조 |
 | 2024-12-04 | 1.2.0 | 홀론 오케스트레이션: HollonOrchestratorService, TaskAnalyzerService, EscalationService, QualityGateService 추가 |
+| 2024-12-04 | 1.3.0 | SSOT에서 구현 로드맵 이동, LLM 한계 극복 서비스 상세, 협업 서비스 상세 추가 |
