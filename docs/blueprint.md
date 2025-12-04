@@ -916,6 +916,67 @@ CREATE INDEX idx_documents_parent ON documents(parent_id);
 CREATE INDEX idx_document_versions_doc ON document_versions(document_id);
 ```
 
+#### document_embeddings (Vector RAG)
+```sql
+-- 문서 임베딩 (Vector RAG용)
+-- pgvector extension 필요: CREATE EXTENSION IF NOT EXISTS vector;
+CREATE TABLE document_embeddings (
+    document_id UUID PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+
+    embedding vector(1536),  -- OpenAI text-embedding-3-small 또는 유사 모델
+    model_name VARCHAR(100) NOT NULL DEFAULT 'text-embedding-3-small',
+    model_version VARCHAR(50),
+
+    -- 임베딩 대상 (전체 문서 vs 청크)
+    chunk_index INTEGER DEFAULT 0,  -- 0 = 전체 문서, 1+ = 청크 인덱스
+    chunk_text TEXT,  -- 청크인 경우 해당 텍스트
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_document_embeddings_vector ON document_embeddings
+    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+```
+
+#### document_relationships (Graph RAG)
+```sql
+-- 문서 관계 그래프 (Graph RAG용)
+CREATE TABLE document_relationships (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    source_document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    target_document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+
+    -- 관계 유형
+    relationship_type VARCHAR(30) NOT NULL
+        CHECK (relationship_type IN (
+            'references',   -- 참조 관계 (A가 B를 인용)
+            'depends_on',   -- 의존 관계 (A 이해에 B 필수)
+            'supersedes',   -- 대체 관계 (A가 B를 대체)
+            'related_to'    -- 연관 관계 (같은 주제)
+        )),
+
+    -- 관계 강도/신뢰도
+    confidence DECIMAL(3, 2) DEFAULT 1.0  -- 자동 추출 시 신뢰도 (0.0-1.0)
+        CHECK (confidence >= 0 AND confidence <= 1),
+    weight DECIMAL(3, 2) DEFAULT 1.0,  -- 관계 가중치
+
+    -- 자동 추출 vs 수동 생성
+    auto_extracted BOOLEAN DEFAULT false,
+    extracted_by VARCHAR(100),  -- 추출에 사용된 모델/규칙
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    -- 동일 관계 중복 방지
+    UNIQUE(source_document_id, target_document_id, relationship_type)
+);
+
+CREATE INDEX idx_doc_rel_source ON document_relationships(source_document_id);
+CREATE INDEX idx_doc_rel_target ON document_relationships(target_document_id);
+CREATE INDEX idx_doc_rel_type ON document_relationships(relationship_type);
+```
+
 ### 1.6 Governance Tables
 
 #### approval_requests
@@ -4666,6 +4727,618 @@ interface CodeAnalysisResult {
 
 ---
 
+## 15. 문서 검색 서비스 (하이브리드 RAG)
+
+### 15.1 DocumentRetrievalService
+
+Vector RAG + Graph RAG 하이브리드 문서 검색:
+
+```typescript
+@Injectable()
+export class DocumentRetrievalService {
+  constructor(
+    @InjectRepository(Document)
+    private readonly documentRepo: Repository<Document>,
+    @InjectRepository(DocumentEmbedding)
+    private readonly embeddingRepo: Repository<DocumentEmbedding>,
+    @InjectRepository(DocumentRelationship)
+    private readonly relationshipRepo: Repository<DocumentRelationship>,
+    private readonly embeddingService: EmbeddingService,
+  ) {}
+
+  /**
+   * 하이브리드 검색: Vector RAG + Graph RAG 결합
+   */
+  async hybridSearch(query: HybridSearchQuery): Promise<RankedDocument[]> {
+    const [vectorResults, graphResults] = await Promise.all([
+      this.vectorSearch(query),
+      this.graphSearch(query),
+    ]);
+
+    // Reciprocal Rank Fusion (RRF) 적용
+    return this.reciprocalRankFusion(vectorResults, graphResults, {
+      vectorWeight: query.vectorWeight ?? 0.6,
+      graphWeight: query.graphWeight ?? 0.4,
+    });
+  }
+
+  /**
+   * Vector RAG: 의미적 유사성 검색
+   */
+  async vectorSearch(query: VectorSearchQuery): Promise<ScoredDocument[]> {
+    // 쿼리 임베딩 생성
+    const queryEmbedding = await this.embeddingService.embed(query.text);
+
+    // pgvector cosine similarity 검색
+    const results = await this.embeddingRepo.query(`
+      SELECT
+        de.document_id,
+        d.name,
+        d.summary,
+        d.scope,
+        d.doc_type,
+        d.keywords,
+        d.importance,
+        1 - (de.embedding <=> $1::vector) as similarity
+      FROM document_embeddings de
+      JOIN documents d ON d.id = de.document_id
+      WHERE d.organization_id = $2
+        AND ($3::text IS NULL OR d.scope = $3)
+        AND ($4::text[] IS NULL OR d.keywords && $4)
+      ORDER BY de.embedding <=> $1::vector
+      LIMIT $5
+    `, [
+      JSON.stringify(queryEmbedding),
+      query.organizationId,
+      query.scope ?? null,
+      query.filterKeywords ?? null,
+      query.limit ?? 10,
+    ]);
+
+    return results.map(r => ({
+      documentId: r.document_id,
+      name: r.name,
+      summary: r.summary,
+      score: r.similarity,
+      source: 'vector' as const,
+    }));
+  }
+
+  /**
+   * Graph RAG: 관계 기반 탐색
+   */
+  async graphSearch(query: GraphSearchQuery): Promise<ScoredDocument[]> {
+    if (!query.seedDocumentIds?.length && !query.text) {
+      return [];
+    }
+
+    // 시드 문서 결정 (직접 지정 또는 키워드 매칭)
+    let seedIds = query.seedDocumentIds ?? [];
+    if (!seedIds.length && query.text) {
+      const keywordMatches = await this.documentRepo.find({
+        where: {
+          organizationId: query.organizationId,
+          keywords: ArrayContains(this.extractKeywords(query.text)),
+        },
+        take: 3,
+      });
+      seedIds = keywordMatches.map(d => d.id);
+    }
+
+    if (!seedIds.length) return [];
+
+    // 관계 그래프 탐색 (BFS with depth limit)
+    const visited = new Set<string>();
+    const results: ScoredDocument[] = [];
+    const queue: Array<{ id: string; depth: number; pathScore: number }> =
+      seedIds.map(id => ({ id, depth: 0, pathScore: 1.0 }));
+
+    while (queue.length > 0) {
+      const { id, depth, pathScore } = queue.shift()!;
+
+      if (visited.has(id) || depth > (query.maxDepth ?? 2)) continue;
+      visited.add(id);
+
+      // 관련 문서 조회
+      const relationships = await this.relationshipRepo.find({
+        where: [
+          { sourceDocumentId: id },
+          { targetDocumentId: id },
+        ],
+      });
+
+      for (const rel of relationships) {
+        const relatedId = rel.sourceDocumentId === id
+          ? rel.targetDocumentId
+          : rel.sourceDocumentId;
+
+        if (visited.has(relatedId)) continue;
+
+        // 관계 유형별 가중치
+        const typeWeight = this.getRelationshipWeight(rel.relationshipType);
+        const newScore = pathScore * rel.confidence * typeWeight * 0.8;
+
+        queue.push({ id: relatedId, depth: depth + 1, pathScore: newScore });
+
+        const doc = await this.documentRepo.findOne({ where: { id: relatedId } });
+        if (doc) {
+          results.push({
+            documentId: doc.id,
+            name: doc.name,
+            summary: doc.summary,
+            score: newScore,
+            source: 'graph' as const,
+            relationship: rel.relationshipType,
+          });
+        }
+      }
+    }
+
+    return results.sort((a, b) => b.score - a.score).slice(0, query.limit ?? 10);
+  }
+
+  /**
+   * Reciprocal Rank Fusion (RRF)
+   * 두 검색 결과를 순위 기반으로 통합
+   */
+  private reciprocalRankFusion(
+    vectorResults: ScoredDocument[],
+    graphResults: ScoredDocument[],
+    weights: { vectorWeight: number; graphWeight: number },
+  ): RankedDocument[] {
+    const k = 60; // RRF 상수
+    const scores = new Map<string, { score: number; doc: ScoredDocument }>();
+
+    // Vector 결과 RRF 점수
+    vectorResults.forEach((doc, rank) => {
+      const rrfScore = weights.vectorWeight / (k + rank + 1);
+      const existing = scores.get(doc.documentId);
+      if (existing) {
+        existing.score += rrfScore;
+      } else {
+        scores.set(doc.documentId, { score: rrfScore, doc });
+      }
+    });
+
+    // Graph 결과 RRF 점수
+    graphResults.forEach((doc, rank) => {
+      const rrfScore = weights.graphWeight / (k + rank + 1);
+      const existing = scores.get(doc.documentId);
+      if (existing) {
+        existing.score += rrfScore;
+        existing.doc.relationship = existing.doc.relationship ?? doc.relationship;
+      } else {
+        scores.set(doc.documentId, { score: rrfScore, doc });
+      }
+    });
+
+    // 최종 순위 정렬
+    return Array.from(scores.values())
+      .sort((a, b) => b.score - a.score)
+      .map(({ score, doc }, rank) => ({
+        ...doc,
+        finalScore: score,
+        rank: rank + 1,
+      }));
+  }
+
+  /**
+   * 문서 저장 시 임베딩 자동 생성
+   */
+  async onDocumentCreated(document: Document): Promise<void> {
+    const content = document.content ?? document.summary ?? document.name;
+    const embedding = await this.embeddingService.embed(content);
+
+    await this.embeddingRepo.save({
+      documentId: document.id,
+      embedding,
+      modelName: 'text-embedding-3-small',
+      modelVersion: 'v1',
+    });
+
+    // 관계 자동 추출
+    await this.extractRelationships(document);
+  }
+
+  /**
+   * 문서 내용에서 관계 자동 추출
+   */
+  private async extractRelationships(document: Document): Promise<void> {
+    const content = document.content ?? '';
+
+    // 1. 명시적 참조 추출 ([[문서명]] 또는 [링크](path) 패턴)
+    const linkPattern = /\[\[([^\]]+)\]\]|\[([^\]]+)\]\(([^)]+)\)/g;
+    const matches = [...content.matchAll(linkPattern)];
+
+    for (const match of matches) {
+      const referencedName = match[1] ?? match[2];
+      const referenced = await this.documentRepo.findOne({
+        where: {
+          organizationId: document.organizationId,
+          name: Like(`%${referencedName}%`),
+        },
+      });
+
+      if (referenced && referenced.id !== document.id) {
+        await this.relationshipRepo.save({
+          sourceDocumentId: document.id,
+          targetDocumentId: referenced.id,
+          relationshipType: 'references',
+          autoExtracted: true,
+          extractedBy: 'link-pattern',
+          confidence: 0.9,
+        });
+      }
+    }
+
+    // 2. 키워드 기반 연관 문서 탐색
+    if (document.keywords?.length) {
+      const related = await this.documentRepo.find({
+        where: {
+          organizationId: document.organizationId,
+          keywords: ArrayOverlap(document.keywords),
+          id: Not(document.id),
+        },
+        take: 5,
+      });
+
+      for (const rel of related) {
+        const overlap = document.keywords.filter(k => rel.keywords?.includes(k)).length;
+        const confidence = Math.min(overlap / document.keywords.length, 0.8);
+
+        if (confidence >= 0.3) {
+          await this.relationshipRepo.save({
+            sourceDocumentId: document.id,
+            targetDocumentId: rel.id,
+            relationshipType: 'related_to',
+            autoExtracted: true,
+            extractedBy: 'keyword-overlap',
+            confidence,
+          });
+        }
+      }
+    }
+  }
+
+  private getRelationshipWeight(type: string): number {
+    const weights: Record<string, number> = {
+      'depends_on': 1.0,
+      'references': 0.8,
+      'supersedes': 0.6,
+      'related_to': 0.4,
+    };
+    return weights[type] ?? 0.5;
+  }
+
+  private extractKeywords(text: string): string[] {
+    // 간단한 키워드 추출 (실제 구현에서는 NLP 사용)
+    return text.toLowerCase()
+      .split(/\s+/)
+      .filter(word => word.length > 3)
+      .slice(0, 5);
+  }
+}
+
+// Types
+interface HybridSearchQuery {
+  text: string;
+  organizationId: string;
+  scope?: string;
+  filterKeywords?: string[];
+  seedDocumentIds?: string[];
+  maxDepth?: number;
+  limit?: number;
+  vectorWeight?: number;
+  graphWeight?: number;
+}
+
+interface VectorSearchQuery {
+  text: string;
+  organizationId: string;
+  scope?: string;
+  filterKeywords?: string[];
+  limit?: number;
+}
+
+interface GraphSearchQuery {
+  text?: string;
+  organizationId: string;
+  seedDocumentIds?: string[];
+  maxDepth?: number;
+  limit?: number;
+}
+
+interface ScoredDocument {
+  documentId: string;
+  name: string;
+  summary?: string;
+  score: number;
+  source: 'vector' | 'graph';
+  relationship?: string;
+}
+
+interface RankedDocument extends ScoredDocument {
+  finalScore: number;
+  rank: number;
+}
+```
+
+### 15.2 EmbeddingService
+
+임베딩 생성 및 관리:
+
+```typescript
+@Injectable()
+export class EmbeddingService {
+  private readonly openai: OpenAI;
+
+  constructor(private readonly configService: ConfigService) {
+    this.openai = new OpenAI({
+      apiKey: this.configService.get('OPENAI_API_KEY'),
+    });
+  }
+
+  async embed(text: string): Promise<number[]> {
+    const response = await this.openai.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: text,
+    });
+    return response.data[0].embedding;
+  }
+
+  async embedBatch(texts: string[]): Promise<number[][]> {
+    const response = await this.openai.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: texts,
+    });
+    return response.data.map(d => d.embedding);
+  }
+}
+```
+
+---
+
+## 16. 홀론 성과 평가 서비스
+
+### 16.1 PerformanceEvaluationService
+
+사이클별 홀론 성과 집계 및 평가:
+
+```typescript
+@Injectable()
+export class PerformanceEvaluationService {
+  constructor(
+    @InjectRepository(HollonPerformanceSummary)
+    private readonly summaryRepo: Repository<HollonPerformanceSummary>,
+    @InjectRepository(Task)
+    private readonly taskRepo: Repository<Task>,
+    @InjectRepository(TaskPullRequest)
+    private readonly prRepo: Repository<TaskPullRequest>,
+    @InjectRepository(Message)
+    private readonly messageRepo: Repository<Message>,
+  ) {}
+
+  /**
+   * 사이클 종료 시 모든 홀론 성과 집계
+   */
+  async evaluateCycle(cycleId: string): Promise<void> {
+    const cycle = await this.getCycleWithHollons(cycleId);
+
+    for (const hollon of cycle.hollons) {
+      await this.evaluateHollon(hollon.id, cycle.startDate, cycle.endDate);
+    }
+  }
+
+  /**
+   * 개별 홀론 성과 평가
+   */
+  async evaluateHollon(
+    hollonId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<HollonPerformanceSummary> {
+    const [
+      productivityMetrics,
+      qualityMetrics,
+      collaborationMetrics,
+    ] = await Promise.all([
+      this.calculateProductivity(hollonId, startDate, endDate),
+      this.calculateQuality(hollonId, startDate, endDate),
+      this.calculateCollaboration(hollonId, startDate, endDate),
+    ]);
+
+    // 가중 평균 계산
+    const overallScore =
+      productivityMetrics.score * 0.4 +
+      qualityMetrics.score * 0.35 +
+      collaborationMetrics.score * 0.25;
+
+    const summary = await this.summaryRepo.save({
+      hollonId,
+
+      // 생산성 지표
+      totalTasksAssigned: productivityMetrics.tasksAssigned,
+      totalTasksCompleted: productivityMetrics.tasksCompleted,
+      totalStoryPointsCompleted: productivityMetrics.storyPoints,
+      avgTaskCompletionHours: productivityMetrics.avgCompletionHours,
+
+      // 품질 지표
+      tasksReopenedCount: qualityMetrics.reopenedCount,
+      codeReviewCommentsReceived: qualityMetrics.reviewComments,
+      avgReviewTurnaroundHours: qualityMetrics.avgReviewHours,
+
+      // 협업 지표
+      delegationsMade: collaborationMetrics.delegationsMade,
+      delegationsReceived: collaborationMetrics.delegationsReceived,
+      messagesSent: collaborationMetrics.messagesSent,
+      collaborationRequests: collaborationMetrics.collaborationRequests,
+
+      // 점수
+      productivityScore: productivityMetrics.score,
+      qualityScore: qualityMetrics.score,
+      collaborationScore: collaborationMetrics.score,
+      overallScore,
+
+      lastTaskCompletedAt: productivityMetrics.lastCompletedAt,
+      lastActiveAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    return summary;
+  }
+
+  private async calculateProductivity(
+    hollonId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<ProductivityMetrics> {
+    const tasks = await this.taskRepo.find({
+      where: {
+        assigneeHollonId: hollonId,
+        updatedAt: Between(startDate, endDate),
+      },
+    });
+
+    const completed = tasks.filter(t => t.status === 'done');
+    const storyPoints = completed.reduce((sum, t) => sum + (t.storyPoints ?? 0), 0);
+
+    const completionTimes = completed
+      .filter(t => t.startedAt && t.completedAt)
+      .map(t => (t.completedAt!.getTime() - t.startedAt!.getTime()) / 3600000);
+
+    const avgCompletionHours = completionTimes.length
+      ? completionTimes.reduce((a, b) => a + b, 0) / completionTimes.length
+      : 0;
+
+    // 생산성 점수 (0-100)
+    const completionRate = tasks.length ? completed.length / tasks.length : 0;
+    const score = Math.min(100, completionRate * 100 + Math.min(storyPoints, 20) * 2);
+
+    return {
+      tasksAssigned: tasks.length,
+      tasksCompleted: completed.length,
+      storyPoints,
+      avgCompletionHours,
+      lastCompletedAt: completed[completed.length - 1]?.completedAt,
+      score,
+    };
+  }
+
+  private async calculateQuality(
+    hollonId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<QualityMetrics> {
+    // PR 리뷰 관련 지표
+    const prs = await this.prRepo.find({
+      where: {
+        authorHollonId: hollonId,
+        createdAt: Between(startDate, endDate),
+      },
+    });
+
+    const reviewComments = prs.reduce((sum, pr) =>
+      sum + (pr.reviewComments?.split('\n').length ?? 0), 0);
+
+    const approvedFirst = prs.filter(pr =>
+      pr.status === 'merged' && !pr.reviewComments?.includes('changes_requested')
+    ).length;
+
+    // 재오픈된 태스크
+    const reopened = await this.taskRepo.count({
+      where: {
+        assigneeHollonId: hollonId,
+        status: 'in_progress',
+        updatedAt: Between(startDate, endDate),
+        // reopened flag가 있다고 가정
+      },
+    });
+
+    // 품질 점수
+    const firstPassRate = prs.length ? approvedFirst / prs.length : 1;
+    const score = Math.max(0, 100 * firstPassRate - reopened * 10 - reviewComments * 0.5);
+
+    return {
+      reopenedCount: reopened,
+      reviewComments,
+      avgReviewHours: 0, // 계산 생략
+      firstPassRate,
+      score: Math.min(100, Math.max(0, score)),
+    };
+  }
+
+  private async calculateCollaboration(
+    hollonId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<CollaborationMetrics> {
+    // 메시지 발송 수
+    const messagesSent = await this.messageRepo.count({
+      where: {
+        senderHollonId: hollonId,
+        createdAt: Between(startDate, endDate),
+      },
+    });
+
+    // 리뷰 참여
+    const reviewsGiven = await this.prRepo.count({
+      where: {
+        reviewerHollonId: hollonId,
+        createdAt: Between(startDate, endDate),
+      },
+    });
+
+    // 협업 점수
+    const score = Math.min(100,
+      50 + // 기본점
+      Math.min(messagesSent, 50) * 0.5 + // 소통
+      reviewsGiven * 5 // 리뷰 기여
+    );
+
+    return {
+      delegationsMade: 0,
+      delegationsReceived: 0,
+      messagesSent,
+      collaborationRequests: reviewsGiven,
+      score,
+    };
+  }
+
+  private async getCycleWithHollons(cycleId: string): Promise<any> {
+    // 구현 생략
+    return {} as any;
+  }
+}
+
+// Types
+interface ProductivityMetrics {
+  tasksAssigned: number;
+  tasksCompleted: number;
+  storyPoints: number;
+  avgCompletionHours: number;
+  lastCompletedAt?: Date;
+  score: number;
+}
+
+interface QualityMetrics {
+  reopenedCount: number;
+  reviewComments: number;
+  avgReviewHours: number;
+  firstPassRate: number;
+  score: number;
+}
+
+interface CollaborationMetrics {
+  delegationsMade: number;
+  delegationsReceived: number;
+  messagesSent: number;
+  collaborationRequests: number;
+  score: number;
+}
+```
+
+---
+
 ## 변경 이력
 
 | 날짜 | 버전 | 변경 내용 |
@@ -4676,3 +5349,4 @@ interface CodeAnalysisResult {
 | 2024-12-04 | 1.3.0 | SSOT에서 구현 로드맵 이동, LLM 한계 극복 서비스 상세, 협업 서비스 상세 추가 |
 | 2024-12-04 | 1.4.0 | 목차 업데이트 (섹션 6-12 추가) |
 | 2024-12-04 | 1.5.0 | Task-PR 연결 테이블, 기술 부채 테이블, CodeReviewService, TechDebtService 추가 |
+| 2024-12-04 | 1.6.0 | 하이브리드 RAG (document_embeddings, document_relationships 테이블, DocumentRetrievalService, EmbeddingService), PerformanceEvaluationService 추가 |
