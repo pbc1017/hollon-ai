@@ -7,11 +7,18 @@
 
 ## 목차
 
-1. [데이터베이스 스키마](#1-데이터베이스-스키마)
-2. [TypeScript 인터페이스](#2-typescript-인터페이스)
-3. [Brain Provider 구현](#3-brain-provider-구현)
-4. [API 엔드포인트](#4-api-엔드포인트)
-5. [실시간 메시징 구현](#5-실시간-메시징-구현)
+1. [데이터베이스 스키마](#1-데이터베이스-스키마) - SQL DDL
+2. [TypeScript 인터페이스](#2-typescript-인터페이스) - 타입 정의
+3. [Brain Provider 구현](#3-brain-provider-구현) - AI 백엔드 추상화
+4. [API 엔드포인트](#4-api-엔드포인트) - REST API
+5. [실시간 메시징 구현](#5-실시간-메시징-구현) - WebSocket
+6. [프롬프트 계층 합성](#6-프롬프트-계층-합성) - PromptComposerService
+7. [Task 선택 알고리즘](#7-task-선택-알고리즘) - TaskPoolService
+8. [홀론 오케스트레이션](#8-홀론-오케스트레이션) - 실행 사이클
+9. [NestJS 프로젝트 구조](#9-nestjs-프로젝트-구조) - 디렉토리 구조
+10. [구현 로드맵](#10-구현-로드맵) - 30주 계획
+11. [LLM 한계 극복 서비스](#11-llm-한계-극복-서비스-상세) - 상세 구현
+12. [협업 서비스](#12-협업-서비스-상세) - 상세 구현
 
 ---
 
@@ -3972,3 +3979,4 @@ export class UncertaintyDecisionService {
 | 2024-12-04 | 1.1.0 | 자율 운영 지원: Document-Memory 통합, 프롬프트 계층 합성, Task Pool, NestJS 구조 |
 | 2024-12-04 | 1.2.0 | 홀론 오케스트레이션: HollonOrchestratorService, TaskAnalyzerService, EscalationService, QualityGateService 추가 |
 | 2024-12-04 | 1.3.0 | SSOT에서 구현 로드맵 이동, LLM 한계 극복 서비스 상세, 협업 서비스 상세 추가 |
+| 2024-12-04 | 1.4.0 | 목차 업데이트 (섹션 6-12 추가) |
