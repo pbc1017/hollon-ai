@@ -10,6 +10,7 @@ import { TeamModule } from './modules/team/team.module';
 import { HollonModule } from './modules/hollon/hollon.module';
 import { ProjectModule } from './modules/project/project.module';
 import { TaskModule } from './modules/task/task.module';
+import { BrainProviderModule } from './modules/brain-provider/brain-provider.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { TaskModule } from './modules/task/task.module';
     HollonModule,
     ProjectModule,
     TaskModule,
+    BrainProviderModule,
   ],
 })
 export class AppModule {}

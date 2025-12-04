@@ -100,7 +100,7 @@ export class ClaudeCodeProvider implements IBrainProvider {
     } catch (error) {
       const duration = Date.now() - startTime;
       this.logger.error(
-        `Claude Code execution failed: ${error.message}, duration=${duration}ms`,
+        `Claude Code execution failed: ${error instanceof Error ? error.message : 'Unknown error'}, duration=${duration}ms`,
       );
       throw error;
     }
