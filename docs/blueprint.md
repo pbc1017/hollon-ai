@@ -19,6 +19,8 @@
 10. [구현 로드맵](#10-구현-로드맵) - 30주 계획
 11. [LLM 한계 극복 서비스](#11-llm-한계-극복-서비스-상세) - 상세 구현
 12. [협업 서비스](#12-협업-서비스-상세) - 상세 구현
+13. [코드 리뷰 서비스](#13-코드-리뷰-서비스) - CodeReviewService
+14. [기술 부채 서비스](#14-기술-부채-서비스) - TechDebtService
 
 ---
 
@@ -508,6 +510,115 @@ CREATE INDEX idx_tasks_status ON tasks(status);
 CREATE INDEX idx_tasks_number ON tasks(project_id, number);
 CREATE INDEX idx_task_logs_task ON task_logs(task_id);
 CREATE INDEX idx_task_comments_task ON task_comments(task_id);
+```
+
+#### task_pull_requests (Task-PR 연결)
+```sql
+CREATE TABLE task_pull_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+
+    -- PR 정보
+    pr_number INTEGER NOT NULL,
+    pr_url VARCHAR(500) NOT NULL,
+    repository VARCHAR(255) NOT NULL,
+    branch_name VARCHAR(255),
+
+    -- 상태
+    status VARCHAR(30) NOT NULL DEFAULT 'draft'
+        CHECK (status IN ('draft', 'ready_for_review', 'changes_requested', 'approved', 'merged', 'closed')),
+
+    -- 작성자
+    author_holon_id UUID REFERENCES hollons(id) ON DELETE SET NULL,
+
+    -- 리뷰어
+    reviewer_holon_id UUID REFERENCES hollons(id) ON DELETE SET NULL,
+    reviewer_type VARCHAR(30),  -- 'team_member', 'security_reviewer', 'architecture_reviewer' 등
+
+    -- 리뷰 결과
+    review_comments TEXT,
+    approved_at TIMESTAMP WITH TIME ZONE,
+    merged_at TIMESTAMP WITH TIME ZONE,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_task_prs_task ON task_pull_requests(task_id);
+CREATE INDEX idx_task_prs_status ON task_pull_requests(status);
+CREATE INDEX idx_task_prs_author ON task_pull_requests(author_holon_id);
+CREATE INDEX idx_task_prs_reviewer ON task_pull_requests(reviewer_holon_id);
+```
+
+#### tech_debts (기술 부채)
+```sql
+CREATE TABLE tech_debts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+
+    -- 부채 정보
+    title VARCHAR(500) NOT NULL,
+    description TEXT,
+
+    debt_type VARCHAR(30) NOT NULL
+        CHECK (debt_type IN ('code', 'test', 'doc', 'dependency', 'architecture')),
+
+    -- 발생 원인
+    source_task_id UUID REFERENCES tasks(id) ON DELETE SET NULL,
+    source_hollon_id UUID REFERENCES hollons(id) ON DELETE SET NULL,
+    source_file VARCHAR(500),
+    source_line INTEGER,
+
+    -- 비용 추정
+    estimated_fix_hours DECIMAL(5, 2),
+
+    -- 이자 계산
+    interest_rate DECIMAL(5, 4) DEFAULT 0.01,  -- 일일 복잡도 증가율
+    accumulated_interest DECIMAL(10, 2) DEFAULT 0,
+
+    -- 영향 범위
+    affected_files TEXT[] DEFAULT '{}',
+    dependent_tasks UUID[] DEFAULT '{}',
+
+    -- 우선순위 점수 (자동 계산)
+    priority_score DECIMAL(10, 2) DEFAULT 0,
+
+    -- 상태
+    status VARCHAR(20) NOT NULL DEFAULT 'identified'
+        CHECK (status IN ('identified', 'scheduled', 'in_progress', 'resolved', 'wont_fix')),
+    scheduled_cycle_id UUID REFERENCES cycles(id) ON DELETE SET NULL,
+
+    -- 해결 정보
+    resolved_by_holon_id UUID REFERENCES hollons(id) ON DELETE SET NULL,
+    resolved_at TIMESTAMP WITH TIME ZONE,
+    resolution_notes TEXT,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_tech_debts_org ON tech_debts(organization_id);
+CREATE INDEX idx_tech_debts_project ON tech_debts(project_id);
+CREATE INDEX idx_tech_debts_type ON tech_debts(debt_type);
+CREATE INDEX idx_tech_debts_status ON tech_debts(status);
+CREATE INDEX idx_tech_debts_priority ON tech_debts(priority_score DESC);
+CREATE INDEX idx_tech_debts_cycle ON tech_debts(scheduled_cycle_id);
+
+-- 이자 자동 누적 (일일 배치 또는 트리거)
+CREATE OR REPLACE FUNCTION update_debt_interest()
+RETURNS void AS $$
+BEGIN
+    UPDATE tech_debts
+    SET
+        accumulated_interest = accumulated_interest + (estimated_fix_hours * interest_rate),
+        priority_score = (interest_rate * EXTRACT(EPOCH FROM (NOW() - created_at)) / 86400)
+                        + (array_length(affected_files, 1) * 0.5)
+                        + (array_length(dependent_tasks, 1) * 2),
+        updated_at = NOW()
+    WHERE status IN ('identified', 'scheduled');
+END;
+$$ LANGUAGE plpgsql;
 ```
 
 ### 1.4 Metrics & Cost Tables
@@ -3971,6 +4082,590 @@ export class UncertaintyDecisionService {
 
 ---
 
+## 13. 코드 리뷰 서비스
+
+### 13.1 CodeReviewService
+
+PR 생성, 리뷰어 할당, 리뷰 프로세스 관리:
+
+```typescript
+@Injectable()
+export class CodeReviewService {
+  constructor(
+    @InjectRepository(TaskPullRequest)
+    private readonly prRepo: Repository<TaskPullRequest>,
+    @InjectRepository(Hollon)
+    private readonly hollonRepo: Repository<Hollon>,
+    private readonly messageService: MessageService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
+
+  /**
+   * PR 생성 및 Task 연결
+   */
+  async createPullRequest(
+    taskId: string,
+    prData: CreatePRDto,
+    authorHollonId: string,
+  ): Promise<TaskPullRequest> {
+    const pr = this.prRepo.create({
+      taskId,
+      prNumber: prData.prNumber,
+      prUrl: prData.prUrl,
+      repository: prData.repository,
+      branchName: prData.branchName,
+      authorHollonId,
+      status: 'draft',
+    });
+
+    const saved = await this.prRepo.save(pr);
+
+    this.eventEmitter.emit('pr.created', { prId: saved.id, taskId });
+
+    return saved;
+  }
+
+  /**
+   * 리뷰 요청 - 리뷰어 자동 할당
+   */
+  async requestReview(prId: string): Promise<TaskPullRequest> {
+    const pr = await this.prRepo.findOne({
+      where: { id: prId },
+      relations: ['task', 'task.project', 'authorHollon', 'authorHollon.team'],
+    });
+
+    if (!pr) throw new Error(`PR not found: ${prId}`);
+
+    // 리뷰어 선택
+    const reviewer = await this.selectReviewer(pr);
+
+    // PR 상태 업데이트
+    pr.status = 'ready_for_review';
+    pr.reviewerHollonId = reviewer.hollonId;
+    pr.reviewerType = reviewer.type;
+    await this.prRepo.save(pr);
+
+    // 리뷰어에게 알림
+    await this.messageService.send({
+      fromHollonId: pr.authorHollonId,
+      toHollonId: reviewer.hollonId,
+      messageType: 'review_request',
+      content: `
+코드 리뷰 요청
+
+**PR**: ${pr.prUrl}
+**Task**: ${pr.task.title}
+**Branch**: ${pr.branchName}
+
+리뷰 후 approve 또는 changes_requested 해주세요.
+      `.trim(),
+      relatedTaskId: pr.taskId,
+    });
+
+    this.eventEmitter.emit('pr.review_requested', { prId, reviewerId: reviewer.hollonId });
+
+    return pr;
+  }
+
+  /**
+   * 리뷰어 선택 로직
+   */
+  private async selectReviewer(pr: TaskPullRequest): Promise<ReviewerSelection> {
+    const authorTeamId = pr.authorHollon?.teamId;
+
+    // 1. PR 유형에 따른 전문 리뷰어 필요 여부 판단
+    const prType = await this.classifyPRType(pr);
+
+    if (prType === 'security') {
+      return this.createSpecializedReviewer('SecurityReviewer', pr);
+    }
+    if (prType === 'architecture') {
+      return this.createSpecializedReviewer('ArchitectureReviewer', pr);
+    }
+    if (prType === 'performance') {
+      return this.createSpecializedReviewer('PerformanceReviewer', pr);
+    }
+
+    // 2. 일반 PR: 같은 팀 동료 홀론
+    if (authorTeamId) {
+      const teammate = await this.hollonRepo.findOne({
+        where: {
+          teamId: authorTeamId,
+          status: 'idle',
+          id: Not(pr.authorHollonId),
+        },
+      });
+
+      if (teammate) {
+        return { hollonId: teammate.id, type: 'team_member' };
+      }
+    }
+
+    // 3. Fallback: 전문 CodeReviewer 생성
+    return this.createSpecializedReviewer('CodeReviewer', pr);
+  }
+
+  /**
+   * 전문 리뷰어 홀론 생성 (임시)
+   */
+  private async createSpecializedReviewer(
+    roleType: string,
+    pr: TaskPullRequest,
+  ): Promise<ReviewerSelection> {
+    const role = await this.roleRepo.findOne({
+      where: { name: roleType, organizationId: pr.task.project.organizationId },
+    });
+
+    if (!role) {
+      throw new Error(`Reviewer role not found: ${roleType}`);
+    }
+
+    // 임시 홀론 생성
+    const reviewer = await this.hollonService.createTemporary({
+      roleId: role.id,
+      organizationId: pr.task.project.organizationId,
+      name: `${roleType}-${pr.prNumber}`,
+      createdBy: pr.authorHollonId,
+    });
+
+    return { hollonId: reviewer.id, type: roleType.toLowerCase() };
+  }
+
+  /**
+   * PR 유형 분류
+   */
+  private async classifyPRType(pr: TaskPullRequest): Promise<PRType> {
+    // 키워드 기반 분류
+    const title = pr.task?.title?.toLowerCase() || '';
+    const desc = pr.task?.description?.toLowerCase() || '';
+    const combined = `${title} ${desc}`;
+
+    if (/security|auth|encrypt|token|credential/i.test(combined)) {
+      return 'security';
+    }
+    if (/architect|refactor|migrate|structure/i.test(combined)) {
+      return 'architecture';
+    }
+    if (/performance|optimize|cache|speed/i.test(combined)) {
+      return 'performance';
+    }
+
+    return 'general';
+  }
+
+  /**
+   * 리뷰 완료 처리
+   */
+  async submitReview(
+    prId: string,
+    reviewerHollonId: string,
+    decision: 'approve' | 'request_changes',
+    comments?: string,
+  ): Promise<TaskPullRequest> {
+    const pr = await this.prRepo.findOne({ where: { id: prId } });
+
+    if (!pr) throw new Error(`PR not found: ${prId}`);
+    if (pr.reviewerHollonId !== reviewerHollonId) {
+      throw new Error('Not authorized to review this PR');
+    }
+
+    pr.reviewComments = comments;
+
+    if (decision === 'approve') {
+      pr.status = 'approved';
+      pr.approvedAt = new Date();
+
+      this.eventEmitter.emit('pr.approved', { prId, reviewerHollonId });
+    } else {
+      pr.status = 'changes_requested';
+
+      // 작성자에게 수정 요청 알림
+      await this.messageService.send({
+        fromHollonId: reviewerHollonId,
+        toHollonId: pr.authorHollonId,
+        messageType: 'review_feedback',
+        content: `
+코드 리뷰 피드백: 수정 필요
+
+**PR**: ${pr.prUrl}
+
+**피드백**:
+${comments}
+
+수정 후 다시 리뷰 요청해주세요.
+        `.trim(),
+        relatedTaskId: pr.taskId,
+      });
+
+      this.eventEmitter.emit('pr.changes_requested', { prId, reviewerHollonId });
+    }
+
+    return this.prRepo.save(pr);
+  }
+
+  /**
+   * PR Merge 처리
+   */
+  async mergePullRequest(prId: string): Promise<TaskPullRequest> {
+    const pr = await this.prRepo.findOne({
+      where: { id: prId },
+      relations: ['task'],
+    });
+
+    if (!pr) throw new Error(`PR not found: ${prId}`);
+    if (pr.status !== 'approved') {
+      throw new Error('PR must be approved before merging');
+    }
+
+    pr.status = 'merged';
+    pr.mergedAt = new Date();
+    await this.prRepo.save(pr);
+
+    // Task 완료 처리
+    await this.taskService.completeTask(pr.taskId);
+
+    this.eventEmitter.emit('pr.merged', { prId, taskId: pr.taskId });
+
+    return pr;
+  }
+}
+
+type PRType = 'general' | 'security' | 'architecture' | 'performance';
+
+interface ReviewerSelection {
+  hollonId: string;
+  type: string;
+}
+
+interface CreatePRDto {
+  prNumber: number;
+  prUrl: string;
+  repository: string;
+  branchName?: string;
+}
+```
+
+---
+
+## 14. 기술 부채 서비스
+
+### 14.1 TechDebtService
+
+기술 부채 감지, 추적, 우선순위화:
+
+```typescript
+@Injectable()
+export class TechDebtService {
+  constructor(
+    @InjectRepository(TechDebt)
+    private readonly debtRepo: Repository<TechDebt>,
+    @InjectRepository(Cycle)
+    private readonly cycleRepo: Repository<Cycle>,
+    private readonly documentService: DocumentService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
+
+  /**
+   * 기술 부채 자동 감지 (QualityGate 연동)
+   */
+  async detectDebts(
+    taskId: string,
+    hollonId: string,
+    codeAnalysis: CodeAnalysisResult,
+  ): Promise<TechDebt[]> {
+    const debts: TechDebt[] = [];
+
+    // 1. TODO/FIXME 패턴 감지
+    for (const todo of codeAnalysis.todos) {
+      debts.push(await this.createDebt({
+        title: `TODO: ${todo.content.substring(0, 100)}`,
+        description: todo.content,
+        debtType: 'code',
+        sourceTaskId: taskId,
+        sourceHollonId: hollonId,
+        sourceFile: todo.file,
+        sourceLine: todo.line,
+        estimatedFixHours: 1,
+        interestRate: 0.01,
+      }));
+    }
+
+    // 2. 복잡도 초과 감지
+    for (const complex of codeAnalysis.complexFunctions) {
+      if (complex.complexity > 15) {
+        debts.push(await this.createDebt({
+          title: `High complexity: ${complex.functionName}`,
+          description: `Cyclomatic complexity ${complex.complexity} exceeds threshold 15`,
+          debtType: 'code',
+          sourceTaskId: taskId,
+          sourceHollonId: hollonId,
+          sourceFile: complex.file,
+          estimatedFixHours: complex.complexity / 5,
+          interestRate: 0.02,
+          affectedFiles: [complex.file],
+        }));
+      }
+    }
+
+    // 3. 테스트 커버리지 미달 감지
+    if (codeAnalysis.testCoverage < 80) {
+      debts.push(await this.createDebt({
+        title: `Test coverage below 80%: ${codeAnalysis.testCoverage}%`,
+        description: `Test coverage is ${codeAnalysis.testCoverage}%, should be at least 80%`,
+        debtType: 'test',
+        sourceTaskId: taskId,
+        sourceHollonId: hollonId,
+        estimatedFixHours: (80 - codeAnalysis.testCoverage) / 10,
+        interestRate: 0.03,
+        affectedFiles: codeAnalysis.uncoveredFiles,
+      }));
+    }
+
+    // 4. 린트 경고 무시 감지
+    for (const suppression of codeAnalysis.lintSuppressions) {
+      debts.push(await this.createDebt({
+        title: `Lint suppression: ${suppression.rule}`,
+        description: suppression.comment,
+        debtType: 'code',
+        sourceTaskId: taskId,
+        sourceHollonId: hollonId,
+        sourceFile: suppression.file,
+        sourceLine: suppression.line,
+        estimatedFixHours: 0.5,
+        interestRate: 0.005,
+      }));
+    }
+
+    return debts;
+  }
+
+  /**
+   * 기술 부채 생성
+   */
+  async createDebt(data: CreateDebtDto): Promise<TechDebt> {
+    const task = await this.taskRepo.findOne({
+      where: { id: data.sourceTaskId },
+      relations: ['project'],
+    });
+
+    const debt = this.debtRepo.create({
+      ...data,
+      organizationId: task.project.organizationId,
+      projectId: task.projectId,
+      status: 'identified',
+      priorityScore: 0,
+    });
+
+    const saved = await this.debtRepo.save(debt);
+
+    // Decision Log에 기록
+    await this.decisionLogService.recordDecision({
+      hollonId: data.sourceHollonId,
+      taskId: data.sourceTaskId,
+      type: 'process',
+      question: '기술 부채 발생',
+      options: ['즉시 해결', '부채로 기록'],
+      chosen: '부채로 기록',
+      rationale: `빠른 전달을 위해 ${data.title}을 기술 부채로 기록`,
+    });
+
+    this.eventEmitter.emit('debt.created', { debtId: saved.id });
+
+    return saved;
+  }
+
+  /**
+   * 이자 누적 업데이트 (일일 배치)
+   */
+  @Cron('0 0 * * *') // 매일 자정
+  async updateInterest(): Promise<void> {
+    await this.debtRepo.query('SELECT update_debt_interest()');
+
+    this.eventEmitter.emit('debt.interest_updated');
+  }
+
+  /**
+   * 우선순위 기반 부채 목록 조회
+   */
+  async getDebtsByPriority(
+    organizationId: string,
+    options?: { projectId?: string; type?: string; limit?: number },
+  ): Promise<TechDebt[]> {
+    const query = this.debtRepo
+      .createQueryBuilder('debt')
+      .where('debt.organization_id = :orgId', { orgId: organizationId })
+      .andWhere('debt.status IN (:...statuses)', { statuses: ['identified', 'scheduled'] })
+      .orderBy('debt.priority_score', 'DESC');
+
+    if (options?.projectId) {
+      query.andWhere('debt.project_id = :projectId', { projectId: options.projectId });
+    }
+
+    if (options?.type) {
+      query.andWhere('debt.debt_type = :type', { type: options.type });
+    }
+
+    if (options?.limit) {
+      query.limit(options.limit);
+    }
+
+    return query.getMany();
+  }
+
+  /**
+   * 사이클에 부채 해결 태스크 스케줄링
+   */
+  async scheduleDebtsForCycle(
+    cycleId: string,
+    debtBudgetPercent: number = 20,
+  ): Promise<ScheduledDebts> {
+    const cycle = await this.cycleRepo.findOne({
+      where: { id: cycleId },
+      relations: ['project'],
+    });
+
+    if (!cycle) throw new Error(`Cycle not found: ${cycleId}`);
+
+    // 사이클 예산의 X%를 부채 해결에 할당
+    const totalBudgetHours = cycle.budgetCents ? cycle.budgetCents / 100 : 40; // 기본 40시간
+    const debtBudgetHours = totalBudgetHours * (debtBudgetPercent / 100);
+
+    // 우선순위 높은 부채 선택
+    const debts = await this.getDebtsByPriority(cycle.project.organizationId, {
+      projectId: cycle.projectId,
+    });
+
+    const scheduled: TechDebt[] = [];
+    let allocatedHours = 0;
+
+    for (const debt of debts) {
+      if (allocatedHours + debt.estimatedFixHours <= debtBudgetHours) {
+        debt.status = 'scheduled';
+        debt.scheduledCycleId = cycleId;
+        await this.debtRepo.save(debt);
+
+        scheduled.push(debt);
+        allocatedHours += debt.estimatedFixHours;
+      }
+    }
+
+    return {
+      cycleId,
+      budgetHours: debtBudgetHours,
+      allocatedHours,
+      scheduledDebts: scheduled,
+      remainingDebts: debts.length - scheduled.length,
+    };
+  }
+
+  /**
+   * 부채 해결 완료
+   */
+  async resolveDebt(
+    debtId: string,
+    resolverHollonId: string,
+    notes?: string,
+  ): Promise<TechDebt> {
+    const debt = await this.debtRepo.findOne({ where: { id: debtId } });
+
+    if (!debt) throw new Error(`Debt not found: ${debtId}`);
+
+    debt.status = 'resolved';
+    debt.resolvedByHollonId = resolverHollonId;
+    debt.resolvedAt = new Date();
+    debt.resolutionNotes = notes;
+
+    const saved = await this.debtRepo.save(debt);
+
+    this.eventEmitter.emit('debt.resolved', { debtId, resolverHollonId });
+
+    return saved;
+  }
+
+  /**
+   * 주간 부채 리포트 생성
+   */
+  @Cron('0 9 * * 1') // 매주 월요일 09:00
+  async generateWeeklyReport(organizationId: string): Promise<void> {
+    const debts = await this.debtRepo.find({
+      where: { organizationId, status: In(['identified', 'scheduled']) },
+    });
+
+    const totalDebt = debts.reduce((sum, d) => sum + d.estimatedFixHours + d.accumulatedInterest, 0);
+    const byType = this.groupByType(debts);
+
+    const report = `
+# 기술 부채 주간 리포트
+
+**총 부채**: ${debts.length}건 (${totalDebt.toFixed(1)} 시간)
+
+## 유형별 현황
+
+| 유형 | 건수 | 예상 해결 시간 | 누적 이자 |
+|------|------|--------------|----------|
+${Object.entries(byType).map(([type, items]) => {
+  const hours = items.reduce((s, d) => s + d.estimatedFixHours, 0);
+  const interest = items.reduce((s, d) => s + d.accumulatedInterest, 0);
+  return `| ${type} | ${items.length} | ${hours.toFixed(1)}h | ${interest.toFixed(1)}h |`;
+}).join('\n')}
+
+## 우선순위 TOP 5
+
+${debts.slice(0, 5).map((d, i) => `${i + 1}. **${d.title}** (Score: ${d.priorityScore.toFixed(1)})`).join('\n')}
+    `.trim();
+
+    await this.documentService.create({
+      organizationId,
+      name: `tech-debt-report-${new Date().toISOString().split('T')[0]}`,
+      content: report,
+      docType: 'meeting',
+      scope: 'organization',
+      scopeId: organizationId,
+      keywords: ['tech-debt', 'report', 'weekly'],
+    });
+  }
+
+  private groupByType(debts: TechDebt[]): Record<string, TechDebt[]> {
+    return debts.reduce((acc, debt) => {
+      acc[debt.debtType] = acc[debt.debtType] || [];
+      acc[debt.debtType].push(debt);
+      return acc;
+    }, {} as Record<string, TechDebt[]>);
+  }
+}
+
+interface CreateDebtDto {
+  title: string;
+  description?: string;
+  debtType: 'code' | 'test' | 'doc' | 'dependency' | 'architecture';
+  sourceTaskId: string;
+  sourceHollonId: string;
+  sourceFile?: string;
+  sourceLine?: number;
+  estimatedFixHours: number;
+  interestRate?: number;
+  affectedFiles?: string[];
+}
+
+interface ScheduledDebts {
+  cycleId: string;
+  budgetHours: number;
+  allocatedHours: number;
+  scheduledDebts: TechDebt[];
+  remainingDebts: number;
+}
+
+interface CodeAnalysisResult {
+  todos: Array<{ content: string; file: string; line: number }>;
+  complexFunctions: Array<{ functionName: string; complexity: number; file: string }>;
+  testCoverage: number;
+  uncoveredFiles: string[];
+  lintSuppressions: Array<{ rule: string; comment: string; file: string; line: number }>;
+}
+```
+
+---
+
 ## 변경 이력
 
 | 날짜 | 버전 | 변경 내용 |
@@ -3980,3 +4675,4 @@ export class UncertaintyDecisionService {
 | 2024-12-04 | 1.2.0 | 홀론 오케스트레이션: HollonOrchestratorService, TaskAnalyzerService, EscalationService, QualityGateService 추가 |
 | 2024-12-04 | 1.3.0 | SSOT에서 구현 로드맵 이동, LLM 한계 극복 서비스 상세, 협업 서비스 상세 추가 |
 | 2024-12-04 | 1.4.0 | 목차 업데이트 (섹션 6-12 추가) |
+| 2024-12-04 | 1.5.0 | Task-PR 연결 테이블, 기술 부채 테이블, CodeReviewService, TechDebtService 추가 |
