@@ -1,20 +1,20 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import { AppModule } from '../../src/app.module';
+import { AppModule } from '../../../src/app.module';
 import { DataSource } from 'typeorm';
-import { HollonOrchestratorService } from '../../src/modules/orchestration/services/hollon-orchestrator.service';
-import { Organization } from '../../src/modules/organization/entities/organization.entity';
-import { Team } from '../../src/modules/team/entities/team.entity';
-import { Role } from '../../src/modules/role/entities/role.entity';
-import { Hollon } from '../../src/modules/hollon/entities/hollon.entity';
-import { Project } from '../../src/modules/project/entities/project.entity';
+import { HollonOrchestratorService } from '../../../src/modules/orchestration/services/hollon-orchestrator.service';
+import { Organization } from '../../../src/modules/organization/entities/organization.entity';
+import { Team } from '../../../src/modules/team/entities/team.entity';
+import { Role } from '../../../src/modules/role/entities/role.entity';
+import { Hollon } from '../../../src/modules/hollon/entities/hollon.entity';
+import { Project } from '../../../src/modules/project/entities/project.entity';
 import {
   Task,
   TaskStatus,
   TaskType,
   TaskPriority,
-} from '../../src/modules/task/entities/task.entity';
-import { BrainProviderConfig } from '../../src/modules/brain-provider/entities/brain-provider-config.entity';
+} from '../../../src/modules/task/entities/task.entity';
+import { BrainProviderConfig } from '../../../src/modules/brain-provider/entities/brain-provider-config.entity';
 
 /**
  * Concurrent Hollons E2E Test
@@ -41,7 +41,7 @@ describe('Concurrent Hollons E2E', () => {
   let project: Project;
   let brainConfig: BrainProviderConfig;
 
-  const testRunId = Date.now();
+  let testRunId: number;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -67,6 +67,9 @@ describe('Concurrent Hollons E2E', () => {
   });
 
   beforeEach(async () => {
+    // Generate unique ID for each test
+    testRunId = Date.now() + Math.random();
+    
     // Create test organization
     const orgRepo = dataSource.getRepository(Organization);
     organization = await orgRepo.save({

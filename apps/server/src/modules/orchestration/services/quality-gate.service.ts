@@ -228,8 +228,20 @@ export class QualityGateService {
 
     try {
       const { execSync } = require('child_process');
-      const files = task.affectedFiles.join(' ');
+      const { existsSync } = require('fs');
+      const { join } = require('path');
 
+      // Check if files actually exist
+      const existingFiles = task.affectedFiles.filter(file =>
+        existsSync(join(task.project!.workingDirectory!, file))
+      );
+
+      if (existingFiles.length === 0) {
+        this.logger.debug('No affected files exist yet, skipping lint check');
+        return { passed: true, shouldRetry: false };
+      }
+
+      const files = existingFiles.join(' ');
       this.logger.log(`Running ESLint on: ${files}`);
 
       execSync(`npx eslint ${files} --format json`, {
@@ -289,6 +301,18 @@ export class QualityGateService {
 
     try {
       const { execSync } = require('child_process');
+      const { existsSync } = require('fs');
+      const { join } = require('path');
+
+      // Check if files actually exist
+      const existingFiles = task.affectedFiles.filter(file =>
+        existsSync(join(task.project!.workingDirectory!, file))
+      );
+
+      if (existingFiles.length === 0) {
+        this.logger.debug('No affected files exist yet, skipping TypeScript check');
+        return { passed: true, shouldRetry: false };
+      }
 
       this.logger.log('Running TypeScript compiler check');
 
