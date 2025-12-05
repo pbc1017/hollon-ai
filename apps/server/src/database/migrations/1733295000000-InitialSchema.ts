@@ -5,7 +5,7 @@ export class InitialSchema1733295000000 implements MigrationInterface {
     // Enable pgvector extension (optional - skip if not available)
     try {
       await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
-    } catch (error) {
+    } catch {
       console.warn(
         'pgvector extension not available - skipping. Vector search features will be disabled.',
       );
