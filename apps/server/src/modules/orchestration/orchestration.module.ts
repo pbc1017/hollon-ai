@@ -12,6 +12,7 @@ import { QualityGateService } from './services/quality-gate.service';
 import { EscalationService } from './services/escalation.service';
 import { SubtaskCreationService } from './services/subtask-creation.service';
 import { TaskAnalyzerService } from './services/task-analyzer.service';
+import { DecisionLogService } from './services/decision-log.service';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { TaskAnalyzerService } from './services/task-analyzer.service';
     EscalationService,
     SubtaskCreationService,
     TaskAnalyzerService,
+    DecisionLogService,
     HollonOrchestratorService,
   ],
   exports: [
