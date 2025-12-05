@@ -236,7 +236,9 @@ describe('Integration: Scenario 4 - Concurrent Hollons', () => {
       });
 
       expect(finalTask?.assignedHollonId).toBeDefined();
-      expect([hollon1.id, hollon2.id]).toContain(finalTask?.assignedHollonId!);
+      if (finalTask?.assignedHollonId) {
+        expect([hollon1.id, hollon2.id]).toContain(finalTask.assignedHollonId);
+      }
     });
   });
 

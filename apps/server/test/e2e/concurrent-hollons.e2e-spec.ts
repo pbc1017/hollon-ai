@@ -39,7 +39,6 @@ describe('Concurrent Hollons E2E', () => {
   let hollon1: Hollon;
   let hollon2: Hollon;
   let project: Project;
-  let brainConfig: BrainProviderConfig;
 
   let testRunId: number;
 
@@ -85,7 +84,7 @@ describe('Concurrent Hollons E2E', () => {
 
     // Create brain provider config
     const configRepo = dataSource.getRepository(BrainProviderConfig);
-    brainConfig = await configRepo.save({
+    await configRepo.save({
       organizationId: organization.id,
       providerId: 'claude_code',
       displayName: 'Claude Code',
@@ -200,7 +199,7 @@ describe('Concurrent Hollons E2E', () => {
       const taskRepo = dataSource.getRepository(Task);
 
       // Create 2 tasks with overlapping files
-      const task1 = await taskRepo.save({
+      await taskRepo.save({
         projectId: project.id,
         title: 'Task 1 - Modify shared.ts',
         description: 'Add function foo() to shared.ts that returns "foo"',
@@ -210,7 +209,7 @@ describe('Concurrent Hollons E2E', () => {
         affectedFiles: ['src/shared.ts'],
       });
 
-      const task2 = await taskRepo.save({
+      await taskRepo.save({
         projectId: project.id,
         title: 'Task 2 - Modify shared.ts',
         description: 'Add function bar() to shared.ts that returns "bar"',
@@ -257,7 +256,7 @@ describe('Concurrent Hollons E2E', () => {
       const taskRepo = dataSource.getRepository(Task);
 
       // Create 5 tasks with different files
-      const tasks = await Promise.all([
+      await Promise.all([
         taskRepo.save({
           projectId: project.id,
           title: 'Task 1',

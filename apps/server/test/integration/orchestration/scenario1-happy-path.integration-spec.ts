@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { AppModule } from '@/app.module';
 import { Organization } from '@/modules/organization/entities/organization.entity';

@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { DataSource, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import configuration from '../../../src/config/configuration';
 import { getTestDatabaseConfig } from '../../setup/test-database';
@@ -43,7 +43,6 @@ describe('Orchestration E2E', () => {
   let orchestrator: HollonOrchestratorService;
   let taskPool: TaskPoolService;
   let promptComposer: PromptComposerService;
-  let brainProvider: BrainProviderService;
 
   let organizationRepo: Repository<Organization>;
   let teamRepo: Repository<Team>;
@@ -105,7 +104,7 @@ describe('Orchestration E2E', () => {
     );
     taskPool = module.get<TaskPoolService>(TaskPoolService);
     promptComposer = module.get<PromptComposerService>(PromptComposerService);
-    brainProvider = module.get<BrainProviderService>(BrainProviderService);
+    module.get<BrainProviderService>(BrainProviderService);
 
     organizationRepo = module.get<Repository<Organization>>(
       getRepositoryToken(Organization),

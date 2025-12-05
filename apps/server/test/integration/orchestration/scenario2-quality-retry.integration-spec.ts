@@ -8,7 +8,6 @@ import { Team } from '@/modules/team/entities/team.entity';
 import { Hollon, HollonStatus } from '@/modules/hollon/entities/hollon.entity';
 import { Project } from '@/modules/project/entities/project.entity';
 import { Task, TaskStatus } from '@/modules/task/entities/task.entity';
-import { HollonOrchestratorService } from '@/modules/orchestration/services/hollon-orchestrator.service';
 import { QualityGateService } from '@/modules/orchestration/services/quality-gate.service';
 import { EscalationService } from '@/modules/orchestration/services/escalation.service';
 
@@ -24,7 +23,6 @@ import { EscalationService } from '@/modules/orchestration/services/escalation.s
 describe('Integration: Scenario 2 - Quality Failure and Retry', () => {
   let app: INestApplication;
   let dataSource: DataSource;
-  let orchestrator: HollonOrchestratorService;
   let qualityGate: QualityGateService;
   let escalation: EscalationService;
 
@@ -46,7 +44,6 @@ describe('Integration: Scenario 2 - Quality Failure and Retry', () => {
     await app.init();
 
     dataSource = app.get(DataSource);
-    orchestrator = app.get(HollonOrchestratorService);
     qualityGate = app.get(QualityGateService);
     escalation = app.get(EscalationService);
   });

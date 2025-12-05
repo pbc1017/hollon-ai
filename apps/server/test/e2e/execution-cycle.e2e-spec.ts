@@ -43,7 +43,6 @@ describe('Full Execution Cycle E2E', () => {
   let role: Role;
   let hollon: Hollon;
   let project: Project;
-  let brainConfig: BrainProviderConfig;
 
   let testRunId: number;
 
@@ -89,7 +88,7 @@ describe('Full Execution Cycle E2E', () => {
 
     // Create brain provider config
     const configRepo = dataSource.getRepository(BrainProviderConfig);
-    brainConfig = await configRepo.save({
+    await configRepo.save({
       organizationId: organization.id,
       providerId: 'claude_code',
       displayName: 'Claude Code',

@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Task } from '../../task/entities/task.entity';
 import { BrainResponse } from '../../brain-provider/interfaces/brain-provider.interface';
+import { execSync } from 'child_process';
+import { existsSync } from 'fs';
+import { join } from 'path';
 
 export interface ValidationResult {
   passed: boolean;
@@ -226,10 +229,6 @@ export class QualityGateService {
     }
 
     try {
-      const { execSync } = require('child_process');
-      const { existsSync } = require('fs');
-      const { join } = require('path');
-
       // Check if files actually exist
       const existingFiles = task.affectedFiles.filter((file) =>
         existsSync(join(task.project!.workingDirectory!, file)),
@@ -305,10 +304,6 @@ export class QualityGateService {
     }
 
     try {
-      const { execSync } = require('child_process');
-      const { existsSync } = require('fs');
-      const { join } = require('path');
-
       // Check if files actually exist
       const existingFiles = task.affectedFiles.filter((file) =>
         existsSync(join(task.project!.workingDirectory!, file)),
@@ -407,7 +402,7 @@ export class QualityGateService {
    * 2. Run test suite in working directory
    * 3. Parse test results
    */
-  // @ts-ignore - Reserved for future implementation
+  // @ts-expect-error - Reserved for future implementation
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private async _checkTestsPassing(
     _workingDirectory?: string,
