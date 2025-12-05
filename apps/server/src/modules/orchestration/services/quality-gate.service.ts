@@ -60,6 +60,18 @@ export class QualityGateService {
       return costCheck;
     }
 
+    // 5. Run lint check (optional, only if affected files specified)
+    const lintCheck = await this.checkLint(context.task);
+    if (!lintCheck.passed) {
+      return lintCheck;
+    }
+
+    // 6. Run TypeScript compilation check (optional, only if affected files specified)
+    const tsCheck = await this.checkTypeScriptCompilation(context.task);
+    if (!tsCheck.passed) {
+      return tsCheck;
+    }
+
     this.logger.log(
       `Quality gate passed for task ${context.task.id}: all checks successful`,
     );
@@ -168,7 +180,7 @@ export class QualityGateService {
 
   /**
    * Check 3: Basic code quality validation
-   * Future enhancements: run actual linters, syntax checkers
+   * Includes: static analysis, incomplete markers, code style
    */
   private checkCodeQuality(brainResult: BrainResponse): ValidationResult {
     const output = brainResult.output;
@@ -197,6 +209,122 @@ export class QualityGateService {
     }
 
     return { passed: true, shouldRetry: false };
+  }
+
+  /**
+   * Check 4a: Run ESLint on affected files
+   * This is an optional validation that runs if affected files are specified
+   */
+  async checkLint(task: Task): Promise<ValidationResult> {
+    // Skip if no affected files or not in a project with working directory
+    if (!task.affectedFiles || task.affectedFiles.length === 0) {
+      return { passed: true, shouldRetry: false };
+    }
+
+    if (!task.project?.workingDirectory) {
+      this.logger.debug('No working directory specified, skipping lint check');
+      return { passed: true, shouldRetry: false };
+    }
+
+    try {
+      const { execSync } = require('child_process');
+      const files = task.affectedFiles.join(' ');
+
+      this.logger.log(`Running ESLint on: ${files}`);
+
+      execSync(`npx eslint ${files} --format json`, {
+        cwd: task.project.workingDirectory,
+        stdio: 'pipe',
+        encoding: 'utf-8',
+      });
+
+      this.logger.log('Lint check passed');
+      return { passed: true, shouldRetry: false };
+    } catch (error: any) {
+      // Parse ESLint JSON output if available
+      let errorCount = 0;
+      let warningCount = 0;
+
+      try {
+        const results = JSON.parse(error.stdout || '[]');
+        errorCount = results.reduce((sum: number, r: any) => sum + r.errorCount, 0);
+        warningCount = results.reduce((sum: number, r: any) => sum + r.warningCount, 0);
+      } catch {
+        // If parsing fails, treat as generic error
+      }
+
+      this.logger.warn(
+        `Lint check failed: ${errorCount} errors, ${warningCount} warnings`,
+      );
+
+      return {
+        passed: false,
+        shouldRetry: true, // Retry - the Brain can fix lint issues
+        reason: `ESLint found ${errorCount} error(s) and ${warningCount} warning(s)`,
+        details: {
+          checkType: 'lint',
+          errorCount,
+          warningCount,
+        },
+      };
+    }
+  }
+
+  /**
+   * Check 4b: Run TypeScript compiler check on affected files
+   * This validates that the generated code compiles without errors
+   */
+  async checkTypeScriptCompilation(task: Task): Promise<ValidationResult> {
+    // Skip if no affected files or not in a project with working directory
+    if (!task.affectedFiles || task.affectedFiles.length === 0) {
+      return { passed: true, shouldRetry: false };
+    }
+
+    if (!task.project?.workingDirectory) {
+      this.logger.debug(
+        'No working directory specified, skipping TypeScript check',
+      );
+      return { passed: true, shouldRetry: false };
+    }
+
+    try {
+      const { execSync } = require('child_process');
+
+      this.logger.log('Running TypeScript compiler check');
+
+      // Run tsc --noEmit to check for type errors without generating output
+      execSync('npx tsc --noEmit', {
+        cwd: task.project.workingDirectory,
+        stdio: 'pipe',
+        encoding: 'utf-8',
+      });
+
+      this.logger.log('TypeScript compilation check passed');
+      return { passed: true, shouldRetry: false };
+    } catch (error: any) {
+      const errorOutput = error.stdout || error.stderr || '';
+
+      // Count errors
+      const errorLines = errorOutput
+        .split('\n')
+        .filter((line: string) => line.includes('error TS'));
+      const errorCount = errorLines.length;
+
+      this.logger.warn(
+        `TypeScript compilation check failed: ${errorCount} error(s)`,
+      );
+
+      return {
+        passed: false,
+        shouldRetry: true, // Retry - the Brain can fix type errors
+        reason: `TypeScript compiler found ${errorCount} error(s)`,
+        details: {
+          checkType: 'typescript',
+          errorCount,
+          errors: errorLines.slice(0, 10), // First 10 errors
+        },
+      };
+    }
   }
 
   /**
