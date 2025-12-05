@@ -1,20 +1,20 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import { AppModule } from '../../../src/app.module';
+import { AppModule } from '../../src/app.module';
 import { DataSource } from 'typeorm';
-import { HollonOrchestratorService } from '../../../src/modules/orchestration/services/hollon-orchestrator.service';
-import { Organization } from '../../../src/modules/organization/entities/organization.entity';
-import { Team } from '../../../src/modules/team/entities/team.entity';
-import { Role } from '../../../src/modules/role/entities/role.entity';
-import { Hollon } from '../../../src/modules/hollon/entities/hollon.entity';
-import { Project } from '../../../src/modules/project/entities/project.entity';
+import { HollonOrchestratorService } from '../../src/modules/orchestration/services/hollon-orchestrator.service';
+import { Organization } from '../../src/modules/organization/entities/organization.entity';
+import { Team } from '../../src/modules/team/entities/team.entity';
+import { Role } from '../../src/modules/role/entities/role.entity';
+import { Hollon } from '../../src/modules/hollon/entities/hollon.entity';
+import { Project } from '../../src/modules/project/entities/project.entity';
 import {
   Task,
   TaskStatus,
   TaskType,
   TaskPriority,
 } from '../../../src/modules/task/entities/task.entity';
-import { BrainProviderConfig } from '../../../src/modules/brain-provider/entities/brain-provider-config.entity';
+import { BrainProviderConfig } from '../../src/modules/brain-provider/entities/brain-provider-config.entity';
 
 /**
  * Concurrent Hollons E2E Test
