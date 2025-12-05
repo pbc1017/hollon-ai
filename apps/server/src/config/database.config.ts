@@ -13,9 +13,11 @@ export const databaseConfig = (
     username: configService.get<string>('database.user'),
     password: configService.get<string>('database.password'),
     database: configService.get<string>('database.name'),
+    schema: 'hollon',
     entities: [__dirname + '/../**/*.entity{.ts,.js}'],
     migrations: [__dirname + '/../database/migrations/*{.ts,.js}'],
-    synchronize: !isProduction, // 개발 환경에서만 자동 동기화
+    synchronize: false, // 마이그레이션 사용
+    migrationsRun: false, // 서버 시작 시 자동 마이그레이션 실행 안 함
     logging: !isProduction,
     ssl: isProduction ? { rejectUnauthorized: false } : false,
   };
