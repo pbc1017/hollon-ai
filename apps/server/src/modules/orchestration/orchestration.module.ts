@@ -11,6 +11,7 @@ import { HollonOrchestratorService } from './services/hollon-orchestrator.servic
 import { QualityGateService } from './services/quality-gate.service';
 import { EscalationService } from './services/escalation.service';
 import { SubtaskCreationService } from './services/subtask-creation.service';
+import { TaskAnalyzerService } from './services/task-analyzer.service';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { SubtaskCreationService } from './services/subtask-creation.service';
     QualityGateService,
     EscalationService,
     SubtaskCreationService,
+    TaskAnalyzerService,
     HollonOrchestratorService,
   ],
   exports: [
