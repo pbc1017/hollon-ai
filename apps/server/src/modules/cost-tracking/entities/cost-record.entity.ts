@@ -43,7 +43,16 @@ export class CostRecord extends BaseEntity {
   @Column({ name: 'output_tokens', default: 0 })
   outputTokens: number;
 
-  @Column({ name: 'cost_cents', type: 'decimal', precision: 10, scale: 4 })
+  @Column({
+    name: 'cost_cents',
+    type: 'decimal',
+    precision: 10,
+    scale: 4,
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string) => parseFloat(value),
+    },
+  })
   costCents: number;
 
   @Column({ name: 'execution_time_ms', nullable: true })

@@ -3,30 +3,30 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { DataSource, Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import configuration from '../../src/config/configuration';
-import { getTestDatabaseConfig } from '../setup/test-database';
-import { HollonOrchestratorService } from '../../src/modules/orchestration/services/hollon-orchestrator.service';
-import { TaskPoolService } from '../../src/modules/orchestration/services/task-pool.service';
-import { PromptComposerService } from '../../src/modules/orchestration/services/prompt-composer.service';
-import { QualityGateService } from '../../src/modules/orchestration/services/quality-gate.service';
-import { BrainProviderService } from '../../src/modules/brain-provider/brain-provider.service';
+import configuration from '../../../src/config/configuration';
+import { getTestDatabaseConfig } from '../../setup/test-database';
+import { HollonOrchestratorService } from '../../../src/modules/orchestration/services/hollon-orchestrator.service';
+import { TaskPoolService } from '../../../src/modules/orchestration/services/task-pool.service';
+import { PromptComposerService } from '../../../src/modules/orchestration/services/prompt-composer.service';
+import { QualityGateService } from '../../../src/modules/orchestration/services/quality-gate.service';
+import { BrainProviderService } from '../../../src/modules/brain-provider/brain-provider.service';
 import {
   Hollon,
   HollonStatus,
-} from '../../src/modules/hollon/entities/hollon.entity';
+} from '../../../src/modules/hollon/entities/hollon.entity';
 import {
   Task,
   TaskStatus,
   TaskPriority,
   TaskType,
-} from '../../src/modules/task/entities/task.entity';
-import { Document } from '../../src/modules/document/entities/document.entity';
-import { Organization } from '../../src/modules/organization/entities/organization.entity';
-import { Team } from '../../src/modules/team/entities/team.entity';
-import { Role } from '../../src/modules/role/entities/role.entity';
-import { Project } from '../../src/modules/project/entities/project.entity';
-import { OrganizationFactory } from '../fixtures/organization.factory';
-import { TeamFactory } from '../fixtures/team.factory';
+} from '../../../src/modules/task/entities/task.entity';
+import { Document } from '../../../src/modules/document/entities/document.entity';
+import { Organization } from '../../../src/modules/organization/entities/organization.entity';
+import { Team } from '../../../src/modules/team/entities/team.entity';
+import { Role } from '../../../src/modules/role/entities/role.entity';
+import { Project } from '../../../src/modules/project/entities/project.entity';
+import { OrganizationFactory } from '../../fixtures/organization.factory';
+import { TeamFactory } from '../../fixtures/team.factory';
 
 /**
  * E2E Orchestration Test
