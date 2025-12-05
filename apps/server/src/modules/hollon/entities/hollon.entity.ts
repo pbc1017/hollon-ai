@@ -17,6 +17,8 @@ export enum HollonStatus {
   WORKING = 'working',
   BLOCKED = 'blocked',
   REVIEWING = 'reviewing',
+  PAUSED = 'paused',
+  ERROR = 'error',
   OFFLINE = 'offline',
 }
 

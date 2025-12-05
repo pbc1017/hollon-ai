@@ -36,7 +36,12 @@ export class ClaudeCodeProvider implements IBrainProvider {
       request.options?.timeoutMs || config.timeoutSeconds * 1000;
 
     // Build command arguments
-    const args = ['--print', '--output-format', 'text'];
+    const args = [
+      '--print',
+      '--output-format',
+      'text',
+      '--dangerously-skip-permissions',
+    ];
     if (request.systemPrompt) {
       args.push('--system-prompt', request.systemPrompt);
     }

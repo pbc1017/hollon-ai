@@ -1,0 +1,302 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
+import { Document, DocumentType } from '../../document/entities/document.entity';
+import { BrainProviderService } from '../../brain-provider/brain-provider.service';
+import { PromptComposerService } from './prompt-composer.service';
+import { TaskPoolService } from './task-pool.service';
+import { Task } from '../../task/entities/task.entity';
+
+export interface ExecutionCycleResult {
+  success: boolean;
+  taskId?: string;
+  taskTitle?: string;
+  duration: number;
+  output?: string;
+  error?: string;
+  noTaskAvailable?: boolean;
+}
+
+/**
+ * HollonOrchestratorService
+ *
+ * Main execution cycle orchestrator:
+ * 1. Pull next task from task pool
+ * 2. Compose prompt using 6-layer composition
+ * 3. Execute brain provider (Claude Code)
+ * 4. Create result document
+ * 5. Update task status
+ * 6. Handle errors and state transitions
+ */
+@Injectable()
+export class HollonOrchestratorService {
+  private readonly logger = new Logger(HollonOrchestratorService.name);
+
+  constructor(
+    @InjectRepository(Hollon)
+    private readonly hollonRepo: Repository<Hollon>,
+    @InjectRepository(Document)
+    private readonly documentRepo: Repository<Document>,
+    private readonly brainProvider: BrainProviderService,
+    private readonly promptComposer: PromptComposerService,
+    private readonly taskPool: TaskPoolService,
+  ) {}
+
+  /**
+   * Run one execution cycle for a hollon
+   *
+   * This is the core autonomous execution loop:
+   * - Hollon pulls a task
+   * - Executes it using brain provider
+   * - Saves results and updates status
+   */
+  async runCycle(hollonId: string): Promise<ExecutionCycleResult> {
+    const startTime = Date.now();
+
+    this.logger.log(`Starting execution cycle for hollon: ${hollonId}`);
+
+    try {
+      // 1. Check hollon status and update to WORKING
+      const hollon = await this.hollonRepo.findOne({
+        where: { id: hollonId },
+      });
+
+      if (!hollon) {
+        throw new Error(`Hollon not found: ${hollonId}`);
+      }
+
+      if (hollon.status === HollonStatus.PAUSED) {
+        this.logger.log(`Hollon ${hollonId} is paused, skipping cycle`);
+        return {
+          success: false,
+          duration: Date.now() - startTime,
+          error: 'Hollon is paused',
+        };
+      }
+
+      // Update status to WORKING
+      await this.updateHollonStatus(hollonId, HollonStatus.WORKING);
+
+      // 2. Pull next task
+      const pullResult = await this.taskPool.pullNextTask(hollonId);
+
+      if (!pullResult.task) {
+        this.logger.log(
+          `No task available for ${hollonId}: ${pullResult.reason}`,
+        );
+        await this.updateHollonStatus(hollonId, HollonStatus.IDLE);
+        return {
+          success: true,
+          duration: Date.now() - startTime,
+          noTaskAvailable: true,
+        };
+      }
+
+      const task = pullResult.task;
+      this.logger.log(
+        `Hollon ${hollonId} pulled task ${task.id}: ${task.title} (${pullResult.reason})`,
+      );
+
+      // 3. Compose prompt
+      const composedPrompt = await this.promptComposer.composePrompt(
+        hollonId,
+        task.id,
+      );
+
+      this.logger.log(
+        `Prompt composed: ${composedPrompt.totalTokens} tokens`,
+      );
+
+      // 4. Execute brain provider
+      const brainResult = await this.brainProvider.executeWithTracking(
+        {
+          prompt: composedPrompt.userPrompt,
+          systemPrompt: composedPrompt.systemPrompt,
+          context: {
+            workingDirectory: task.project?.workingDirectory,
+          },
+        },
+        {
+          organizationId: hollon.organizationId,
+          hollonId: hollon.id,
+          taskId: task.id,
+        },
+      );
+
+      if (!brainResult.success) {
+        throw new Error(
+          `Brain execution failed: ${brainResult.output || 'Unknown error'}`,
+        );
+      }
+
+      this.logger.log(
+        `Brain execution completed: ${brainResult.duration}ms, ` +
+          `cost=$${brainResult.cost.totalCostCents.toFixed(4)}`,
+      );
+
+      // 5. Save result as document
+      await this.saveResultDocument(
+        task,
+        hollon,
+        brainResult.output,
+        composedPrompt,
+      );
+
+      // 6. Complete task
+      await this.taskPool.completeTask(task.id);
+
+      // 7. Update hollon status back to IDLE
+      await this.updateHollonStatus(hollonId, HollonStatus.IDLE);
+
+      const duration = Date.now() - startTime;
+      this.logger.log(
+        `Execution cycle completed for ${hollonId}: ` +
+          `task=${task.id}, duration=${duration}ms`,
+      );
+
+      return {
+        success: true,
+        taskId: task.id,
+        taskTitle: task.title,
+        duration,
+        output: brainResult.output,
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+
+      this.logger.error(
+        `Execution cycle failed for ${hollonId}: ${errorMessage}`,
+      );
+
+      // Update hollon status to ERROR
+      await this.updateHollonStatus(hollonId, HollonStatus.ERROR);
+
+      return {
+        success: false,
+        duration,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Update hollon status
+   */
+  private async updateHollonStatus(
+    hollonId: string,
+    status: HollonStatus,
+  ): Promise<void> {
+    await this.hollonRepo.update({ id: hollonId }, { status });
+    this.logger.debug(`Hollon ${hollonId} status updated to ${status}`);
+  }
+
+  /**
+   * Save execution result as document for future reference
+   */
+  private async saveResultDocument(
+    task: Task,
+    hollon: Hollon,
+    output: string,
+    composedPrompt: any,
+  ): Promise<void> {
+    const document = this.documentRepo.create({
+      title: `Result: ${task.title}`,
+      content: `# Task: ${task.title}
+
+## Description
+${task.description}
+
+## Executed By
+Hollon: ${hollon.name}
+
+## Result
+${output}
+
+---
+
+## Prompt Used (for debugging)
+### System Prompt
+${composedPrompt.systemPrompt.substring(0, 500)}...
+
+### User Prompt
+${composedPrompt.userPrompt.substring(0, 500)}...
+`,
+      type: DocumentType.TASK_CONTEXT,
+      projectId: task.projectId,
+      hollonId: hollon.id,
+      taskId: task.id,
+      tags: ['result', 'execution', hollon.name],
+      metadata: {
+        taskId: task.id,
+        hollonId: hollon.id,
+        completedAt: new Date().toISOString(),
+        promptTokens: composedPrompt.totalTokens,
+      },
+    });
+
+    await this.documentRepo.save(document);
+
+    this.logger.log(
+      `Result document saved: ${document.id} for task ${task.id}`,
+    );
+  }
+
+  /**
+   * Get hollon current status and activity
+   */
+  async getHollonActivity(hollonId: string): Promise<{
+    status: HollonStatus;
+    currentTask?: {
+      id: string;
+      title: string;
+      startedAt: Date;
+    };
+    recentTasks: Array<{
+      id: string;
+      title: string;
+      completedAt: Date;
+    }>;
+  }> {
+    const hollon = await this.hollonRepo.findOne({
+      where: { id: hollonId },
+      relations: ['assignedTasks'],
+    });
+
+    if (!hollon) {
+      throw new Error(`Hollon not found: ${hollonId}`);
+    }
+
+    // Get current task (if any)
+    const currentTask = hollon.assignedTasks?.find(
+      (task) => task.status === 'in_progress',
+    );
+
+    // Get recent completed tasks
+    const recentTasks = hollon.assignedTasks
+      ?.filter((task) => task.status === 'completed' && task.completedAt)
+      .sort(
+        (a, b) => b.completedAt!.getTime() - a.completedAt!.getTime(),
+      )
+      .slice(0, 5)
+      .map((task) => ({
+        id: task.id,
+        title: task.title,
+        completedAt: task.completedAt!,
+      }));
+
+    return {
+      status: hollon.status,
+      currentTask: currentTask
+        ? {
+            id: currentTask.id,
+            title: currentTask.title,
+            startedAt: currentTask.startedAt!,
+          }
+        : undefined,
+      recentTasks: recentTasks || [],
+    };
+  }
+}

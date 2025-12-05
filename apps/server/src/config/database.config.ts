@@ -13,7 +13,7 @@ export const databaseConfig = (
     username: configService.get<string>('database.user'),
     password: configService.get<string>('database.password'),
     database: configService.get<string>('database.name'),
-    schema: 'hollon',
+    schema: configService.get<string>('database.schema', 'hollon'),
     entities: [__dirname + '/../**/*.entity{.ts,.js}'],
     migrations: [__dirname + '/../database/migrations/*{.ts,.js}'],
     synchronize: false, // 마이그레이션 사용

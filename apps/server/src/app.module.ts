@@ -11,6 +11,7 @@ import { HollonModule } from './modules/hollon/hollon.module';
 import { ProjectModule } from './modules/project/project.module';
 import { TaskModule } from './modules/task/task.module';
 import { BrainProviderModule } from './modules/brain-provider/brain-provider.module';
+import { OrchestrationModule } from './modules/orchestration/orchestration.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { BrainProviderModule } from './modules/brain-provider/brain-provider.mod
     ProjectModule,
     TaskModule,
     BrainProviderModule,
+    OrchestrationModule,
   ],
 })
 export class AppModule {}

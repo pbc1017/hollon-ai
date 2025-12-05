@@ -12,6 +12,7 @@ export default () => ({
     name: process.env.DB_NAME || 'hollon',
     user: process.env.DB_USER || 'hollon',
     password: process.env.DB_PASSWORD || '',
+    schema: process.env.DB_SCHEMA || 'hollon',
     url: process.env.DATABASE_URL,
   },
 

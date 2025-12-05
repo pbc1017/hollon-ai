@@ -8,9 +8,11 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm";  -- 텍스트 검색용
 
 -- Create schemas
 CREATE SCHEMA IF NOT EXISTS hollon;
+CREATE SCHEMA IF NOT EXISTS hollon_test;
 
 -- Grant permissions
 GRANT ALL ON SCHEMA hollon TO hollon;
+GRANT ALL ON SCHEMA hollon_test TO hollon;
 
 -- Log initialization
 DO $$
