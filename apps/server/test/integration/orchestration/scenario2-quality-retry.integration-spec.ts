@@ -144,7 +144,7 @@ describe('Integration: Scenario 2 - Quality Failure and Retry', () => {
   describe('Execution: Trigger quality failures', () => {
     it('should execute and fail quality gate', async () => {
       // Mock a brain response that fails quality checks
-      const mockResult = {
+      const mockBrainResult = {
         content: 'incomplete code without proper implementation',
         tokensUsed: 100,
         costCents: 1,
@@ -153,12 +153,16 @@ describe('Integration: Scenario 2 - Quality Failure and Retry', () => {
 
       // In real scenario, orchestrator would run and QualityGate would fail
       // Here we test the QualityGate service directly
-      const validation = await qualityGate.validateResult(mockResult, task);
+      const validation = await qualityGate.validateResult({
+        task,
+        brainResult: mockBrainResult,
+        organizationId: organization.id,
+        costLimitDailyCents: 10000,
+      });
 
       expect(validation.passed).toBe(false);
       expect(validation.shouldRetry).toBe(true);
-      expect(validation.failureReasons).toBeDefined();
-      expect(validation.failureReasons.length).toBeGreaterThan(0);
+      expect(validation.reason).toBeDefined();
     });
 
     it('should increment retry count on failure', async () => {

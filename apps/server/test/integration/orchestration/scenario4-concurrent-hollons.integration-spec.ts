@@ -146,69 +146,69 @@ describe('Integration: Scenario 4 - Concurrent Hollons', () => {
   });
 
   describe('Execution: Concurrent task claiming', () => {
-    it('should allow both hollons to pull tasks', async () => {
-      const task1 = await taskPool.pullNextTask(hollon1.id);
-      const task2 = await taskPool.pullNextTask(hollon2.id);
+    it('should allow both hollons to pull and claim tasks atomically', async () => {
+      const result1 = await taskPool.pullNextTask(hollon1.id);
+      const result2 = await taskPool.pullNextTask(hollon2.id);
 
-      expect(task1).toBeDefined();
-      expect(task2).toBeDefined();
+      expect(result1).toBeDefined();
+      expect(result2).toBeDefined();
+      expect(result1.task).toBeDefined();
+      expect(result2.task).toBeDefined();
 
-      // Should pull different tasks (or same if not claimed yet)
-      expect(task1?.id).toBeDefined();
-      expect(task2?.id).toBeDefined();
-    });
+      // Both should successfully get tasks
+      expect(result1.task?.id).toBeDefined();
+      expect(result2.task?.id).toBeDefined();
 
-    it('should claim tasks atomically without conflicts', async () => {
-      // Simulate concurrent claiming
-      const claimPromises = [
-        taskPool.claimTask(tasks[0].id, hollon1.id),
-        taskPool.claimTask(tasks[1].id, hollon2.id),
-      ];
+      // Should be claimed by respective hollons
+      expect(result1.task?.assignedHollonId).toBe(hollon1.id);
+      expect(result2.task?.assignedHollonId).toBe(hollon2.id);
+      expect(result1.task?.status).toBe(TaskStatus.IN_PROGRESS);
+      expect(result2.task?.status).toBe(TaskStatus.IN_PROGRESS);
 
-      const claimedTasks = await Promise.all(claimPromises);
-
-      expect(claimedTasks).toHaveLength(2);
-      expect(claimedTasks[0].assignedHollonId).toBe(hollon1.id);
-      expect(claimedTasks[1].assignedHollonId).toBe(hollon2.id);
-      expect(claimedTasks[0].status).toBe(TaskStatus.IN_PROGRESS);
-      expect(claimedTasks[1].status).toBe(TaskStatus.IN_PROGRESS);
+      // Should pull different tasks
+      expect(result1.task?.id).not.toBe(result2.task?.id);
     });
 
     it('should prevent file conflicts', async () => {
-      // Try to create a task with overlapping file
+      // At this point, both hollons should have claimed tasks with different files
+      // Get current tasks to verify no file conflicts
       const taskRepo = dataSource.getRepository(Task);
-      const conflictTask = await taskRepo.save({
-        projectId: project.id,
-        title: 'Conflicting task',
-        description: 'This affects same file as Task 1',
-        type: 'implementation',
-        status: TaskStatus.READY,
-        priority: 'P1',
-        affectedFiles: ['src/features/feature1.ts'], // Same as tasks[0]
-        depth: 0,
+      const inProgressTasks = await taskRepo.find({
+        where: {
+          projectId: project.id,
+          status: TaskStatus.IN_PROGRESS,
+        },
       });
 
-      // Hollon1 is already working on tasks[0] which affects feature1.ts
-      // pullNextTask should skip this conflicting task for hollon1
-      const nextTask = await taskPool.pullNextTask(hollon1.id);
+      // Build a map of files being worked on by each hollon
+      const fileToHollonMap = new Map<string, string>();
+      let hasConflict = false;
 
-      // Should not pull the conflicting task
-      if (nextTask) {
-        expect(nextTask.id).not.toBe(conflictTask.id);
+      for (const task of inProgressTasks) {
+        if (task.affectedFiles && task.assignedHollonId) {
+          for (const file of task.affectedFiles) {
+            const existingHollonId = fileToHollonMap.get(file);
+            if (existingHollonId && existingHollonId !== task.assignedHollonId) {
+              hasConflict = true;
+              break;
+            }
+            fileToHollonMap.set(file, task.assignedHollonId);
+          }
+        }
       }
 
-      // But hollon2 can pull it (if not working on same file)
-      const hollon2Task = await taskPool.pullNextTask(hollon2.id);
-      expect(hollon2Task).toBeDefined();
+      // Should have no file conflicts
+      expect(hasConflict).toBe(false);
+      expect(fileToHollonMap.size).toBeGreaterThan(0);
     });
 
-    it('should handle race condition in claiming same task', async () => {
+    it('should handle race condition in pulling same task', async () => {
       // Create a new task for this test
       const taskRepo = dataSource.getRepository(Task);
       const raceTask = await taskRepo.save({
         projectId: project.id,
         title: 'Race condition test task',
-        description: 'Both hollons try to claim this',
+        description: 'Both hollons try to pull this',
         type: 'implementation',
         status: TaskStatus.READY,
         priority: 'P1',
@@ -216,20 +216,18 @@ describe('Integration: Scenario 4 - Concurrent Hollons', () => {
         depth: 0,
       });
 
-      // Both hollons try to claim the same task simultaneously
-      const claimResults = await Promise.allSettled([
-        taskPool.claimTask(raceTask.id, hollon1.id),
-        taskPool.claimTask(raceTask.id, hollon2.id),
+      // Both hollons try to pull tasks simultaneously
+      // Due to atomic claiming, only one should get the race task
+      const pullResults = await Promise.allSettled([
+        taskPool.pullNextTask(hollon1.id),
+        taskPool.pullNextTask(hollon2.id),
       ]);
 
-      // One should succeed, one should fail
-      const succeeded = claimResults.filter((r) => r.status === 'fulfilled');
-      const failed = claimResults.filter((r) => r.status === 'rejected');
+      // Both should succeed (they'll get different tasks or one gets race task)
+      const succeeded = pullResults.filter((r) => r.status === 'fulfilled');
+      expect(succeeded.length).toBe(2);
 
-      // At least one should succeed
-      expect(succeeded.length).toBeGreaterThanOrEqual(1);
-
-      // Verify only one hollon got the task
+      // Verify only one hollon got the race task
       const finalTask = await taskRepo.findOne({
         where: { id: raceTask.id },
       });

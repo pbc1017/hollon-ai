@@ -147,19 +147,14 @@ describe('Integration: Scenario 1 - Happy Path', () => {
   });
 
   describe('Execution: Run hollon cycle', () => {
-    it('should pull task from pool', async () => {
-      const pulledTask = await taskPool.pullNextTask(hollon.id);
+    it('should pull and claim task atomically', async () => {
+      const result = await taskPool.pullNextTask(hollon.id);
 
-      expect(pulledTask).toBeDefined();
-      expect(pulledTask?.id).toBe(task.id);
-      expect(pulledTask?.assignedHollonId).toBeNull(); // Not claimed yet
-    });
-
-    it('should claim task atomically', async () => {
-      const claimedTask = await taskPool.claimTask(task.id, hollon.id);
-
-      expect(claimedTask.assignedHollonId).toBe(hollon.id);
-      expect(claimedTask.status).toBe(TaskStatus.IN_PROGRESS);
+      expect(result).toBeDefined();
+      expect(result.task).toBeDefined();
+      expect(result.task?.id).toBe(task.id);
+      expect(result.task?.assignedHollonId).toBe(hollon.id);
+      expect(result.task?.status).toBe(TaskStatus.IN_PROGRESS);
     });
 
     it('should execute hollon cycle', async () => {
@@ -210,7 +205,7 @@ describe('Integration: Scenario 1 - Happy Path', () => {
       const docRepo = dataSource.getRepository(Document);
       const documents = await docRepo.find({
         where: {
-          organizationId: organization.id,
+          projectId: project.id,
         },
       });
 
