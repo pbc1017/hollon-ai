@@ -2,8 +2,14 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class InitialSchema1733295000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Enable pgvector extension
-    await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+    // Enable pgvector extension (optional - skip if not available)
+    try {
+      await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+    } catch (error) {
+      console.warn(
+        'pgvector extension not available - skipping. Vector search features will be disabled.',
+      );
+    }
 
     // Organizations table
     await queryRunner.query(`
