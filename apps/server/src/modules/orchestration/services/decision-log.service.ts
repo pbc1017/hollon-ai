@@ -132,7 +132,9 @@ export class DecisionLogService {
 
     // Filter by hollon if specified
     if (hollonId) {
-      candidateDecisions = candidateDecisions.filter((d) => d.hollonId === hollonId);
+      candidateDecisions = candidateDecisions.filter(
+        (d) => d.hollonId === hollonId,
+      );
     }
 
     // Score each decision based on keyword matches
@@ -161,13 +163,19 @@ export class DecisionLogService {
 
         // Find which parts matched for similarity description
         const matchingParts: string[] = [];
-        if (decision.question.toLowerCase().includes(queryLower.substring(0, 20))) {
+        if (
+          decision.question.toLowerCase().includes(queryLower.substring(0, 20))
+        ) {
           matchingParts.push('question');
         }
-        if (decision.answer.toLowerCase().includes(queryLower.substring(0, 20))) {
+        if (
+          decision.answer.toLowerCase().includes(queryLower.substring(0, 20))
+        ) {
           matchingParts.push('answer');
         }
-        if (decision.reasoning.toLowerCase().includes(queryLower.substring(0, 20))) {
+        if (
+          decision.reasoning.toLowerCase().includes(queryLower.substring(0, 20))
+        ) {
           matchingParts.push('reasoning');
         }
 
@@ -211,7 +219,8 @@ export class DecisionLogService {
       return {
         isConsistent: true,
         conflictingDecisions: [],
-        recommendation: 'No similar previous decisions found. This is a new decision.',
+        recommendation:
+          'No similar previous decisions found. This is a new decision.',
       };
     }
 
@@ -224,7 +233,10 @@ export class DecisionLogService {
       const pastAnswerLower = pastDecision.answer.toLowerCase();
 
       // Simple conflict detection: opposite keywords
-      const hasConflict = this.detectConflict(proposedAnswerLower, pastAnswerLower);
+      const hasConflict = this.detectConflict(
+        proposedAnswerLower,
+        pastAnswerLower,
+      );
 
       if (hasConflict) {
         conflictingDecisions.push(pastDecision);

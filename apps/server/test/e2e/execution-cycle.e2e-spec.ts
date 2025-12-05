@@ -8,14 +8,19 @@ import { Team } from '../../src/modules/team/entities/team.entity';
 import { Role } from '../../src/modules/role/entities/role.entity';
 import { Hollon } from '../../src/modules/hollon/entities/hollon.entity';
 import { Project } from '../../src/modules/project/entities/project.entity';
-import { Task, TaskStatus, TaskType, TaskPriority } from '../../src/modules/task/entities/task.entity';
+import {
+  Task,
+  TaskStatus,
+  TaskType,
+  TaskPriority,
+} from '../../src/modules/task/entities/task.entity';
 import { Document } from '../../src/modules/document/entities/document.entity';
 import { CostRecord } from '../../src/modules/cost-tracking/entities/cost-record.entity';
 import { BrainProviderConfig } from '../../src/modules/brain-provider/entities/brain-provider-config.entity';
 
 /**
  * Full Execution Cycle E2E Test
- * 
+ *
  * Tests the complete Hollon execution cycle:
  * 1. Pull next task from task pool
  * 2. Compose 6-layer prompt
@@ -24,7 +29,7 @@ import { BrainProviderConfig } from '../../src/modules/brain-provider/entities/b
  * 5. Save result as document
  * 6. Update task status to completed
  * 7. Record cost
- * 
+ *
  * This validates Phase 1 core functionality end-to-end.
  */
 describe('Full Execution Cycle E2E', () => {
@@ -68,7 +73,7 @@ describe('Full Execution Cycle E2E', () => {
   beforeEach(async () => {
     // Generate unique ID for each test
     testRunId = Date.now() + Math.random();
-    
+
     // Create test organization
     const orgRepo = dataSource.getRepository(Organization);
     organization = await orgRepo.save({
@@ -210,7 +215,7 @@ describe('Full Execution Cycle E2E', () => {
       // Verify cost record
       const costRepo = dataSource.getRepository(CostRecord);
       const costRecords = await costRepo.find({
-        where: { 
+        where: {
           organizationId: organization.id,
           hollonId: hollon.id,
           taskId: task.id,
@@ -268,7 +273,7 @@ describe('Full Execution Cycle E2E', () => {
 
       // Verify all tasks completed
       const completedTasks = await taskRepo.find({
-        where: { 
+        where: {
           projectId: project.id,
           status: TaskStatus.COMPLETED,
         },

@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
-import { CostRecord, CostRecordType } from '../../cost-tracking/entities/cost-record.entity';
+import {
+  CostRecord,
+  CostRecordType,
+} from '../../cost-tracking/entities/cost-record.entity';
 
 export interface BudgetLimit {
   daily?: number; // Cents
@@ -158,7 +161,11 @@ export class CostTrackingService {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const dailyUsed = await this.getCostForPeriod(organizationId, today, tomorrow);
+    const dailyUsed = await this.getCostForPeriod(
+      organizationId,
+      today,
+      tomorrow,
+    );
     const dailyLimit = limits.daily!;
     const remaining = Math.max(0, dailyLimit - dailyUsed);
     const usagePercent = (dailyUsed / dailyLimit) * 100;
@@ -167,8 +174,10 @@ export class CostTrackingService {
     let shouldStopWork = false;
     let message = '';
 
-    const alertThreshold = limits.alertThresholdPercent || this.DEFAULT_ALERT_THRESHOLD;
-    const stopThreshold = limits.stopThresholdPercent || this.DEFAULT_STOP_THRESHOLD;
+    const alertThreshold =
+      limits.alertThresholdPercent || this.DEFAULT_ALERT_THRESHOLD;
+    const stopThreshold =
+      limits.stopThresholdPercent || this.DEFAULT_STOP_THRESHOLD;
 
     if (usagePercent >= stopThreshold) {
       status = 'exceeded';
@@ -218,8 +227,10 @@ export class CostTrackingService {
     let shouldStopWork = false;
     let message = '';
 
-    const alertThreshold = limits.alertThresholdPercent || this.DEFAULT_ALERT_THRESHOLD;
-    const stopThreshold = limits.stopThresholdPercent || this.DEFAULT_STOP_THRESHOLD;
+    const alertThreshold =
+      limits.alertThresholdPercent || this.DEFAULT_ALERT_THRESHOLD;
+    const stopThreshold =
+      limits.stopThresholdPercent || this.DEFAULT_STOP_THRESHOLD;
 
     if (usagePercent >= stopThreshold) {
       status = 'exceeded';
@@ -313,7 +324,8 @@ export class CostTrackingService {
       totalRecords: records.length,
       costByType,
       costByHollon,
-      averageCostPerExecution: records.length > 0 ? totalCostCents / records.length : 0,
+      averageCostPerExecution:
+        records.length > 0 ? totalCostCents / records.length : 0,
       totalTokens,
     };
   }

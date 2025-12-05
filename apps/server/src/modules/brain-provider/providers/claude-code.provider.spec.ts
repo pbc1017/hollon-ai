@@ -164,9 +164,9 @@ describe('ClaudeCodeProvider', () => {
         new BrainTimeoutError(1000, 1500),
       );
 
-      await expect(
-        provider.execute({ prompt: 'test' }),
-      ).rejects.toThrow(BrainTimeoutError);
+      await expect(provider.execute({ prompt: 'test' })).rejects.toThrow(
+        BrainTimeoutError,
+      );
     });
 
     it('should throw error on non-zero exit code', async () => {
@@ -191,9 +191,9 @@ describe('ClaudeCodeProvider', () => {
         duration: 100,
       });
 
-      await expect(
-        provider.execute({ prompt: 'test' }),
-      ).rejects.toThrow(BrainExecutionError);
+      await expect(provider.execute({ prompt: 'test' })).rejects.toThrow(
+        BrainExecutionError,
+      );
     });
 
     it('should throw error when response parser detects error', async () => {
@@ -224,9 +224,9 @@ describe('ClaudeCodeProvider', () => {
         errorMessage: 'Error: Something went wrong',
       });
 
-      await expect(
-        provider.execute({ prompt: 'test' }),
-      ).rejects.toThrow(BrainExecutionError);
+      await expect(provider.execute({ prompt: 'test' })).rejects.toThrow(
+        BrainExecutionError,
+      );
     });
 
     it('should use custom timeout from options', async () => {

@@ -1,4 +1,10 @@
-import { IsString, IsOptional, IsUUID, IsUrl, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsUUID,
+  IsUrl,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateProjectDto {
   @IsString()

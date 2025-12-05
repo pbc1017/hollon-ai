@@ -8,7 +8,10 @@ import { Team } from '@/modules/team/entities/team.entity';
 import { Hollon, HollonStatus } from '@/modules/hollon/entities/hollon.entity';
 import { Project } from '@/modules/project/entities/project.entity';
 import { Task, TaskStatus } from '@/modules/task/entities/task.entity';
-import { CostRecord, CostRecordType } from '@/modules/cost-tracking/entities/cost-record.entity';
+import {
+  CostRecord,
+  CostRecordType,
+} from '@/modules/cost-tracking/entities/cost-record.entity';
 import { CostTrackingService } from '@/modules/orchestration/services/cost-tracking.service';
 
 /**
@@ -223,7 +226,9 @@ describe('Integration: Scenario 3 - Budget Exceeded', () => {
       const summary = await costTracking.getDailySummary(organization.id);
 
       expect(summary.costByType).toBeDefined();
-      expect(summary.costByType[CostRecordType.BRAIN_EXECUTION]).toBeGreaterThan(0);
+      expect(
+        summary.costByType[CostRecordType.BRAIN_EXECUTION],
+      ).toBeGreaterThan(0);
     });
 
     it('should have cost breakdown by hollon', async () => {

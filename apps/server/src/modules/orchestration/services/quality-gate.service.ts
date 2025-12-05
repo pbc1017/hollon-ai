@@ -25,7 +25,9 @@ export class QualityGateService {
    * Run all quality gate checks on brain execution result
    * Returns validation result indicating whether the result passes quality standards
    */
-  async validateResult(context: QualityCheckContext): Promise<ValidationResult> {
+  async validateResult(
+    context: QualityCheckContext,
+  ): Promise<ValidationResult> {
     this.logger.log(
       `Running quality gate for task ${context.task.id} (${context.task.title})`,
     );
@@ -155,10 +157,7 @@ export class QualityGateService {
     }
 
     // For code tasks, check if output looks like code
-    if (
-      task.type === 'implementation' ||
-      task.type === 'bug_fix'
-    ) {
+    if (task.type === 'implementation' || task.type === 'bug_fix') {
       // Basic heuristic: code should contain common programming elements
       const hasCodeIndicators =
         /\bfunction\b|\bclass\b|\bconst\b|\blet\b|\bvar\b|\bimport\b|\bexport\b|\breturn\b/i.test(
@@ -232,8 +231,8 @@ export class QualityGateService {
       const { join } = require('path');
 
       // Check if files actually exist
-      const existingFiles = task.affectedFiles.filter(file =>
-        existsSync(join(task.project!.workingDirectory!, file))
+      const existingFiles = task.affectedFiles.filter((file) =>
+        existsSync(join(task.project!.workingDirectory!, file)),
       );
 
       if (existingFiles.length === 0) {
@@ -259,8 +258,14 @@ export class QualityGateService {
 
       try {
         const results = JSON.parse(error.stdout || '[]');
-        errorCount = results.reduce((sum: number, r: any) => sum + r.errorCount, 0);
-        warningCount = results.reduce((sum: number, r: any) => sum + r.warningCount, 0);
+        errorCount = results.reduce(
+          (sum: number, r: any) => sum + r.errorCount,
+          0,
+        );
+        warningCount = results.reduce(
+          (sum: number, r: any) => sum + r.warningCount,
+          0,
+        );
       } catch {
         // If parsing fails, treat as generic error
       }
@@ -305,12 +310,14 @@ export class QualityGateService {
       const { join } = require('path');
 
       // Check if files actually exist
-      const existingFiles = task.affectedFiles.filter(file =>
-        existsSync(join(task.project!.workingDirectory!, file))
+      const existingFiles = task.affectedFiles.filter((file) =>
+        existsSync(join(task.project!.workingDirectory!, file)),
       );
 
       if (existingFiles.length === 0) {
-        this.logger.debug('No affected files exist yet, skipping TypeScript check');
+        this.logger.debug(
+          'No affected files exist yet, skipping TypeScript check',
+        );
         return { passed: true, shouldRetry: false };
       }
 
@@ -374,7 +381,8 @@ export class QualityGateService {
       return {
         passed: false,
         shouldRetry: false, // Don't retry - cost will likely be high again
-        reason: 'Execution cost exceeds single-task threshold (10% of daily limit)',
+        reason:
+          'Execution cost exceeds single-task threshold (10% of daily limit)',
         details: {
           checkType: 'cost_validation',
           actualCostCents: costCents,

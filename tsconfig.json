@@ -7,8 +7,5 @@
       "@hollon-ai/shared/*": ["packages/shared/src/*"]
     }
   },
-  "references": [
-    { "path": "apps/server" },
-    { "path": "packages/shared" }
-  ]
+  "references": [{ "path": "apps/server" }, { "path": "packages/shared" }]
 }

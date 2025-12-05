@@ -121,7 +121,9 @@ export class SubtaskCreationService {
 
         const savedSubtask = await this.taskRepo.save(subtask);
         createdSubtasks.push(savedSubtask);
-        this.logger.log(`Created subtask ${savedSubtask.id}: ${savedSubtask.title}`);
+        this.logger.log(
+          `Created subtask ${savedSubtask.id}: ${savedSubtask.title}`,
+        );
       } catch (error) {
         const errorMsg = `Failed to create subtask "${definition.title}": ${error instanceof Error ? error.message : String(error)}`;
         this.logger.error(errorMsg);
@@ -191,16 +193,24 @@ export class SubtaskCreationService {
       relations: ['subtasks'],
     });
 
-    if (!parentTask || !parentTask.subtasks || parentTask.subtasks.length === 0) {
+    if (
+      !parentTask ||
+      !parentTask.subtasks ||
+      parentTask.subtasks.length === 0
+    ) {
       return;
     }
 
     const subtasks = parentTask.subtasks;
 
     // Check various conditions
-    const allCompleted = subtasks.every((t) => t.status === TaskStatus.COMPLETED);
+    const allCompleted = subtasks.every(
+      (t) => t.status === TaskStatus.COMPLETED,
+    );
     const anyFailed = subtasks.some((t) => t.status === TaskStatus.FAILED);
-    const anyInProgress = subtasks.some((t) => t.status === TaskStatus.IN_PROGRESS);
+    const anyInProgress = subtasks.some(
+      (t) => t.status === TaskStatus.IN_PROGRESS,
+    );
     const anyBlocked = subtasks.some((t) => t.status === TaskStatus.BLOCKED);
 
     let newStatus: TaskStatus | null = null;

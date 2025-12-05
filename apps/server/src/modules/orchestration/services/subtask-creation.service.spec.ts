@@ -4,7 +4,12 @@ import {
   SubtaskCreationService,
   SubtaskDefinition,
 } from './subtask-creation.service';
-import { Task, TaskStatus, TaskType, TaskPriority } from '../../task/entities/task.entity';
+import {
+  Task,
+  TaskStatus,
+  TaskType,
+  TaskPriority,
+} from '../../task/entities/task.entity';
 
 describe('SubtaskCreationService', () => {
   let service: SubtaskCreationService;
@@ -113,7 +118,10 @@ describe('SubtaskCreationService', () => {
         .mockResolvedValueOnce({ id: 'level-1', parentTaskId: 'root' }) // Depth calc: level-1
         .mockResolvedValueOnce({ id: 'root', parentTaskId: null }); // Depth calc: root
 
-      const result = await service.createSubtasks('deep-task', subtaskDefinitions);
+      const result = await service.createSubtasks(
+        'deep-task',
+        subtaskDefinitions,
+      );
 
       expect(result.success).toBe(false);
       expect(result.createdSubtasks).toHaveLength(0);
@@ -129,10 +137,9 @@ describe('SubtaskCreationService', () => {
 
       mockTaskRepo.findOne.mockResolvedValue(taskWithManySubtasks);
 
-      const result = await service.createSubtasks(
-        'parent-1',
-        [subtaskDefinitions[0]],
-      );
+      const result = await service.createSubtasks('parent-1', [
+        subtaskDefinitions[0],
+      ]);
 
       expect(result.success).toBe(false);
       expect(result.createdSubtasks).toHaveLength(0);
@@ -155,7 +162,10 @@ describe('SubtaskCreationService', () => {
       mockTaskRepo.update.mockResolvedValue({ affected: 1 });
 
       // Try to add 2 more (should succeed, total = 10)
-      const result = await service.createSubtasks('parent-1', subtaskDefinitions);
+      const result = await service.createSubtasks(
+        'parent-1',
+        subtaskDefinitions,
+      );
 
       expect(result.success).toBe(true);
       expect(result.createdSubtasks).toHaveLength(2);
@@ -195,10 +205,14 @@ describe('SubtaskCreationService', () => {
       mockTaskRepo.find.mockResolvedValue([]);
       mockTaskRepo.update.mockResolvedValue({ affected: 1 });
 
-      const result = await service.createSubtasks('deep-task', subtaskDefinitions, {
-        validateDepth: false,
-        validateCount: false,
-      });
+      const result = await service.createSubtasks(
+        'deep-task',
+        subtaskDefinitions,
+        {
+          validateDepth: false,
+          validateCount: false,
+        },
+      );
 
       expect(result.success).toBe(true);
       expect(result.createdSubtasks).toHaveLength(2);
@@ -328,9 +342,7 @@ describe('SubtaskCreationService', () => {
       const parentAlreadyInProgress: Partial<Task> = {
         id: 'parent-1',
         status: TaskStatus.IN_PROGRESS,
-        subtasks: [
-          { id: 'sub-1', status: TaskStatus.IN_PROGRESS } as Task,
-        ],
+        subtasks: [{ id: 'sub-1', status: TaskStatus.IN_PROGRESS } as Task],
       };
 
       mockTaskRepo.findOne.mockResolvedValue(parentAlreadyInProgress);

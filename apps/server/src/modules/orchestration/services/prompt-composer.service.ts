@@ -51,9 +51,7 @@ export class PromptComposerService {
     hollonId: string,
     taskId: string,
   ): Promise<ComposedPrompt> {
-    this.logger.log(
-      `Composing prompt: hollon=${hollonId}, task=${taskId}`,
-    );
+    this.logger.log(`Composing prompt: hollon=${hollonId}, task=${taskId}`);
 
     // Load all required entities
     const [hollon, task] = await Promise.all([
@@ -193,10 +191,9 @@ export class PromptComposerService {
     const queryBuilder = this.documentRepo
       .createQueryBuilder('doc')
       .where('doc.project_id = :projectId', { projectId })
-      .andWhere(
-        '(doc.hollon_id = :hollonId OR doc.hollon_id IS NULL)',
-        { hollonId },
-      )
+      .andWhere('(doc.hollon_id = :hollonId OR doc.hollon_id IS NULL)', {
+        hollonId,
+      })
       .orderBy('doc.created_at', 'DESC')
       .limit(10);
 

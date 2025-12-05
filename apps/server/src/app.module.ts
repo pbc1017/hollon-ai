@@ -19,10 +19,7 @@ import { OrchestrationModule } from './modules/orchestration/orchestration.modul
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
-      envFilePath: [
-        '../../.env.local',
-        '../../.env',
-      ],
+      envFilePath: ['../../.env.local', '../../.env'],
     }),
 
     // Database

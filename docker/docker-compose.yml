@@ -11,12 +11,13 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-hollon_dev_password}
       POSTGRES_DB: ${DB_NAME:-hollon}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - '${DB_PORT:-5432}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-scripts:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-hollon} -d ${DB_NAME:-hollon}"]
+      test:
+        ['CMD-SHELL', 'pg_isready -U ${DB_USER:-hollon} -d ${DB_NAME:-hollon}']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -27,12 +28,12 @@ services:
     container_name: hollon-redis
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - '${REDIS_PORT:-6379}:6379'
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5

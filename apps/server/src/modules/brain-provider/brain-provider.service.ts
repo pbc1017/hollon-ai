@@ -2,8 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ClaudeCodeProvider } from './providers/claude-code.provider';
-import { CostRecord, CostRecordType } from '../cost-tracking/entities/cost-record.entity';
-import { BrainRequest, BrainResponse } from './interfaces/brain-provider.interface';
+import {
+  CostRecord,
+  CostRecordType,
+} from '../cost-tracking/entities/cost-record.entity';
+import {
+  BrainRequest,
+  BrainResponse,
+} from './interfaces/brain-provider.interface';
 
 @Injectable()
 export class BrainProviderService {

@@ -38,10 +38,6 @@ import { CostRecord } from '../cost-tracking/entities/cost-record.entity';
     CostTrackingService,
     HollonOrchestratorService,
   ],
-  exports: [
-    PromptComposerService,
-    TaskPoolService,
-    HollonOrchestratorService,
-  ],
+  exports: [PromptComposerService, TaskPoolService, HollonOrchestratorService],
 })
 export class OrchestrationModule {}

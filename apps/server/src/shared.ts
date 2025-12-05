@@ -1,7 +1,7 @@
 export function foo(): string {
-  return "foo";
+  return 'foo';
 }
 
 export function bar(): string {
-  return "bar";
+  return 'bar';
 }

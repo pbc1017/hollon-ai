@@ -51,28 +51,42 @@ describe('Phase 1 POC (e2e)', () => {
     dataSource = moduleFixture.get<DataSource>(DataSource);
 
     // Clean up any leftover test data from previous runs
-    await dataSource.query('TRUNCATE tasks, projects, hollons, roles, teams, organizations RESTART IDENTITY CASCADE');
+    await dataSource.query(
+      'TRUNCATE tasks, projects, hollons, roles, teams, organizations RESTART IDENTITY CASCADE',
+    );
   });
 
   afterAll(async () => {
     // Cleanup: Delete all test data
     if (taskId) {
-      await dataSource.query('DELETE FROM hollon.tasks WHERE id = $1', [taskId]);
+      await dataSource.query('DELETE FROM hollon.tasks WHERE id = $1', [
+        taskId,
+      ]);
     }
     if (projectId) {
-      await dataSource.query('DELETE FROM hollon.projects WHERE id = $1', [projectId]);
+      await dataSource.query('DELETE FROM hollon.projects WHERE id = $1', [
+        projectId,
+      ]);
     }
     if (hollonId) {
-      await dataSource.query('DELETE FROM hollon.hollons WHERE id = $1', [hollonId]);
+      await dataSource.query('DELETE FROM hollon.hollons WHERE id = $1', [
+        hollonId,
+      ]);
     }
     if (roleId) {
-      await dataSource.query('DELETE FROM hollon.roles WHERE id = $1', [roleId]);
+      await dataSource.query('DELETE FROM hollon.roles WHERE id = $1', [
+        roleId,
+      ]);
     }
     if (teamId) {
-      await dataSource.query('DELETE FROM hollon.teams WHERE id = $1', [teamId]);
+      await dataSource.query('DELETE FROM hollon.teams WHERE id = $1', [
+        teamId,
+      ]);
     }
     if (organizationId) {
-      await dataSource.query('DELETE FROM hollon.organizations WHERE id = $1', [organizationId]);
+      await dataSource.query('DELETE FROM hollon.organizations WHERE id = $1', [
+        organizationId,
+      ]);
     }
 
     await app.close();
@@ -129,7 +143,8 @@ describe('Phase 1 POC (e2e)', () => {
           organizationId,
           name: `Backend Engineer ${testRunId}`,
           description: 'TypeScript and NestJS expert',
-          systemPrompt: 'You are an expert backend engineer specializing in TypeScript and NestJS framework.',
+          systemPrompt:
+            'You are an expert backend engineer specializing in TypeScript and NestJS framework.',
           capabilities: ['typescript', 'nestjs', 'postgresql', 'testing'],
         })
         .expect(201);
@@ -152,7 +167,8 @@ describe('Phase 1 POC (e2e)', () => {
           teamId,
           roleId,
           name: 'Alpha',
-          systemPrompt: 'You are Alpha, a skilled backend developer who loves clean code.',
+          systemPrompt:
+            'You are Alpha, a skilled backend developer who loves clean code.',
           maxConcurrentTasks: 1,
         })
         .expect(201);
@@ -197,7 +213,8 @@ describe('Phase 1 POC (e2e)', () => {
         .send({
           projectId,
           title: 'Implement Hello World function',
-          description: 'Create a simple TypeScript function that returns "Hello, World!"',
+          description:
+            'Create a simple TypeScript function that returns "Hello, World!"',
           type: 'implementation',
           priority: 'P2',
           acceptanceCriteria: [

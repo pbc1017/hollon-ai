@@ -145,19 +145,16 @@ describe('Orchestration E2E', () => {
       });
 
       // Create team using factory
-      testTeam = await TeamFactory.createPersisted(
-        teamRepo,
-        testOrg.id,
-        {
-          description: 'E2E orchestration test team',
-        },
-      );
+      testTeam = await TeamFactory.createPersisted(teamRepo, testOrg.id, {
+        description: 'E2E orchestration test team',
+      });
 
       // Create role
       testRole = await roleRepo.save({
         name: 'E2E Backend Engineer',
         description: 'Test role for backend development',
-        systemPrompt: 'You are a senior backend engineer specializing in NestJS',
+        systemPrompt:
+          'You are a senior backend engineer specializing in NestJS',
         capabilities: ['typescript', 'nestjs', 'postgresql'],
         organizationId: testOrg.id,
       });

@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
-import { Document, DocumentType } from '../../document/entities/document.entity';
+import {
+  Document,
+  DocumentType,
+} from '../../document/entities/document.entity';
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 import { PromptComposerService } from './prompt-composer.service';
 import { TaskPoolService } from './task-pool.service';
@@ -109,9 +112,7 @@ export class HollonOrchestratorService {
         task.id,
       );
 
-      this.logger.log(
-        `Prompt composed: ${composedPrompt.totalTokens} tokens`,
-      );
+      this.logger.log(`Prompt composed: ${composedPrompt.totalTokens} tokens`);
 
       // 4. Execute brain provider
       const brainResult = await this.brainProvider.executeWithTracking(
@@ -324,9 +325,7 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
     // Get recent completed tasks
     const recentTasks = hollon.assignedTasks
       ?.filter((task) => task.status === 'completed' && task.completedAt)
-      .sort(
-        (a, b) => b.completedAt!.getTime() - a.completedAt!.getTime(),
-      )
+      .sort((a, b) => b.completedAt!.getTime() - a.completedAt!.getTime())
       .slice(0, 5)
       .map((task) => ({
         id: task.id,

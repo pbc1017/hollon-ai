@@ -18,13 +18,13 @@ import { BrainProviderConfig } from '../../src/modules/brain-provider/entities/b
 
 /**
  * Concurrent Hollons E2E Test
- * 
+ *
  * Tests that multiple hollons can work simultaneously without conflicts:
  * 1. File conflict prevention - hollons don't work on same files
  * 2. Atomic task assignment - no race conditions
  * 3. Efficient task distribution
  * 4. Priority ordering maintained
- * 
+ *
  * This validates Phase 1 completion criterion:
  * "2개 홀론 동시 운영 스모크 테스트 통과"
  */
@@ -69,7 +69,7 @@ describe('Concurrent Hollons E2E', () => {
   beforeEach(async () => {
     // Generate unique ID for each test
     testRunId = Date.now() + Math.random();
-    
+
     // Create test organization
     const orgRepo = dataSource.getRepository(Organization);
     organization = await orgRepo.save({
@@ -378,12 +378,16 @@ describe('Concurrent Hollons E2E', () => {
       ]);
 
       // P1 should be picked first
-      const firstResult = [result1, result2].find((r) => r.taskId === p1Task.id);
+      const firstResult = [result1, result2].find(
+        (r) => r.taskId === p1Task.id,
+      );
       expect(firstResult).toBeDefined();
       expect(firstResult.success).toBe(true);
 
       // P3 should be picked second
-      const secondResult = [result1, result2].find((r) => r.taskId === p3Task.id);
+      const secondResult = [result1, result2].find(
+        (r) => r.taskId === p3Task.id,
+      );
       expect(secondResult).toBeDefined();
       expect(secondResult.success).toBe(true);
     }, 240000);

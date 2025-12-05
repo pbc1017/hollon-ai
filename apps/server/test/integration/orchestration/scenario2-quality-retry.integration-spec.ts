@@ -208,7 +208,9 @@ describe('Integration: Scenario 2 - Quality Failure and Retry', () => {
 
       // Task status should be updated to BLOCKED
       const escalatedTask = await taskRepo.findOne({ where: { id: task.id } });
-      expect([TaskStatus.BLOCKED, TaskStatus.READY]).toContain(escalatedTask?.status);
+      expect([TaskStatus.BLOCKED, TaskStatus.READY]).toContain(
+        escalatedTask?.status,
+      );
     });
   });
 
@@ -232,14 +234,18 @@ describe('Integration: Scenario 2 - Quality Failure and Retry', () => {
 
     it('should have hollon available for other tasks', async () => {
       const hollonRepo = dataSource.getRepository(Hollon);
-      const finalHollon = await hollonRepo.findOne({ where: { id: hollon.id } });
+      const finalHollon = await hollonRepo.findOne({
+        where: { id: hollon.id },
+      });
 
       // Hollon should not be stuck in error state
       expect(finalHollon?.status).not.toBe(HollonStatus.ERROR);
       // Should be idle or working on something else
-      expect([HollonStatus.IDLE, HollonStatus.WORKING, HollonStatus.WAITING]).toContain(
-        finalHollon?.status,
-      );
+      expect([
+        HollonStatus.IDLE,
+        HollonStatus.WORKING,
+        HollonStatus.WAITING,
+      ]).toContain(finalHollon?.status);
     });
   });
 

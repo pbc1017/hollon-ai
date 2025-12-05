@@ -3,7 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "Recursive Multi-Agent System - AI agents collaborating like a startup organization",
-  "keywords": ["ai", "multi-agent", "hollon", "autonomous"],
+  "keywords": [
+    "ai",
+    "multi-agent",
+    "hollon",
+    "autonomous"
+  ],
   "license": "MIT",
   "packageManager": "pnpm@9.14.4",
   "engines": {
@@ -15,8 +20,13 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "lint:fix": "turbo run lint:fix",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "typecheck": "pnpm --filter @hollon-ai/server exec tsc --noEmit",
     "test": "turbo run test",
+    "test:integration": "pnpm --filter @hollon-ai/server test:integration",
     "test:e2e": "turbo run test:e2e",
+    "test:all": "pnpm test && pnpm test:integration",
     "clean": "turbo run clean && rm -rf node_modules",
     "db:migrate": "pnpm --filter @hollon-ai/server db:migrate",
     "db:seed": "pnpm --filter @hollon-ai/server db:seed",

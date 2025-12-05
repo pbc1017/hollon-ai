@@ -188,7 +188,10 @@ describe('Integration: Scenario 4 - Concurrent Hollons', () => {
         if (task.affectedFiles && task.assignedHollonId) {
           for (const file of task.affectedFiles) {
             const existingHollonId = fileToHollonMap.get(file);
-            if (existingHollonId && existingHollonId !== task.assignedHollonId) {
+            if (
+              existingHollonId &&
+              existingHollonId !== task.assignedHollonId
+            ) {
               hasConflict = true;
               break;
             }
@@ -303,14 +306,20 @@ describe('Integration: Scenario 4 - Concurrent Hollons', () => {
       }
 
       // Each file should only be worked on by one hollon
-      expect(affectedFilesMap.size).toBeLessThanOrEqual(allInProgressTasks.length);
+      expect(affectedFilesMap.size).toBeLessThanOrEqual(
+        allInProgressTasks.length,
+      );
     });
 
     it('should have both hollons in valid states', async () => {
       const hollonRepo = dataSource.getRepository(Hollon);
 
-      const finalHollon1 = await hollonRepo.findOne({ where: { id: hollon1.id } });
-      const finalHollon2 = await hollonRepo.findOne({ where: { id: hollon2.id } });
+      const finalHollon1 = await hollonRepo.findOne({
+        where: { id: hollon1.id },
+      });
+      const finalHollon2 = await hollonRepo.findOne({
+        where: { id: hollon2.id },
+      });
 
       expect(finalHollon1).toBeDefined();
       expect(finalHollon2).toBeDefined();
@@ -349,9 +358,9 @@ describe('Integration: Scenario 4 - Concurrent Hollons', () => {
       });
 
       // All in-progress tasks should have assigned hollon
-      expect(
-        inProgressTasks.every((t) => t.assignedHollonId !== null),
-      ).toBe(true);
+      expect(inProgressTasks.every((t) => t.assignedHollonId !== null)).toBe(
+        true,
+      );
     });
 
     it('should support adding more hollons dynamically', async () => {

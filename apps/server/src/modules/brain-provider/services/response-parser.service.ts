@@ -30,8 +30,7 @@ export class ResponseParserService {
     }
 
     // Detect errors (must be at the start of the line)
-    const hasError =
-      /^Error:/i.test(trimmed) || /^Fatal:/i.test(trimmed);
+    const hasError = /^Error:/i.test(trimmed) || /^Fatal:/i.test(trimmed);
     const errorMessage = hasError ? trimmed : undefined;
 
     return {

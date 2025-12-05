@@ -5,7 +5,11 @@ import {
   EscalationLevel,
   EscalationRequest,
 } from './escalation.service';
-import { Task, TaskStatus, TaskPriority } from '../../task/entities/task.entity';
+import {
+  Task,
+  TaskStatus,
+  TaskPriority,
+} from '../../task/entities/task.entity';
 import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
 
 describe('EscalationService', () => {

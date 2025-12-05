@@ -5,10 +5,10 @@ import { Task, TaskStatus } from '../../task/entities/task.entity';
 import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
 
 export enum EscalationLevel {
-  SELF_RESOLVE = 1,      // 재시도
+  SELF_RESOLVE = 1, // 재시도
   TEAM_COLLABORATION = 2, // 팀 내 다른 Hollon에게 도움 요청
-  TEAM_LEADER = 3,        // 팀 리더 결정
-  ORGANIZATION = 4,       // 조직 레벨 에스컬레이션
+  TEAM_LEADER = 3, // 팀 리더 결정
+  ORGANIZATION = 4, // 조직 레벨 에스컬레이션
   HUMAN_INTERVENTION = 5, // 인간 개입 필요
 }
 
@@ -40,7 +40,7 @@ export interface EscalationRecord {
 @Injectable()
 export class EscalationService {
   private readonly logger = new Logger(EscalationService.name);
-  
+
   // In-memory escalation records (향후 DB로 이동)
   private escalationHistory: Map<string, EscalationRecord[]> = new Map();
 
@@ -236,9 +236,7 @@ export class EscalationService {
       errorMessage: `Escalated to team leader: ${request.reason}`,
     });
 
-    this.logger.log(
-      `Task ${request.taskId} marked for team leader review`,
-    );
+    this.logger.log(`Task ${request.taskId} marked for team leader review`);
 
     return {
       success: true,
@@ -304,7 +302,8 @@ export class EscalationService {
     return {
       success: true,
       action: 'human_approval_required',
-      message: 'Task marked for human intervention - notifications sent to administrators',
+      message:
+        'Task marked for human intervention - notifications sent to administrators',
     };
   }
 

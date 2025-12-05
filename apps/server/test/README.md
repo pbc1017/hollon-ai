@@ -21,6 +21,7 @@ The Hollon-AI testing strategy follows NestJS best practices:
 ### Test Database Isolation
 
 E2E tests use **PostgreSQL schema-based isolation**:
+
 - Tests run in separate schema: `hollon_test_worker_1`
 - Development data remains untouched in `hollon` schema
 - Supports parallel test execution with multiple Jest workers
@@ -48,11 +49,13 @@ test/
 ### Prerequisites
 
 1. **Database must be running**:
+
    ```bash
    docker compose up -d
    ```
 
 2. **Test schema must exist** (automatically created by Docker init script):
+
    ```bash
    # Verify schema exists
    docker exec -i hollon-postgres psql -U hollon -d hollon -c "\\dn"
@@ -110,6 +113,7 @@ TypeOrmModule.forRootAsync({
 ```
 
 Key functions:
+
 - `getTestDatabaseConfig()` - Returns TypeORM config with test schema
 - `setupTestSchema()` - Creates schema and runs migrations
 - `cleanDatabase()` - Truncates all tables (fast cleanup)
@@ -138,6 +142,7 @@ Factories automatically generate unique names using UUID to prevent conflicts.
 ### Global Setup
 
 The `test/setup/jest-e2e-setup.ts` file runs before all tests:
+
 - Sets `NODE_ENV=test`
 - Configures test timeout (30 seconds)
 - Logs worker ID and schema name
@@ -147,11 +152,13 @@ The `test/setup/jest-e2e-setup.ts` file runs before all tests:
 ### Creating a New E2E Test
 
 1. **Create test file** in appropriate subdirectory:
+
    ```
    test/your-module/your-feature.e2e-spec.ts
    ```
 
 2. **Import test infrastructure**:
+
    ```typescript
    import { Test, TestingModule } from '@nestjs/testing';
    import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -162,6 +169,7 @@ The `test/setup/jest-e2e-setup.ts` file runs before all tests:
    ```
 
 3. **Set up test module** with test database:
+
    ```typescript
    beforeAll(async () => {
      const module: TestingModule = await Test.createTestingModule({
@@ -176,14 +184,19 @@ The `test/setup/jest-e2e-setup.ts` file runs before all tests:
              getTestDatabaseConfig(configService),
            inject: [ConfigService],
          }),
-         TypeOrmModule.forFeature([/* your entities */]),
+         TypeOrmModule.forFeature([
+           /* your entities */
+         ]),
        ],
-       providers: [/* your services */],
+       providers: [
+         /* your services */
+       ],
      }).compile();
    });
    ```
 
 4. **Use factories for test data**:
+
    ```typescript
    const org = await OrganizationFactory.createPersisted(organizationRepo);
    const team = await TeamFactory.createPersisted(teamRepo, org.id);
@@ -251,17 +264,21 @@ describe('Feature E2E', () => {
 ### Common Issues
 
 #### 1. "column 'type' does not exist"
+
 **Cause**: Database schema out of sync with entities
 
 **Solution**:
+
 ```bash
 DB_SCHEMA=hollon_test pnpm --filter=@hollon-ai/server db:migrate
 ```
 
 #### 2. "Jest did not exit one second after the test run has completed"
+
 **Cause**: Unclosed database connections or async operations
 
 **Solution**:
+
 - Ensure `module.close()` is called in `afterAll`
 - Use `--detectOpenHandles` flag to identify the issue:
   ```bash
@@ -269,14 +286,17 @@ DB_SCHEMA=hollon_test pnpm --filter=@hollon-ai/server db:migrate
   ```
 
 #### 3. "foreign key constraint violation"
+
 **Cause**: Incorrect cleanup order
 
 **Solution**: Delete entities in reverse dependency order (children before parents)
 
 #### 4. "schema 'hollon_test_worker_1' does not exist"
+
 **Cause**: Test schema not created or migrations not run
 
 **Solution**:
+
 ```bash
 # Create schema manually
 docker exec -i hollon-postgres psql -U hollon -d hollon -c \
@@ -287,9 +307,11 @@ DB_SCHEMA=hollon_test pnpm --filter=@hollon-ai/server db:migrate
 ```
 
 #### 5. "Test timeout exceeded"
+
 **Cause**: Test taking longer than 30 seconds
 
 **Solution**:
+
 - Optimize test (reduce data, simplify operations)
 - Or increase timeout in specific test:
   ```typescript
@@ -301,11 +323,13 @@ DB_SCHEMA=hollon_test pnpm --filter=@hollon-ai/server db:migrate
 ### Debug Tips
 
 1. **Enable detailed logging**:
+
    ```bash
    LOG_LEVEL=debug pnpm --filter=@hollon-ai/server test:e2e:debug
    ```
 
 2. **Run single test file**:
+
    ```bash
    pnpm --filter=@hollon-ai/server test:e2e -- orchestration
    ```

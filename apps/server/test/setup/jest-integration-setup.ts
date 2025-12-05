@@ -14,4 +14,6 @@ jest.setTimeout(30000);
 
 console.log('🧪 E2E Test Environment Initialized');
 console.log(`   Worker ID: ${process.env.JEST_WORKER_ID || '1'}`);
-console.log(`   Test Schema: hollon_test_worker_${process.env.JEST_WORKER_ID || '1'}`);
+console.log(
+  `   Test Schema: hollon_test_worker_${process.env.JEST_WORKER_ID || '1'}`,
+);

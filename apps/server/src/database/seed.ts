@@ -5,7 +5,10 @@ import { Organization } from '../modules/organization/entities/organization.enti
 import { Role } from '../modules/role/entities/role.entity';
 import { Team } from '../modules/team/entities/team.entity';
 import { Hollon, HollonStatus } from '../modules/hollon/entities/hollon.entity';
-import { Project, ProjectStatus } from '../modules/project/entities/project.entity';
+import {
+  Project,
+  ProjectStatus,
+} from '../modules/project/entities/project.entity';
 import { BrainProviderConfig } from '../modules/brain-provider/entities/brain-provider-config.entity';
 
 // Load environment variables from project root
@@ -87,7 +90,13 @@ async function seed() {
 - 명확한 타입 정의
 - 함수는 단일 책임 원칙 준수
 - 주석은 "왜"를 설명, "무엇"은 코드로 표현`,
-      capabilities: ['typescript', 'nestjs', 'postgresql', 'typeorm', 'rest-api'],
+      capabilities: [
+        'typescript',
+        'nestjs',
+        'postgresql',
+        'typeorm',
+        'rest-api',
+      ],
     });
 
     const frontendRole = roleRepo.create({
@@ -107,7 +116,13 @@ async function seed() {
 - 재사용 가능한 컴포넌트 설계
 - Tailwind CSS 활용
 - 접근성(a11y) 고려`,
-      capabilities: ['typescript', 'react', 'nextjs', 'tailwind', 'responsive-design'],
+      capabilities: [
+        'typescript',
+        'react',
+        'nextjs',
+        'tailwind',
+        'responsive-design',
+      ],
     });
 
     const qaRole = roleRepo.create({
@@ -131,7 +146,9 @@ async function seed() {
     });
 
     await roleRepo.save([backendRole, frontendRole, qaRole]);
-    console.log(`✅ Roles created: ${backendRole.name}, ${frontendRole.name}, ${qaRole.name}`);
+    console.log(
+      `✅ Roles created: ${backendRole.name}, ${frontendRole.name}, ${qaRole.name}`,
+    );
 
     // 4. Create Team
     console.log('🏢 Creating team...');
@@ -156,7 +173,8 @@ async function seed() {
       brainProviderId: 'claude_code',
       status: HollonStatus.IDLE,
       maxConcurrentTasks: 1,
-      systemPrompt: '당신은 Alpha입니다. 백엔드 개발에 집중하며, 특히 API 엔드포인트와 비즈니스 로직 구현을 담당합니다.',
+      systemPrompt:
+        '당신은 Alpha입니다. 백엔드 개발에 집중하며, 특히 API 엔드포인트와 비즈니스 로직 구현을 담당합니다.',
     });
 
     const hollonBeta = hollonRepo.create({
@@ -167,7 +185,8 @@ async function seed() {
       brainProviderId: 'claude_code',
       status: HollonStatus.IDLE,
       maxConcurrentTasks: 1,
-      systemPrompt: '당신은 Beta입니다. 백엔드 개발에 집중하며, 특히 데이터베이스 스키마와 엔티티 구현을 담당합니다.',
+      systemPrompt:
+        '당신은 Beta입니다. 백엔드 개발에 집중하며, 특히 데이터베이스 스키마와 엔티티 구현을 담당합니다.',
     });
 
     await hollonRepo.save([hollonAlpha, hollonBeta]);
@@ -179,13 +198,16 @@ async function seed() {
     const phase1Project = projectRepo.create({
       organizationId: org.id,
       name: 'Phase 1: MVP Core',
-      description: '자율 실행 엔진 구현 - 홀론이 태스크를 Pull → 실행 → 완료하는 사이클',
+      description:
+        '자율 실행 엔진 구현 - 홀론이 태스크를 Pull → 실행 → 완료하는 사이클',
       repositoryUrl: 'https://github.com/your-org/hollon-ai',
       workingDirectory: '/path/to/hollon-ai',
       status: ProjectStatus.ACTIVE,
     });
     await projectRepo.save(phase1Project);
-    console.log(`✅ Project created: ${phase1Project.name} (${phase1Project.id})`);
+    console.log(
+      `✅ Project created: ${phase1Project.name} (${phase1Project.id})`,
+    );
 
     console.log('\n🎉 Database seeding completed successfully!');
     console.log('\n📊 Summary:');

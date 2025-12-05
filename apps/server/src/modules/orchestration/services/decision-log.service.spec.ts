@@ -212,7 +212,9 @@ describe('DecisionLogService', () => {
         hollonId: 'hollon-1',
       });
 
-      expect(results.every((r) => r.decision.hollonId === 'hollon-1')).toBe(true);
+      expect(results.every((r) => r.decision.hollonId === 'hollon-1')).toBe(
+        true,
+      );
     });
 
     it('should respect result limit', () => {
@@ -229,13 +231,17 @@ describe('DecisionLogService', () => {
         });
       }
 
-      const results = service.searchSimilarDecisions('authentication', { limit: 5 });
+      const results = service.searchSimilarDecisions('authentication', {
+        limit: 5,
+      });
 
       expect(results).toHaveLength(5);
     });
 
     it('should return empty array for non-matching query', () => {
-      const results = service.searchSimilarDecisions('blockchain cryptocurrency');
+      const results = service.searchSimilarDecisions(
+        'blockchain cryptocurrency',
+      );
 
       expect(results).toHaveLength(0);
     });
@@ -374,9 +380,9 @@ describe('DecisionLogService', () => {
 
       expect(stats.recentDecisions).toHaveLength(3);
       // Most recent should be first
-      expect(stats.recentDecisions[0].timestamp.getTime()).toBeGreaterThanOrEqual(
-        stats.recentDecisions[1].timestamp.getTime(),
-      );
+      expect(
+        stats.recentDecisions[0].timestamp.getTime(),
+      ).toBeGreaterThanOrEqual(stats.recentDecisions[1].timestamp.getTime());
     });
   });
 
@@ -469,7 +475,9 @@ describe('DecisionLogService', () => {
       const decisions = service.getDecisionsByType(DecisionType.SPLIT_TASK);
 
       expect(decisions).toHaveLength(2);
-      expect(decisions.every((d) => d.type === DecisionType.SPLIT_TASK)).toBe(true);
+      expect(decisions.every((d) => d.type === DecisionType.SPLIT_TASK)).toBe(
+        true,
+      );
     });
 
     it('should return empty array for type with no decisions', () => {

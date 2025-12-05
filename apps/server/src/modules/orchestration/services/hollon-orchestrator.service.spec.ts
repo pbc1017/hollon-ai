@@ -80,9 +80,7 @@ describe('HollonOrchestratorService', () => {
       ],
     }).compile();
 
-    service = module.get<HollonOrchestratorService>(
-      HollonOrchestratorService,
-    );
+    service = module.get<HollonOrchestratorService>(HollonOrchestratorService);
   });
 
   afterEach(() => {
@@ -188,9 +186,7 @@ describe('HollonOrchestratorService', () => {
         reason: 'Directly assigned',
       });
       mockPromptComposer.composePrompt.mockResolvedValue(mockComposedPrompt);
-      mockBrainProvider.executeWithTracking.mockResolvedValue(
-        mockBrainResult,
-      );
+      mockBrainProvider.executeWithTracking.mockResolvedValue(mockBrainResult);
       mockOrganizationRepo.findOne.mockResolvedValue({
         id: 'org-1',
         settings: { costLimitDailyCents: 100 },

@@ -2,7 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CostTrackingService } from './cost-tracking.service';
-import { CostRecord, CostRecordType } from '../../cost-tracking/entities/cost-record.entity';
+import {
+  CostRecord,
+  CostRecordType,
+} from '../../cost-tracking/entities/cost-record.entity';
 import { Organization } from '../../organization/entities/organization.entity';
 
 describe('CostTrackingService', () => {
@@ -134,7 +137,9 @@ describe('CostTrackingService', () => {
         getRawOne: jest.fn().mockResolvedValue({ total: '500' }), // $5.00 used
       };
 
-      costRecordRepo.createQueryBuilder = jest.fn().mockReturnValue(queryBuilder);
+      costRecordRepo.createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(queryBuilder);
 
       const result = await service.checkBudget('org-1');
 
@@ -154,7 +159,9 @@ describe('CostTrackingService', () => {
         getRawOne: jest.fn().mockResolvedValue({ total: '850' }), // 85% used
       };
 
-      costRecordRepo.createQueryBuilder = jest.fn().mockReturnValue(queryBuilder);
+      costRecordRepo.createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(queryBuilder);
 
       const result = await service.checkBudget('org-1');
 
@@ -174,7 +181,9 @@ describe('CostTrackingService', () => {
         getRawOne: jest.fn().mockResolvedValue({ total: '1050' }), // 105% used
       };
 
-      costRecordRepo.createQueryBuilder = jest.fn().mockReturnValue(queryBuilder);
+      costRecordRepo.createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(queryBuilder);
 
       const result = await service.checkBudget('org-1');
 
@@ -194,12 +203,15 @@ describe('CostTrackingService', () => {
         select: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn()
+        getRawOne: jest
+          .fn()
           .mockResolvedValueOnce({ total: '500' }) // Daily OK
           .mockResolvedValueOnce({ total: '8500' }), // Monthly warning
       };
 
-      costRecordRepo.createQueryBuilder = jest.fn().mockReturnValue(queryBuilder);
+      costRecordRepo.createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(queryBuilder);
 
       const result = await service.checkBudget('org-1');
 
@@ -219,12 +231,15 @@ describe('CostTrackingService', () => {
         select: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn()
+        getRawOne: jest
+          .fn()
           .mockResolvedValueOnce({ total: '1200' }) // Daily exceeded
           .mockResolvedValueOnce({ total: '5000' }), // Monthly OK
       };
 
-      costRecordRepo.createQueryBuilder = jest.fn().mockReturnValue(queryBuilder);
+      costRecordRepo.createQueryBuilder = jest
+        .fn()
+        .mockReturnValue(queryBuilder);
 
       const result = await service.checkBudget('org-1');
 
@@ -239,9 +254,21 @@ describe('CostTrackingService', () => {
       const endDate = new Date('2025-01-02');
 
       const records = [
-        mockCostRecord({ costCents: 100, type: CostRecordType.BRAIN_EXECUTION, hollonId: 'hollon-1' }),
-        mockCostRecord({ costCents: 200, type: CostRecordType.BRAIN_EXECUTION, hollonId: 'hollon-1' }),
-        mockCostRecord({ costCents: 150, type: CostRecordType.TASK_ANALYSIS, hollonId: 'hollon-2' }),
+        mockCostRecord({
+          costCents: 100,
+          type: CostRecordType.BRAIN_EXECUTION,
+          hollonId: 'hollon-1',
+        }),
+        mockCostRecord({
+          costCents: 200,
+          type: CostRecordType.BRAIN_EXECUTION,
+          hollonId: 'hollon-1',
+        }),
+        mockCostRecord({
+          costCents: 150,
+          type: CostRecordType.TASK_ANALYSIS,
+          hollonId: 'hollon-2',
+        }),
       ];
 
       costRecordRepo.find = jest.fn().mockResolvedValue(records);

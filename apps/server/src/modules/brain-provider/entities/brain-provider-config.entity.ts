@@ -22,10 +22,20 @@ export class BrainProviderConfig extends BaseEntity {
     [key: string]: unknown;
   };
 
-  @Column({ name: 'cost_per_input_token_cents', type: 'decimal', precision: 10, scale: 6 })
+  @Column({
+    name: 'cost_per_input_token_cents',
+    type: 'decimal',
+    precision: 10,
+    scale: 6,
+  })
   costPerInputTokenCents: number;
 
-  @Column({ name: 'cost_per_output_token_cents', type: 'decimal', precision: 10, scale: 6 })
+  @Column({
+    name: 'cost_per_output_token_cents',
+    type: 'decimal',
+    precision: 10,
+    scale: 6,
+  })
   costPerOutputTokenCents: number;
 
   @Column({ default: true })

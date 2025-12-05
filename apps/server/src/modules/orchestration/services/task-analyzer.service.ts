@@ -250,7 +250,8 @@ Respond in JSON format:
       const response = await this.brainProvider.executeWithTracking(
         {
           prompt,
-          systemPrompt: 'You are a technical task complexity analyzer. Provide accurate, actionable assessments.',
+          systemPrompt:
+            'You are a technical task complexity analyzer. Provide accurate, actionable assessments.',
         },
         {
           organizationId,
@@ -292,7 +293,9 @@ Respond in JSON format:
         reasoning: `${aiResult.reasoning} (AI-enhanced from heuristic score ${heuristicAnalysis.score})`,
       };
     } catch (error) {
-      this.logger.error(`AI enhancement failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(
+        `AI enhancement failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
       throw error;
     }
   }
@@ -377,7 +380,8 @@ Respond in JSON format:
     const response = await this.brainProvider.executeWithTracking(
       {
         prompt,
-        systemPrompt: 'You are a task breakdown specialist. Create clear, actionable subtasks.',
+        systemPrompt:
+          'You are a task breakdown specialist. Create clear, actionable subtasks.',
       },
       {
         organizationId,
@@ -416,7 +420,9 @@ Respond in JSON format:
    * Fallback when AI is not available or fails
    */
   private generateBasicSubtaskSuggestions(task: Task): SubtaskSuggestion {
-    this.logger.log(`Using basic rules to generate subtask suggestions for ${task.id}`);
+    this.logger.log(
+      `Using basic rules to generate subtask suggestions for ${task.id}`,
+    );
 
     const subtaskDefinitions: SubtaskDefinition[] = [];
 
@@ -435,7 +441,8 @@ Respond in JSON format:
       return {
         subtaskDefinitions,
         strategy: 'sequential',
-        reasoning: 'Split by acceptance criteria - each subtask addresses one criterion',
+        reasoning:
+          'Split by acceptance criteria - each subtask addresses one criterion',
         usedAI: false,
       };
     }
@@ -457,7 +464,8 @@ Respond in JSON format:
       return {
         subtaskDefinitions,
         strategy: 'parallel',
-        reasoning: 'Split by file directories - subtasks can be executed in parallel',
+        reasoning:
+          'Split by file directories - subtasks can be executed in parallel',
         usedAI: false,
       };
     }
@@ -488,7 +496,8 @@ Respond in JSON format:
     return {
       subtaskDefinitions,
       strategy: 'sequential',
-      reasoning: 'Generic 3-phase breakdown: research → implementation → testing',
+      reasoning:
+        'Generic 3-phase breakdown: research → implementation → testing',
       usedAI: false,
     };
   }
@@ -501,7 +510,8 @@ Respond in JSON format:
 
     files.forEach((file) => {
       const parts = file.split('/');
-      const directory = parts.length > 1 ? parts.slice(0, -1).join('/') : 'root';
+      const directory =
+        parts.length > 1 ? parts.slice(0, -1).join('/') : 'root';
 
       if (!groups[directory]) {
         groups[directory] = [];

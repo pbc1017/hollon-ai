@@ -104,20 +104,21 @@ export class ClaudeCodeProvider implements IBrainProvider {
       };
     } catch (error) {
       const duration = Date.now() - startTime;
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+
       // Log detailed error information for debugging
       if (error instanceof BrainExecutionError) {
         this.logger.error(
           `Claude Code execution failed: ${errorMessage}, ` +
-          `exitCode=${error.exitCode}, duration=${duration}ms`,
+            `exitCode=${error.exitCode}, duration=${duration}ms`,
         );
       } else {
         this.logger.error(
           `Claude Code execution failed: ${errorMessage}, duration=${duration}ms`,
         );
       }
-      
+
       throw error;
     }
   }

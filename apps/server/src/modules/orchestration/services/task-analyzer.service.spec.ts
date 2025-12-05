@@ -2,7 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TaskAnalyzerService } from './task-analyzer.service';
-import { Task, TaskType, TaskStatus, TaskPriority } from '../../task/entities/task.entity';
+import {
+  Task,
+  TaskType,
+  TaskStatus,
+  TaskPriority,
+} from '../../task/entities/task.entity';
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 
 describe('TaskAnalyzerService', () => {
@@ -89,12 +94,9 @@ describe('TaskAnalyzerService', () => {
 
     it('should analyze moderately complex task', async () => {
       const task = mockTask({
-        description: 'A moderately complex task with some details and requirements that need to be addressed carefully. This involves multiple steps and considerations.',
-        acceptanceCriteria: [
-          'Criterion 1',
-          'Criterion 2',
-          'Criterion 3',
-        ],
+        description:
+          'A moderately complex task with some details and requirements that need to be addressed carefully. This involves multiple steps and considerations.',
+        acceptanceCriteria: ['Criterion 1', 'Criterion 2', 'Criterion 3'],
         affectedFiles: ['file1.ts', 'file2.ts', 'file3.ts'],
         type: TaskType.IMPLEMENTATION,
       });
@@ -114,7 +116,10 @@ describe('TaskAnalyzerService', () => {
       const longDescription = 'A'.repeat(1500);
       const task = mockTask({
         description: longDescription,
-        acceptanceCriteria: Array.from({ length: 12 }, (_, i) => `Criterion ${i + 1}`),
+        acceptanceCriteria: Array.from(
+          { length: 12 },
+          (_, i) => `Criterion ${i + 1}`,
+        ),
         affectedFiles: Array.from({ length: 15 }, (_, i) => `file${i + 1}.ts`),
         type: TaskType.IMPLEMENTATION,
         subtasks: [mockTask({ id: 'subtask-1' })],
@@ -221,7 +226,9 @@ describe('TaskAnalyzerService', () => {
       });
 
       taskRepo.findOne.mockResolvedValue(task);
-      brainProvider.executeWithTracking.mockRejectedValue(new Error('AI service unavailable'));
+      brainProvider.executeWithTracking.mockRejectedValue(
+        new Error('AI service unavailable'),
+      );
 
       const result = await service.analyzeComplexity('task-1', {
         useAI: true,
@@ -286,7 +293,9 @@ describe('TaskAnalyzerService', () => {
       result.subtaskDefinitions.forEach((subtask, index) => {
         expect(subtask.title).toContain('Part');
         expect(subtask.acceptanceCriteria).toHaveLength(1);
-        expect(subtask.acceptanceCriteria![0]).toBe(task.acceptanceCriteria![index]);
+        expect(subtask.acceptanceCriteria![0]).toBe(
+          task.acceptanceCriteria![index],
+        );
       });
     });
 
@@ -335,9 +344,15 @@ describe('TaskAnalyzerService', () => {
       expect(result.reasoning).toContain('3-phase');
 
       const titles = result.subtaskDefinitions.map((st) => st.title);
-      expect(titles.some((t) => t.includes('Setup') || t.includes('Research'))).toBe(true);
+      expect(
+        titles.some((t) => t.includes('Setup') || t.includes('Research')),
+      ).toBe(true);
       expect(titles.some((t) => t.includes('Implementation'))).toBe(true);
-      expect(titles.some((t) => t.includes('Testing') || t.includes('Documentation'))).toBe(true);
+      expect(
+        titles.some(
+          (t) => t.includes('Testing') || t.includes('Documentation'),
+        ),
+      ).toBe(true);
     });
 
     it('should generate AI-powered subtask suggestions', async () => {
@@ -365,13 +380,21 @@ describe('TaskAnalyzerService', () => {
               title: 'Implement authentication endpoints',
               description: 'Create login/logout/refresh endpoints',
               type: 'implementation',
-              acceptanceCriteria: ['Login works', 'Logout works', 'Refresh works'],
-              affectedFiles: ['src/auth/auth.controller.ts', 'src/auth/auth.service.ts'],
+              acceptanceCriteria: [
+                'Login works',
+                'Logout works',
+                'Refresh works',
+              ],
+              affectedFiles: [
+                'src/auth/auth.controller.ts',
+                'src/auth/auth.service.ts',
+              ],
               priority: 'P1',
             },
           ],
           strategy: 'sequential',
-          reasoning: 'JWT setup must happen before endpoints can be implemented',
+          reasoning:
+            'JWT setup must happen before endpoints can be implemented',
         }),
         cost: { inputTokens: 200, outputTokens: 100, totalCostCents: 0.3 },
         duration: 1500,
@@ -386,7 +409,9 @@ describe('TaskAnalyzerService', () => {
       expect(result.usedAI).toBe(true);
       expect(result.subtaskDefinitions).toHaveLength(2);
       expect(result.strategy).toBe('sequential');
-      expect(result.subtaskDefinitions[0].title).toBe('Setup JWT infrastructure');
+      expect(result.subtaskDefinitions[0].title).toBe(
+        'Setup JWT infrastructure',
+      );
 
       expect(brainProvider.executeWithTracking).toHaveBeenCalled();
     });
@@ -399,7 +424,9 @@ describe('TaskAnalyzerService', () => {
       });
 
       taskRepo.findOne.mockResolvedValue(task);
-      brainProvider.executeWithTracking.mockRejectedValue(new Error('AI failed'));
+      brainProvider.executeWithTracking.mockRejectedValue(
+        new Error('AI failed'),
+      );
 
       const result = await service.suggestSubtasks('task-1', {
         useAI: true,
@@ -433,7 +460,10 @@ describe('TaskAnalyzerService', () => {
     it('should return true for many acceptance criteria', () => {
       const task = mockTask({
         description: 'Short description',
-        acceptanceCriteria: Array.from({ length: 8 }, (_, i) => `Criterion ${i + 1}`),
+        acceptanceCriteria: Array.from(
+          { length: 8 },
+          (_, i) => `Criterion ${i + 1}`,
+        ),
       });
 
       expect(service.shouldAnalyzeBeforeExecution(task)).toBe(true);
@@ -475,7 +505,10 @@ describe('TaskAnalyzerService', () => {
     it('should handle task with extremely long description', async () => {
       const task = mockTask({
         description: 'A'.repeat(5000),
-        acceptanceCriteria: Array.from({ length: 15 }, (_, i) => `Criterion ${i + 1}`),
+        acceptanceCriteria: Array.from(
+          { length: 15 },
+          (_, i) => `Criterion ${i + 1}`,
+        ),
         affectedFiles: Array.from({ length: 15 }, (_, i) => `file${i + 1}.ts`),
         type: TaskType.IMPLEMENTATION,
       });

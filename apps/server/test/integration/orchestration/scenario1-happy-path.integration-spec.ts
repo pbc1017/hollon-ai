@@ -127,7 +127,8 @@ describe('Integration: Scenario 1 - Happy Path', () => {
       task = await taskRepo.save({
         projectId: project.id,
         title: 'Implement simple utility function',
-        description: 'Create a function that adds two numbers and returns the result',
+        description:
+          'Create a function that adds two numbers and returns the result',
         type: 'implementation',
         status: TaskStatus.READY,
         priority: 'P2',
@@ -183,9 +184,11 @@ describe('Integration: Scenario 1 - Happy Path', () => {
 
       expect(updatedTask).toBeDefined();
       // Task should be either IN_PROGRESS or COMPLETED depending on execution
-      expect([TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED, TaskStatus.IN_REVIEW]).toContain(
-        updatedTask?.status,
-      );
+      expect([
+        TaskStatus.IN_PROGRESS,
+        TaskStatus.COMPLETED,
+        TaskStatus.IN_REVIEW,
+      ]).toContain(updatedTask?.status);
     });
 
     it('should have hollon status updated', async () => {
@@ -196,9 +199,11 @@ describe('Integration: Scenario 1 - Happy Path', () => {
 
       expect(updatedHollon).toBeDefined();
       // Hollon should be either WORKING, IN_REVIEW, or back to IDLE
-      expect([HollonStatus.WORKING, HollonStatus.IN_REVIEW, HollonStatus.IDLE]).toContain(
-        updatedHollon?.status,
-      );
+      expect([
+        HollonStatus.WORKING,
+        HollonStatus.IN_REVIEW,
+        HollonStatus.IDLE,
+      ]).toContain(updatedHollon?.status);
     });
 
     it('should create document with result (if completed)', async () => {
