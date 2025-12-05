@@ -13,6 +13,8 @@ import { EscalationService } from './services/escalation.service';
 import { SubtaskCreationService } from './services/subtask-creation.service';
 import { TaskAnalyzerService } from './services/task-analyzer.service';
 import { DecisionLogService } from './services/decision-log.service';
+import { CostTrackingService } from './services/cost-tracking.service';
+import { CostRecord } from '../cost-tracking/entities/cost-record.entity';
 
 @Module({
   imports: [
@@ -21,6 +23,7 @@ import { DecisionLogService } from './services/decision-log.service';
       Task,
       Document,
       Organization,
+      CostRecord,
     ]),
     BrainProviderModule,
   ],
@@ -32,6 +35,7 @@ import { DecisionLogService } from './services/decision-log.service';
     SubtaskCreationService,
     TaskAnalyzerService,
     DecisionLogService,
+    CostTrackingService,
     HollonOrchestratorService,
   ],
   exports: [
