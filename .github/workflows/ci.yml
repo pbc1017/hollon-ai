@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, HL-*]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main, dev]
 
 # Cancel in-progress runs for the same workflow and ref
 concurrency:
