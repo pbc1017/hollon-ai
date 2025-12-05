@@ -2,14 +2,9 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class InitialSchema1733295000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Enable pgvector extension (optional - skip if not available)
-    try {
-      await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
-    } catch {
-      console.warn(
-        'pgvector extension not available - skipping. Vector search features will be disabled.',
-      );
-    }
+    // Note: pgvector extension should be installed manually if vector search is needed
+    // CREATE EXTENSION IF NOT EXISTS vector;
+    // It's commented out to avoid transaction failures in environments without pgvector
 
     // Organizations table
     await queryRunner.query(`
@@ -297,6 +292,7 @@ export class InitialSchema1733295000000 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE IF EXISTS "brain_provider_configs"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "organizations"`);
 
-    await queryRunner.query(`DROP EXTENSION IF EXISTS vector`);
+    // Note: pgvector extension should be dropped manually if it was installed
+    // await queryRunner.query(`DROP EXTENSION IF EXISTS vector`);
   }
 }
