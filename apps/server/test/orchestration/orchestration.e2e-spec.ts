@@ -8,6 +8,7 @@ import { getTestDatabaseConfig } from '../setup/test-database';
 import { HollonOrchestratorService } from '../../src/modules/orchestration/services/hollon-orchestrator.service';
 import { TaskPoolService } from '../../src/modules/orchestration/services/task-pool.service';
 import { PromptComposerService } from '../../src/modules/orchestration/services/prompt-composer.service';
+import { QualityGateService } from '../../src/modules/orchestration/services/quality-gate.service';
 import { BrainProviderService } from '../../src/modules/brain-provider/brain-provider.service';
 import {
   Hollon,
@@ -91,6 +92,7 @@ describe('Orchestration E2E', () => {
         HollonOrchestratorService,
         TaskPoolService,
         PromptComposerService,
+        QualityGateService,
         {
           provide: BrainProviderService,
           useValue: mockBrainProvider,

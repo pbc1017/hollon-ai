@@ -8,6 +8,8 @@ import { BrainProviderService } from '../../brain-provider/brain-provider.servic
 import { PromptComposerService } from './prompt-composer.service';
 import { TaskPoolService } from './task-pool.service';
 import { TaskStatus } from '../../task/entities/task.entity';
+import { Organization } from '../../organization/entities/organization.entity';
+import { QualityGateService } from './quality-gate.service';
 
 describe('HollonOrchestratorService', () => {
   let service: HollonOrchestratorService;
@@ -41,6 +43,14 @@ describe('HollonOrchestratorService', () => {
     failTask: jest.fn(),
   };
 
+  const mockOrganizationRepo = {
+    findOne: jest.fn(),
+  };
+
+  const mockQualityGate = {
+    validateResult: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -64,6 +74,14 @@ describe('HollonOrchestratorService', () => {
         {
           provide: TaskPoolService,
           useValue: mockTaskPool,
+        },
+        {
+          provide: getRepositoryToken(Organization),
+          useValue: mockOrganizationRepo,
+        },
+        {
+          provide: QualityGateService,
+          useValue: mockQualityGate,
         },
       ],
     }).compile();
@@ -186,6 +204,14 @@ describe('HollonOrchestratorService', () => {
       mockBrainProvider.executeWithTracking.mockResolvedValue(
         mockBrainResult,
       );
+      mockOrganizationRepo.findOne.mockResolvedValue({
+        id: 'org-1',
+        settings: { costLimitDailyCents: 100 },
+      });
+      mockQualityGate.validateResult.mockResolvedValue({
+        passed: true,
+        shouldRetry: false,
+      });
       mockDocumentRepo.create.mockReturnValue({
         id: 'doc-1',
         title: 'Result',

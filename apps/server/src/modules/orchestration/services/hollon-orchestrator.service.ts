@@ -7,6 +7,8 @@ import { BrainProviderService } from '../../brain-provider/brain-provider.servic
 import { PromptComposerService } from './prompt-composer.service';
 import { TaskPoolService } from './task-pool.service';
 import { Task } from '../../task/entities/task.entity';
+import { QualityGateService } from './quality-gate.service';
+import { Organization } from '../../organization/entities/organization.entity';
 
 export interface ExecutionCycleResult {
   success: boolean;
@@ -38,9 +40,12 @@ export class HollonOrchestratorService {
     private readonly hollonRepo: Repository<Hollon>,
     @InjectRepository(Document)
     private readonly documentRepo: Repository<Document>,
+    @InjectRepository(Organization)
+    private readonly organizationRepo: Repository<Organization>,
     private readonly brainProvider: BrainProviderService,
     private readonly promptComposer: PromptComposerService,
     private readonly taskPool: TaskPoolService,
+    private readonly qualityGate: QualityGateService,
   ) {}
 
   /**
@@ -134,6 +139,48 @@ export class HollonOrchestratorService {
         `Brain execution completed: ${brainResult.duration}ms, ` +
           `cost=$${brainResult.cost.totalCostCents.toFixed(4)}`,
       );
+
+      // 4.5. Run quality gate validation
+      const organization = await this.organizationRepo.findOne({
+        where: { id: hollon.organizationId },
+      });
+
+      const costLimitDailyCents = organization?.settings
+        ?.costLimitDailyCents as number | undefined;
+
+      const validationResult = await this.qualityGate.validateResult({
+        task,
+        brainResult,
+        organizationId: hollon.organizationId,
+        costLimitDailyCents,
+      });
+
+      if (!validationResult.passed) {
+        this.logger.warn(
+          `Quality gate failed for task ${task.id}: ${validationResult.reason}`,
+        );
+
+        // If quality gate suggests retry, throw error to trigger retry logic
+        if (validationResult.shouldRetry) {
+          throw new Error(
+            `Quality gate validation failed: ${validationResult.reason}`,
+          );
+        } else {
+          // If no retry suggested, mark task as failed
+          await this.taskPool.failTask(
+            task.id,
+            `Quality gate failed: ${validationResult.reason}`,
+          );
+
+          return {
+            success: false,
+            duration: Date.now() - startTime,
+            error: `Quality gate failed: ${validationResult.reason}`,
+          };
+        }
+      }
+
+      this.logger.log(`Quality gate passed for task ${task.id}`);
 
       // 5. Save result as document
       await this.saveResultDocument(

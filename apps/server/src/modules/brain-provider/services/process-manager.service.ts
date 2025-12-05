@@ -28,6 +28,9 @@ export class ProcessManagerService implements IProcessManager {
       const proc = spawn(options.command, options.args, {
         cwd: options.cwd || process.cwd(),
         env: process.env,
+        // Explicit stdio configuration to prevent Claude Code Ink framework issues
+        // 'pipe' allows us to capture stdout/stderr while preventing TTY detection errors
+        stdio: ['pipe', 'pipe', 'pipe'],
       });
 
       // Timeout handler
