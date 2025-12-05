@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Task, TaskStatus } from '../../task/entities/task.entity';
-import { Hollon } from '../../hollon/entities/hollon.entity';
+import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
 
 export enum EscalationLevel {
   SELF_RESOLVE = 1,      // 재시도
@@ -171,10 +171,19 @@ export class EscalationService {
     }
 
     // Find other available hollons in the same team
+    if (!hollon.teamId) {
+      return {
+        success: false,
+        action: 'no_team',
+        nextLevel: EscalationLevel.ORGANIZATION,
+        message: 'Hollon has no team for collaboration',
+      };
+    }
+
     const teamHollons = await this.hollonRepo.find({
       where: {
         teamId: hollon.teamId,
-        status: 'idle', // Only idle hollons
+        status: HollonStatus.IDLE, // Only idle hollons
       },
     });
 
@@ -324,8 +333,8 @@ export class EscalationService {
    */
   async determineEscalationLevel(
     taskId: string,
-    hollonId: string,
-    failureReason: string,
+    _hollonId: string,
+    _failureReason: string,
   ): Promise<EscalationLevel> {
     const task = await this.taskRepo.findOne({
       where: { id: taskId },

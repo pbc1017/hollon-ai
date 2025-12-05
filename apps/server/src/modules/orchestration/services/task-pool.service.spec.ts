@@ -1,14 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { TaskPoolService } from './task-pool.service';
 import { Task, TaskStatus } from '../../task/entities/task.entity';
 import { Hollon } from '../../hollon/entities/hollon.entity';
 
 describe('TaskPoolService', () => {
   let service: TaskPoolService;
-  let taskRepo: Repository<Task>;
-  let hollonRepo: Repository<Hollon>;
 
   const mockTaskRepo = {
     find: jest.fn(),
@@ -39,8 +36,6 @@ describe('TaskPoolService', () => {
     }).compile();
 
     service = module.get<TaskPoolService>(TaskPoolService);
-    taskRepo = module.get<Repository<Task>>(getRepositoryToken(Task));
-    hollonRepo = module.get<Repository<Hollon>>(getRepositoryToken(Hollon));
   });
 
   afterEach(() => {

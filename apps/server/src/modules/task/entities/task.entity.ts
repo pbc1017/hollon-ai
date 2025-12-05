@@ -75,13 +75,13 @@ export class Task extends BaseEntity {
   projectId: string;
 
   @Column({ name: 'assigned_hollon_id', nullable: true })
-  assignedHollonId: string;
+  assignedHollonId: string | null;
 
   @Column({ name: 'parent_task_id', nullable: true })
-  parentTaskId: string;
+  parentTaskId: string | null;
 
   @Column({ name: 'creator_hollon_id', nullable: true })
-  creatorHollonId: string;
+  creatorHollonId: string | null;
 
   // 안전장치: 서브태스크 재귀 제한
   @Column({ default: 0 })
@@ -103,33 +103,34 @@ export class Task extends BaseEntity {
     array: true,
     nullable: true,
   })
-  acceptanceCriteria: string[];
+  acceptanceCriteria?: string[];
 
   @Column({
     name: 'estimated_complexity',
+    type: 'varchar',
     length: 20,
     nullable: true,
   })
-  estimatedComplexity: 'low' | 'medium' | 'high';
+  estimatedComplexity?: 'low' | 'medium' | 'high' | null;
 
   @Column({ type: 'text', array: true, nullable: true })
-  tags: string[];
+  tags?: string[];
 
   @Column({ name: 'retry_count', default: 0 })
   retryCount: number;
 
   @Column({ name: 'error_message', type: 'text', nullable: true })
-  errorMessage: string;
+  errorMessage?: string | null;
 
   // 타임스탬프
   @Column({ name: 'started_at', type: 'timestamp', nullable: true })
-  startedAt: Date;
+  startedAt?: Date | null;
 
   @Column({ name: 'completed_at', type: 'timestamp', nullable: true })
-  completedAt: Date;
+  completedAt?: Date | null;
 
   @Column({ name: 'due_date', type: 'timestamp', nullable: true })
-  dueDate: Date;
+  dueDate?: Date | null;
 
   // Relations
   @ManyToOne(() => Project, (project) => project.tasks, { onDelete: 'CASCADE' })

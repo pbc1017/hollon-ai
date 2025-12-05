@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { DecisionLogService, DecisionType, Decision } from './decision-log.service';
+import { DecisionLogService, DecisionType } from './decision-log.service';
 
 describe('DecisionLogService', () => {
   let service: DecisionLogService;
@@ -51,7 +51,7 @@ describe('DecisionLogService', () => {
 
       expect(decision.metadata).toBeDefined();
       expect(decision.metadata?.alternatives).toHaveLength(2);
-      expect(decision.metadata?.criteriaScore.postgresql).toBe(9);
+      expect((decision.metadata?.criteriaScore as any).postgresql).toBe(9);
     });
   });
 

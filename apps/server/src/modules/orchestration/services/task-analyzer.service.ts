@@ -89,7 +89,7 @@ export class TaskAnalyzerService {
         );
       } catch (error) {
         this.logger.warn(
-          `AI analysis failed, falling back to heuristics: ${error.message}`,
+          `AI analysis failed, falling back to heuristics: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -259,7 +259,7 @@ Respond in JSON format:
         },
       );
 
-      const aiResult = JSON.parse(response.result);
+      const aiResult = JSON.parse(response.output);
 
       // Merge AI analysis with heuristic analysis
       const enhancedScore = Math.round(
@@ -292,7 +292,7 @@ Respond in JSON format:
         reasoning: `${aiResult.reasoning} (AI-enhanced from heuristic score ${heuristicAnalysis.score})`,
       };
     } catch (error) {
-      this.logger.error(`AI enhancement failed: ${error.message}`);
+      this.logger.error(`AI enhancement failed: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
@@ -325,7 +325,7 @@ Respond in JSON format:
         );
       } catch (error) {
         this.logger.warn(
-          `AI subtask generation failed, using basic splitting: ${error.message}`,
+          `AI subtask generation failed, using basic splitting: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -386,7 +386,7 @@ Respond in JSON format:
       },
     );
 
-    const aiResult = JSON.parse(response.result);
+    const aiResult = JSON.parse(response.output);
 
     const subtaskDefinitions: SubtaskDefinition[] = aiResult.subtasks.map(
       (st: any) => ({

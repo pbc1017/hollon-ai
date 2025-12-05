@@ -224,6 +224,10 @@ export class TaskPoolService {
     hollon: Hollon,
     lockedFiles: string[],
   ): Promise<Task | null> {
+    if (!hollon.teamId) {
+      return null;
+    }
+
     // Get all projects this team works on
     const teamHollons = await this.hollonRepo.find({
       where: { teamId: hollon.teamId },

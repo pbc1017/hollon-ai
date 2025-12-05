@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { CostRecord, CostRecordType } from '../../cost-tracking/entities/cost-record.entity';
-import { Organization } from '../../organization/entities/organization.entity';
 
 export interface BudgetLimit {
   daily?: number; // Cents
@@ -57,8 +56,6 @@ export class CostTrackingService {
   constructor(
     @InjectRepository(CostRecord)
     private readonly costRecordRepo: Repository<CostRecord>,
-    @InjectRepository(Organization)
-    private readonly orgRepo: Repository<Organization>,
   ) {}
 
   /**

@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { HollonOrchestratorService } from './hollon-orchestrator.service';
 import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
 import { Document } from '../../document/entities/document.entity';
@@ -13,11 +12,6 @@ import { QualityGateService } from './quality-gate.service';
 
 describe('HollonOrchestratorService', () => {
   let service: HollonOrchestratorService;
-  let hollonRepo: Repository<Hollon>;
-  let documentRepo: Repository<Document>;
-  let brainProvider: BrainProviderService;
-  let promptComposer: PromptComposerService;
-  let taskPool: TaskPoolService;
 
   const mockHollonRepo = {
     findOne: jest.fn(),
@@ -89,13 +83,6 @@ describe('HollonOrchestratorService', () => {
     service = module.get<HollonOrchestratorService>(
       HollonOrchestratorService,
     );
-    hollonRepo = module.get<Repository<Hollon>>(getRepositoryToken(Hollon));
-    documentRepo = module.get<Repository<Document>>(
-      getRepositoryToken(Document),
-    );
-    brainProvider = module.get<BrainProviderService>(BrainProviderService);
-    promptComposer = module.get<PromptComposerService>(PromptComposerService);
-    taskPool = module.get<TaskPoolService>(TaskPoolService);
   });
 
   afterEach(() => {

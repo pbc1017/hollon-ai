@@ -108,19 +108,22 @@ export class SubtaskCreationService {
     const createdSubtasks: Task[] = [];
     for (const definition of subtaskDefinitions) {
       try {
-        const subtask = await this.taskRepo.save({
+        const subtask = this.taskRepo.create({
           ...definition,
           parentTaskId: parentTaskId,
           projectId: parentTask.projectId,
           status: TaskStatus.READY,
           assignedHollonId: null, // Subtasks start unassigned
           retryCount: 0,
+          priority: definition.priority as any,
+          type: definition.type as any, // Cast to any to avoid TypeScript error
         });
 
-        createdSubtasks.push(subtask);
-        this.logger.log(`Created subtask ${subtask.id}: ${subtask.title}`);
+        const savedSubtask = await this.taskRepo.save(subtask);
+        createdSubtasks.push(savedSubtask);
+        this.logger.log(`Created subtask ${savedSubtask.id}: ${savedSubtask.title}`);
       } catch (error) {
-        const errorMsg = `Failed to create subtask "${definition.title}": ${error.message}`;
+        const errorMsg = `Failed to create subtask "${definition.title}": ${error instanceof Error ? error.message : String(error)}`;
         this.logger.error(errorMsg);
         errors.push(errorMsg);
       }
@@ -193,7 +196,6 @@ export class SubtaskCreationService {
     }
 
     const subtasks = parentTask.subtasks;
-    const subtaskStatuses = subtasks.map((t) => t.status);
 
     // Check various conditions
     const allCompleted = subtasks.every((t) => t.status === TaskStatus.COMPLETED);

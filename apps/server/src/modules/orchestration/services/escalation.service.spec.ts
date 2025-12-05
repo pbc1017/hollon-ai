@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import {
   EscalationService,
   EscalationLevel,
@@ -11,8 +10,6 @@ import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
 
 describe('EscalationService', () => {
   let service: EscalationService;
-  let taskRepo: Repository<Task>;
-  let hollonRepo: Repository<Hollon>;
 
   const mockTaskRepo = {
     findOne: jest.fn(),
@@ -41,8 +38,6 @@ describe('EscalationService', () => {
     }).compile();
 
     service = module.get<EscalationService>(EscalationService);
-    taskRepo = module.get<Repository<Task>>(getRepositoryToken(Task));
-    hollonRepo = module.get<Repository<Hollon>>(getRepositoryToken(Hollon));
 
     // Clear history before each test
     service.clearHistory();
@@ -196,7 +191,7 @@ describe('EscalationService', () => {
       const mockHollon: Partial<Hollon> = {
         id: 'hollon-1',
         teamId: null,
-        team: null,
+        team: undefined,
       };
 
       mockHollonRepo.findOne.mockResolvedValue(mockHollon);

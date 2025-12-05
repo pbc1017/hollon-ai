@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { PromptComposerService } from './prompt-composer.service';
 import { Hollon } from '../../hollon/entities/hollon.entity';
 import { Task } from '../../task/entities/task.entity';
@@ -8,9 +7,6 @@ import { Document } from '../../document/entities/document.entity';
 
 describe('PromptComposerService', () => {
   let service: PromptComposerService;
-  let hollonRepo: Repository<Hollon>;
-  let taskRepo: Repository<Task>;
-  let documentRepo: Repository<Document>;
 
   const mockHollonRepo = {
     findOne: jest.fn(),
@@ -44,11 +40,6 @@ describe('PromptComposerService', () => {
     }).compile();
 
     service = module.get<PromptComposerService>(PromptComposerService);
-    hollonRepo = module.get<Repository<Hollon>>(getRepositoryToken(Hollon));
-    taskRepo = module.get<Repository<Task>>(getRepositoryToken(Task));
-    documentRepo = module.get<Repository<Document>>(
-      getRepositoryToken(Document),
-    );
   });
 
   afterEach(() => {

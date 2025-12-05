@@ -33,11 +33,11 @@ describe('TaskAnalyzerService', () => {
     dueDate: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-    project: null,
-    assignedHollon: null,
-    parentTask: null,
+    project: undefined as any,
+    assignedHollon: undefined as any,
+    parentTask: undefined as any,
     subtasks: [],
-    creatorHollon: null,
+    creatorHollon: undefined as any,
     ...overrides,
   });
 
@@ -178,7 +178,8 @@ describe('TaskAnalyzerService', () => {
       taskRepo.findOne.mockResolvedValue(task);
 
       brainProvider.executeWithTracking.mockResolvedValue({
-        result: JSON.stringify({
+        success: true,
+        output: JSON.stringify({
           adjustedScore: 70,
           recommendation: 'should_split',
           reasoning: 'AI detected hidden complexity in requirements',
@@ -285,7 +286,7 @@ describe('TaskAnalyzerService', () => {
       result.subtaskDefinitions.forEach((subtask, index) => {
         expect(subtask.title).toContain('Part');
         expect(subtask.acceptanceCriteria).toHaveLength(1);
-        expect(subtask.acceptanceCriteria[0]).toBe(task.acceptanceCriteria[index]);
+        expect(subtask.acceptanceCriteria![0]).toBe(task.acceptanceCriteria![index]);
       });
     });
 
@@ -313,7 +314,7 @@ describe('TaskAnalyzerService', () => {
 
       result.subtaskDefinitions.forEach((subtask) => {
         expect(subtask.affectedFiles).toBeDefined();
-        expect(subtask.affectedFiles.length).toBeGreaterThan(0);
+        expect(subtask.affectedFiles!.length).toBeGreaterThan(0);
       });
     });
 
@@ -349,7 +350,8 @@ describe('TaskAnalyzerService', () => {
       taskRepo.findOne.mockResolvedValue(task);
 
       brainProvider.executeWithTracking.mockResolvedValue({
-        result: JSON.stringify({
+        success: true,
+        output: JSON.stringify({
           subtasks: [
             {
               title: 'Setup JWT infrastructure',
@@ -511,7 +513,8 @@ describe('TaskAnalyzerService', () => {
       taskRepo.findOne.mockResolvedValue(task);
 
       brainProvider.executeWithTracking.mockResolvedValue({
-        result: 'invalid json',
+        success: true,
+        output: 'invalid json',
         cost: { inputTokens: 10, outputTokens: 10, totalCostCents: 0.01 },
         duration: 100,
       });

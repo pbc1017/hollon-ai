@@ -8,7 +8,6 @@ import { Organization } from '../../organization/entities/organization.entity';
 describe('CostTrackingService', () => {
   let service: CostTrackingService;
   let costRecordRepo: jest.Mocked<Repository<CostRecord>>;
-  let orgRepo: jest.Mocked<Repository<Organization>>;
 
   const mockCostRecord = (overrides: Partial<CostRecord> = {}): CostRecord =>
     ({
@@ -49,7 +48,6 @@ describe('CostTrackingService', () => {
 
     service = module.get<CostTrackingService>(CostTrackingService);
     costRecordRepo = module.get(getRepositoryToken(CostRecord));
-    orgRepo = module.get(getRepositoryToken(Organization));
   });
 
   afterEach(() => {

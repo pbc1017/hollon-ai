@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import {
   SubtaskCreationService,
   SubtaskDefinition,
@@ -9,7 +8,6 @@ import { Task, TaskStatus, TaskType, TaskPriority } from '../../task/entities/ta
 
 describe('SubtaskCreationService', () => {
   let service: SubtaskCreationService;
-  let taskRepo: Repository<Task>;
 
   const mockTaskRepo = {
     findOne: jest.fn(),
@@ -30,7 +28,6 @@ describe('SubtaskCreationService', () => {
     }).compile();
 
     service = module.get<SubtaskCreationService>(SubtaskCreationService);
-    taskRepo = module.get<Repository<Task>>(getRepositoryToken(Task));
   });
 
   afterEach(() => {

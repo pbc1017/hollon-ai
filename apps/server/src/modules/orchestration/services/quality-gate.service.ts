@@ -247,6 +247,7 @@ export class QualityGateService {
    * 2. Run test suite in working directory
    * 3. Parse test results
    */
+  // @ts-ignore - Reserved for future implementation
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private async _checkTestsPassing(
     _workingDirectory?: string,

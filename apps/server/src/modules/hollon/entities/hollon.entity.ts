@@ -39,7 +39,7 @@ export class Hollon extends BaseEntity {
   organizationId: string;
 
   @Column({ name: 'team_id', nullable: true })
-  teamId: string;
+  teamId: string | null;
 
   @Column({ name: 'role_id' })
   roleId: string;
