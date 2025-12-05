@@ -19,6 +19,7 @@ describe('SubtaskCreationService', () => {
     save: jest.fn(),
     update: jest.fn(),
     find: jest.fn(),
+    create: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -70,6 +71,7 @@ describe('SubtaskCreationService', () => {
     it('should create subtasks successfully', async () => {
       mockTaskRepo.findOne.mockResolvedValueOnce(mockParentTask); // Parent task lookup
       mockTaskRepo.findOne.mockResolvedValueOnce(mockParentTask); // Depth calculation
+      mockTaskRepo.create.mockImplementation((task) => task); // Mock create to return the task object
       mockTaskRepo.save.mockImplementation((task) =>
         Promise.resolve({ ...task, id: `subtask-${Math.random()}` }),
       );
@@ -155,6 +157,7 @@ describe('SubtaskCreationService', () => {
 
       mockTaskRepo.findOne.mockResolvedValueOnce(taskWith8Subtasks); // Parent lookup
       mockTaskRepo.findOne.mockResolvedValueOnce(taskWith8Subtasks); // Depth calc
+      mockTaskRepo.create.mockImplementation((task) => task);
       mockTaskRepo.save.mockImplementation((task) =>
         Promise.resolve({ ...task, id: `subtask-${Math.random()}` }),
       );
@@ -174,6 +177,7 @@ describe('SubtaskCreationService', () => {
     it('should handle partial failures when creating subtasks', async () => {
       mockTaskRepo.findOne.mockResolvedValueOnce(mockParentTask); // Parent lookup
       mockTaskRepo.findOne.mockResolvedValueOnce(mockParentTask); // Depth calc
+      mockTaskRepo.create.mockImplementation((task) => task);
       mockTaskRepo.save
         .mockResolvedValueOnce({ ...subtaskDefinitions[0], id: 'subtask-1' })
         .mockRejectedValueOnce(new Error('Database error'));
@@ -199,6 +203,7 @@ describe('SubtaskCreationService', () => {
       };
 
       mockTaskRepo.findOne.mockResolvedValue(deepTask);
+      mockTaskRepo.create.mockImplementation((task) => task);
       mockTaskRepo.save.mockImplementation((task) =>
         Promise.resolve({ ...task, id: `subtask-${Math.random()}` }),
       );
