@@ -3,17 +3,21 @@ import { DecisionLogService, DecisionType } from './decision-log.service';
 
 describe('DecisionLogService', () => {
   let service: DecisionLogService;
+  let module: TestingModule;
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [DecisionLogService],
     }).compile();
 
     service = module.get<DecisionLogService>(DecisionLogService);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     service.clearAll();
+    if (module) {
+      await module.close();
+    }
   });
 
   describe('recordDecision', () => {

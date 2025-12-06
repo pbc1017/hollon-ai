@@ -7,6 +7,7 @@ import { Document } from '../../document/entities/document.entity';
 
 describe('PromptComposerService', () => {
   let service: PromptComposerService;
+  let module: TestingModule;
 
   const mockHollonRepo = {
     findOne: jest.fn(),
@@ -21,7 +22,7 @@ describe('PromptComposerService', () => {
   };
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         PromptComposerService,
         {
@@ -42,8 +43,11 @@ describe('PromptComposerService', () => {
     service = module.get<PromptComposerService>(PromptComposerService);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     jest.clearAllMocks();
+    if (module) {
+      await module.close();
+    }
   });
 
   it('should be defined', () => {

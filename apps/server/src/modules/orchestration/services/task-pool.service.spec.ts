@@ -6,6 +6,7 @@ import { Hollon } from '../../hollon/entities/hollon.entity';
 
 describe('TaskPoolService', () => {
   let service: TaskPoolService;
+  let module: TestingModule;
 
   const mockTaskRepo = {
     find: jest.fn(),
@@ -21,7 +22,7 @@ describe('TaskPoolService', () => {
   };
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         TaskPoolService,
         {
@@ -38,8 +39,11 @@ describe('TaskPoolService', () => {
     service = module.get<TaskPoolService>(TaskPoolService);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     jest.clearAllMocks();
+    if (module) {
+      await module.close();
+    }
   });
 
   it('should be defined', () => {

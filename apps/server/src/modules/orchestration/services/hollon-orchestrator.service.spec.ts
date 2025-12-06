@@ -12,6 +12,7 @@ import { QualityGateService } from './quality-gate.service';
 
 describe('HollonOrchestratorService', () => {
   let service: HollonOrchestratorService;
+  let module: TestingModule;
 
   const mockHollonRepo = {
     findOne: jest.fn(),
@@ -46,7 +47,7 @@ describe('HollonOrchestratorService', () => {
   };
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         HollonOrchestratorService,
         {
@@ -83,8 +84,11 @@ describe('HollonOrchestratorService', () => {
     service = module.get<HollonOrchestratorService>(HollonOrchestratorService);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     jest.clearAllMocks();
+    if (module) {
+      await module.close();
+    }
   });
 
   it('should be defined', () => {

@@ -14,6 +14,7 @@ import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
 
 describe('EscalationService', () => {
   let service: EscalationService;
+  let module: TestingModule;
 
   const mockTaskRepo = {
     findOne: jest.fn(),
@@ -27,7 +28,7 @@ describe('EscalationService', () => {
   };
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         EscalationService,
         {
@@ -47,8 +48,11 @@ describe('EscalationService', () => {
     service.clearHistory();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     jest.clearAllMocks();
+    if (module) {
+      await module.close();
+    }
   });
 
   it('should be defined', () => {

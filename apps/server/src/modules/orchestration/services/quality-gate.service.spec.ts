@@ -5,13 +5,20 @@ import { BrainResponse } from '../../brain-provider/interfaces/brain-provider.in
 
 describe('QualityGateService', () => {
   let service: QualityGateService;
+  let module: TestingModule;
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [QualityGateService],
     }).compile();
 
     service = module.get<QualityGateService>(QualityGateService);
+  });
+
+  afterEach(async () => {
+    if (module) {
+      await module.close();
+    }
   });
 
   it('should be defined', () => {

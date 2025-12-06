@@ -13,6 +13,7 @@ import {
 
 describe('SubtaskCreationService', () => {
   let service: SubtaskCreationService;
+  let module: TestingModule;
 
   const mockTaskRepo = {
     findOne: jest.fn(),
@@ -23,7 +24,7 @@ describe('SubtaskCreationService', () => {
   };
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         SubtaskCreationService,
         {
@@ -36,8 +37,11 @@ describe('SubtaskCreationService', () => {
     service = module.get<SubtaskCreationService>(SubtaskCreationService);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     jest.clearAllMocks();
+    if (module) {
+      await module.close();
+    }
   });
 
   it('should be defined', () => {

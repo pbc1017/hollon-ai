@@ -12,6 +12,7 @@ import { BrainProviderService } from '../../brain-provider/brain-provider.servic
 
 describe('TaskAnalyzerService', () => {
   let service: TaskAnalyzerService;
+  let module: TestingModule;
   let taskRepo: jest.Mocked<Repository<Task>>;
   let brainProvider: jest.Mocked<BrainProviderService>;
 
@@ -47,7 +48,7 @@ describe('TaskAnalyzerService', () => {
   });
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         TaskAnalyzerService,
         {
@@ -70,8 +71,11 @@ describe('TaskAnalyzerService', () => {
     brainProvider = module.get(BrainProviderService);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     jest.clearAllMocks();
+    if (module) {
+      await module.close();
+    }
   });
 
   describe('analyzeComplexity', () => {

@@ -10,6 +10,7 @@ import { Organization } from '../../organization/entities/organization.entity';
 
 describe('CostTrackingService', () => {
   let service: CostTrackingService;
+  let module: TestingModule;
   let costRecordRepo: jest.Mocked<Repository<CostRecord>>;
 
   const mockCostRecord = (overrides: Partial<CostRecord> = {}): CostRecord =>
@@ -32,7 +33,7 @@ describe('CostTrackingService', () => {
     }) as CostRecord;
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         CostTrackingService,
         {
@@ -53,9 +54,12 @@ describe('CostTrackingService', () => {
     costRecordRepo = module.get(getRepositoryToken(CostRecord));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     service.clearBudgetLimits();
     jest.clearAllMocks();
+    if (module) {
+      await module.close();
+    }
   });
 
   describe('setBudgetLimits', () => {
