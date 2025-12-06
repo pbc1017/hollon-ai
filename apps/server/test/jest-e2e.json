@@ -1,0 +1,18 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "testRegex": ".e2e-spec.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/../src/$1"
+  },
+  "setupFilesAfterEnv": ["<rootDir>/setup/jest-integration-setup.ts"],
+  "testTimeout": 60000,
+  "coverageDirectory": "../coverage-e2e",
+  "maxWorkers": 1,
+  "forceExit": true,
+  "detectOpenHandles": true
+}

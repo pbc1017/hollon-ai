@@ -62,6 +62,7 @@
 ### 1.2 Core Tables
 
 #### organizations
+
 ```sql
 CREATE TABLE organizations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -91,6 +92,7 @@ CREATE TABLE organizations (
 ```
 
 #### brain_provider_configs
+
 ```sql
 CREATE TABLE brain_provider_configs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -138,6 +140,7 @@ CREATE INDEX idx_brain_configs_type ON brain_provider_configs(provider_type);
 ```
 
 #### roles
+
 ```sql
 CREATE TABLE roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -183,6 +186,7 @@ CREATE INDEX idx_roles_org ON roles(organization_id);
 ```
 
 #### teams
+
 ```sql
 CREATE TABLE teams (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -217,6 +221,7 @@ CREATE INDEX idx_teams_parent ON teams(parent_team_id);
 ```
 
 #### hollons
+
 ```sql
 CREATE TABLE hollons (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -272,6 +277,7 @@ CREATE INDEX idx_hierarchy_descendant ON holon_hierarchy(descendant_id);
 ```
 
 #### messages
+
 ```sql
 CREATE TABLE messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -307,6 +313,7 @@ CREATE INDEX idx_messages_created ON messages(created_at DESC);
 ```
 
 #### conversations
+
 ```sql
 CREATE TABLE conversations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -337,6 +344,7 @@ CREATE TABLE conversation_history (
 ### 1.3 Project & Task Tables
 
 #### projects
+
 ```sql
 CREATE TABLE projects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -367,6 +375,7 @@ CREATE INDEX idx_projects_team ON projects(team_id);
 ```
 
 #### milestones
+
 ```sql
 CREATE TABLE milestones (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -390,6 +399,7 @@ CREATE INDEX idx_milestones_project ON milestones(project_id);
 ```
 
 #### cycles
+
 ```sql
 CREATE TABLE cycles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -420,6 +430,7 @@ CREATE INDEX idx_cycles_status ON cycles(status);
 ```
 
 #### tasks
+
 ```sql
 CREATE TABLE tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -522,6 +533,7 @@ CREATE INDEX idx_task_comments_task ON task_comments(task_id);
 ```
 
 #### task_pull_requests (Task-PR 연결)
+
 ```sql
 CREATE TABLE task_pull_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -560,6 +572,7 @@ CREATE INDEX idx_task_prs_reviewer ON task_pull_requests(reviewer_holon_id);
 ```
 
 #### tech_debts (기술 부채)
+
 ```sql
 CREATE TABLE tech_debts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -633,6 +646,7 @@ $$ LANGUAGE plpgsql;
 ### 1.4 Metrics & Cost Tables
 
 #### metric_definitions
+
 ```sql
 CREATE TABLE metric_definitions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -671,6 +685,7 @@ CREATE INDEX idx_metric_definitions_org ON metric_definitions(organization_id);
 ```
 
 #### metric_records
+
 ```sql
 CREATE TABLE metric_records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -707,6 +722,7 @@ CREATE INDEX idx_metric_records_recorded ON metric_records(recorded_at DESC);
 ```
 
 #### cost_records
+
 ```sql
 CREATE TABLE cost_records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -742,6 +758,7 @@ CREATE INDEX idx_cost_records_type ON cost_records(cost_type);
 ```
 
 #### holon_performance_summary
+
 ```sql
 CREATE TABLE holon_performance_summary (
     holon_id UUID PRIMARY KEY REFERENCES hollons(id) ON DELETE CASCADE,
@@ -779,6 +796,7 @@ CREATE TABLE holon_performance_summary (
 ### 1.5 Channel & Document Tables
 
 #### channels
+
 ```sql
 CREATE TABLE channels (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -835,6 +853,7 @@ CREATE INDEX idx_channel_messages_created ON channel_messages(created_at DESC);
 ```
 
 #### documents (Memory 시스템 통합)
+
 ```sql
 CREATE TABLE documents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -926,6 +945,7 @@ CREATE INDEX idx_document_versions_doc ON document_versions(document_id);
 ```
 
 #### document_embeddings (Vector RAG)
+
 ```sql
 -- 문서 임베딩 (Vector RAG용)
 -- pgvector extension 필요: CREATE EXTENSION IF NOT EXISTS vector;
@@ -949,6 +969,7 @@ CREATE INDEX idx_document_embeddings_vector ON document_embeddings
 ```
 
 #### document_relationships (Graph RAG)
+
 ```sql
 -- 문서 관계 그래프 (Graph RAG용)
 CREATE TABLE document_relationships (
@@ -989,6 +1010,7 @@ CREATE INDEX idx_doc_rel_type ON document_relationships(relationship_type);
 ### 1.6 Governance Tables
 
 #### approval_requests
+
 ```sql
 CREATE TABLE approval_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1028,6 +1050,7 @@ CREATE INDEX idx_approval_holon ON approval_requests(holon_id);
 ```
 
 #### action_policies
+
 ```sql
 CREATE TABLE action_policies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1178,7 +1201,7 @@ interface BrainProviderMeta {
 interface Organization {
   id: string;
   name: string;
-  contextPrompt?: string;  // Layer 1 프롬프트
+  contextPrompt?: string; // Layer 1 프롬프트
   maxConcurrentHolons: number;
   maxTotalHolons: number;
   costLimitDailyCents?: number;
@@ -1225,7 +1248,7 @@ interface Hollon {
   parentId: string | null;
   lifecycle: 'permanent' | 'temporary';
   status: 'idle' | 'running' | 'waiting' | 'terminated' | 'error';
-  customPrompt?: string;  // Layer 4 프롬프트
+  customPrompt?: string; // Layer 4 프롬프트
   customCapabilities?: string[];
   customAllowedPaths?: string[];
   brainProviderConfigId?: string;
@@ -1243,7 +1266,7 @@ interface Team {
   organizationId: string;
   name: string;
   description?: string;
-  contextPrompt?: string;  // Layer 2 프롬프트
+  contextPrompt?: string; // Layer 2 프롬프트
   parentTeamId?: string;
   leaderHolonId?: string;
   createdAt: Date;
@@ -1281,7 +1304,13 @@ interface Task {
   description?: string;
   assignedHolonId?: string;
   creatorHolonId?: string;
-  status: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled';
+  status:
+    | 'backlog'
+    | 'todo'
+    | 'in_progress'
+    | 'in_review'
+    | 'done'
+    | 'cancelled';
   priority: 'none' | 'low' | 'medium' | 'high' | 'urgent';
   estimatePoints?: number;
   dueDate?: Date;
@@ -1319,7 +1348,7 @@ interface Document {
   scope: DocumentScope;
   scopeId?: string;
   keywords: string[];
-  importance: number;  // 1-10
+  importance: number; // 1-10
   autoGenerated: boolean;
   sourceTaskId?: string;
   sourceHollonId?: string;
@@ -1432,7 +1461,12 @@ interface APIBrainConfig {
 
 ```typescript
 type WSEvent =
-  | { type: 'holon_status_changed'; holonId: string; oldStatus: string; newStatus: string }
+  | {
+      type: 'holon_status_changed';
+      holonId: string;
+      oldStatus: string;
+      newStatus: string;
+    }
   | { type: 'holon_created'; holon: Hollon }
   | { type: 'holon_deleted'; holonId: string }
   | { type: 'message_received'; message: Message }
@@ -1524,7 +1558,7 @@ const BRAIN_PROVIDERS: Record<BrainProviderType, BrainProviderMeta> = {
     },
     pricing: {
       inputPer1kTokens: 0.075,
-      outputPer1kTokens: 0.30,
+      outputPer1kTokens: 0.3,
     },
   },
   'openai-api': {
@@ -1573,19 +1607,19 @@ class ClaudeCodeBrainProvider implements IBrainProvider {
 
     const fullPrompt = this.buildPrompt(systemPrompt, messages);
 
-    this.process = spawn(this.config.command, [
-      ...this.config.args!,
-      '--print',
-      '-p', fullPrompt,
-    ], {
-      cwd: workingDirectory,
-      env: {
-        ...process.env,
-        ...this.config.env,
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    this.process = spawn(
+      this.config.command,
+      [...this.config.args!, '--print', '-p', fullPrompt],
+      {
+        cwd: workingDirectory,
+        env: {
+          ...process.env,
+          ...this.config.env,
+          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+        },
+        timeout: timeout || 300000,
       },
-      timeout: timeout || 300000,
-    });
+    );
 
     const output = await this.collectOutput();
 
@@ -1597,12 +1631,17 @@ class ClaudeCodeBrainProvider implements IBrainProvider {
   }
 
   async *executeStream(options: BrainExecuteOptions): AsyncIterable<string> {
-    const proc = spawn(this.config.command, [
-      ...this.config.args!,
-      '-p', this.buildPrompt(options.systemPrompt, options.messages),
-    ], {
-      cwd: options.workingDirectory,
-    });
+    const proc = spawn(
+      this.config.command,
+      [
+        ...this.config.args!,
+        '-p',
+        this.buildPrompt(options.systemPrompt, options.messages),
+      ],
+      {
+        cwd: options.workingDirectory,
+      },
+    );
 
     for await (const chunk of proc.stdout!) {
       yield chunk.toString();
@@ -1624,8 +1663,12 @@ class ClaudeCodeBrainProvider implements IBrainProvider {
   private async collectOutput(): Promise<string> {
     return new Promise((resolve, reject) => {
       let output = '';
-      this.process!.stdout?.on('data', (data) => { output += data.toString(); });
-      this.process!.stderr?.on('data', (data) => { output += data.toString(); });
+      this.process!.stdout?.on('data', (data) => {
+        output += data.toString();
+      });
+      this.process!.stderr?.on('data', (data) => {
+        output += data.toString();
+      });
       this.process!.on('close', () => resolve(output));
       this.process!.on('error', reject);
     });
@@ -1674,20 +1717,20 @@ class ClaudeAPIBrainProvider implements IBrainProvider {
       model: this.config.model,
       max_tokens: this.config.maxTokens || 4096,
       system: options.systemPrompt,
-      messages: options.messages.map(m => ({
+      messages: options.messages.map((m) => ({
         role: m.role === 'user' ? 'user' : 'assistant',
         content: m.content,
       })),
     });
 
     const content = response.content
-      .filter(c => c.type === 'text')
-      .map(c => (c as { type: 'text'; text: string }).text)
+      .filter((c) => c.type === 'text')
+      .map((c) => (c as { type: 'text'; text: string }).text)
       .join('');
 
     const costCents = this.calculateCost(
       response.usage.input_tokens,
-      response.usage.output_tokens
+      response.usage.output_tokens,
     );
 
     return {
@@ -1709,7 +1752,7 @@ class ClaudeAPIBrainProvider implements IBrainProvider {
       model: this.config.model,
       max_tokens: this.config.maxTokens || 4096,
       system: options.systemPrompt,
-      messages: options.messages.map(m => ({
+      messages: options.messages.map((m) => ({
         role: m.role === 'user' ? 'user' : 'assistant',
         content: m.content,
       })),
@@ -1748,7 +1791,10 @@ class ClaudeAPIBrainProvider implements IBrainProvider {
 
 ```typescript
 class BrainProviderFactory {
-  private static providers = new Map<BrainProviderType, new () => IBrainProvider>([
+  private static providers = new Map<
+    BrainProviderType,
+    new () => IBrainProvider
+  >([
     ['claude-code', ClaudeCodeBrainProvider],
     ['claude-api', ClaudeAPIBrainProvider],
     // ['gemini-cli', GeminiCLIBrainProvider],
@@ -1759,7 +1805,7 @@ class BrainProviderFactory {
 
   static async create(
     type: BrainProviderType,
-    config: BrainProviderConfig
+    config: BrainProviderConfig,
   ): Promise<IBrainProvider> {
     const ProviderClass = this.providers.get(type);
     if (!ProviderClass) {
@@ -1771,12 +1817,17 @@ class BrainProviderFactory {
     return provider;
   }
 
-  static register(type: BrainProviderType, provider: new () => IBrainProvider): void {
+  static register(
+    type: BrainProviderType,
+    provider: new () => IBrainProvider,
+  ): void {
     this.providers.set(type, provider);
   }
 
   static getAvailableProviders(): BrainProviderMeta[] {
-    return Array.from(this.providers.keys()).map(type => BRAIN_PROVIDERS[type]);
+    return Array.from(this.providers.keys()).map(
+      (type) => BRAIN_PROVIDERS[type],
+    );
   }
 }
 ```
@@ -1787,7 +1838,7 @@ class BrainProviderFactory {
 async function getEffectiveBrainProvider(
   hollon: Hollon,
   role: Role,
-  organization: Organization
+  organization: Organization,
 ): Promise<IBrainProvider> {
   // 우선순위: Hollon > Role > Organization 기본값
   const configId =
@@ -1813,15 +1864,12 @@ async function getEffectiveBrainProvider(
     throw new Error(`Brain provider config not found: ${configId}`);
   }
 
-  return BrainProviderFactory.create(
-    config.providerType as BrainProviderType,
-    {
-      ...config.config,
-      apiKey: config.encryptedCredentials
-        ? await decryptCredentials(config.encryptedCredentials)
-        : undefined,
-    }
-  );
+  return BrainProviderFactory.create(config.providerType as BrainProviderType, {
+    ...config.config,
+    apiKey: config.encryptedCredentials
+      ? await decryptCredentials(config.encryptedCredentials)
+      : undefined,
+  });
 }
 ```
 
@@ -1849,14 +1897,17 @@ async function getEffectiveBrainProvider(
 async function sendMessage(req: Request): Promise<Response> {
   const { fromHolonId, toHolonId, content, messageType } = req.body;
 
-  const message = await db.insert(messages).values({
-    fromType: 'holon',
-    fromId: fromHolonId,
-    toType: 'holon',
-    toId: toHolonId,
-    content,
-    messageType,
-  }).returning();
+  const message = await db
+    .insert(messages)
+    .values({
+      fromType: 'holon',
+      fromId: fromHolonId,
+      toType: 'holon',
+      toId: toHolonId,
+      content,
+      messageType,
+    })
+    .returning();
 
   // NOTIFY 트리거가 자동으로 수신자에게 알림
   return Response.json(message[0]);
@@ -1919,27 +1970,32 @@ async function listenForMessages(holonId: string) {
 # 홀론 역할 정의
 
 ## 당신의 정체성
+
 - 홀론 ID: {holonId}
 - 이름: {name}
 - 조직: {organizationName}
 - 상위 홀론: {parentName || 'None (루트)'}
 
 ## 역할
+
 {systemPrompt}
 
 {customPromptSuffix}
 
 ## 권한
+
 - 접근 가능 경로: {allowedPaths}
 - 서브 홀론 생성: {canCreateSubHolons}
 - 사용자 직접 대화: {canTalkToUser}
 
 ## 통신 규칙
+
 1. 상위 홀론에게 진행 상황 보고
 2. 서브 홀론 생성 시 승인 요청
 3. 태스크 완료 시 결과 보고
 
 ## API 엔드포인트
+
 - 메시지 발송: POST {apiBaseUrl}/messages
 - 메시지 수신: GET {apiBaseUrl}/messages/inbox
 - 상태 업데이트: PATCH {apiBaseUrl}/holons/{holonId}/status
@@ -2093,16 +2149,14 @@ export class PromptComposerService {
     taskId?: string,
   ): Promise<Document[]> {
     // 태스크에서 키워드 추출
-    const keywords = taskId
-      ? await this.extractTaskKeywords(taskId)
-      : [];
+    const keywords = taskId ? await this.extractTaskKeywords(taskId) : [];
 
     // 스코프 우선순위: hollon → team → project → organization
     const scopeConditions = [
       { scope: 'hollon', scopeId: hollon.id },
       { scope: 'team', scopeId: hollon.teamId },
       { scope: 'organization', scopeId: hollon.organizationId },
-    ].filter(s => s.scopeId);
+    ].filter((s) => s.scopeId);
 
     const documents = await this.documentRepo
       .createQueryBuilder('doc')
@@ -2110,7 +2164,7 @@ export class PromptComposerService {
       .andWhere('doc.doc_type != :folder', { folder: 'folder' })
       .andWhere('(doc.expires_at IS NULL OR doc.expires_at > NOW())')
       .andWhere(
-        new Brackets(qb => {
+        new Brackets((qb) => {
           scopeConditions.forEach((cond, idx) => {
             if (idx === 0) {
               qb.where('(doc.scope = :scope0 AND doc.scope_id = :scopeId0)', {
@@ -2118,10 +2172,13 @@ export class PromptComposerService {
                 scopeId0: cond.scopeId,
               });
             } else {
-              qb.orWhere(`(doc.scope = :scope${idx} AND doc.scope_id = :scopeId${idx})`, {
-                [`scope${idx}`]: cond.scope,
-                [`scopeId${idx}`]: cond.scopeId,
-              });
+              qb.orWhere(
+                `(doc.scope = :scope${idx} AND doc.scope_id = :scopeId${idx})`,
+                {
+                  [`scope${idx}`]: cond.scope,
+                  [`scopeId${idx}`]: cond.scopeId,
+                },
+              );
             }
           });
         }),
@@ -2134,7 +2191,7 @@ export class PromptComposerService {
     // 접근 횟수 업데이트
     if (documents.length > 0) {
       await this.documentRepo.update(
-        documents.map(d => d.id),
+        documents.map((d) => d.id),
         {
           accessCount: () => 'access_count + 1',
           lastAccessedAt: new Date(),
@@ -2147,12 +2204,12 @@ export class PromptComposerService {
 
   private formatMemories(documents: Document[]): string {
     return documents
-      .map(doc => `## ${doc.name}\n${doc.summary || doc.content}`)
+      .map((doc) => `## ${doc.name}\n${doc.summary || doc.content}`)
       .join('\n\n---\n\n');
   }
 
   private mergeLayers(layers: PromptLayer[]): string {
-    return layers.map(l => l.content).join('\n\n');
+    return layers.map((l) => l.content).join('\n\n');
   }
 }
 
@@ -2278,9 +2335,12 @@ export class TaskPoolService {
         startedAt: new Date(),
       })
       .where('id = :id', { id: task.id })
-      .andWhere('(assigned_holon_id IS NULL OR assigned_holon_id = :hollonId)', {
-        hollonId,
-      })
+      .andWhere(
+        '(assigned_holon_id IS NULL OR assigned_holon_id = :hollonId)',
+        {
+          hollonId,
+        },
+      )
       .execute();
 
     if (result.affected === 0) {
@@ -2327,12 +2387,12 @@ export class TaskPoolService {
       .createQueryBuilder('task')
       .select('UNNEST(task.affected_files)', 'file')
       .where('task.assigned_holon_id = :hollonId', { hollonId })
-      .andWhere('task.completed_at > NOW() - INTERVAL \'1 day\'')
+      .andWhere("task.completed_at > NOW() - INTERVAL '1 day'")
       .getRawMany();
 
     if (recentFiles.length === 0) return null;
 
-    const files = recentFiles.map(r => r.file);
+    const files = recentFiles.map((r) => r.file);
 
     // 같은 파일을 수정하는 대기 중인 태스크
     return this.taskRepo
@@ -2350,7 +2410,7 @@ export class TaskPoolService {
    */
   private buildPriorityOrder(): { [key: string]: 'ASC' | 'DESC' } {
     return {
-      'CASE task.priority WHEN \'urgent\' THEN 1 WHEN \'high\' THEN 2 WHEN \'medium\' THEN 3 WHEN \'low\' THEN 4 ELSE 5 END':
+      "CASE task.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END":
         'ASC',
       'task.due_date': 'ASC',
       'task.created_at': 'ASC',
@@ -2484,7 +2544,11 @@ export class HollonOrchestratorService {
       } else if (result.status === 'needs_subtasks') {
         await this.handleSubtaskCreation(hollon, task, result);
       } else if (result.status === 'needs_escalation') {
-        await this.escalationService.escalate(hollon, task, result.escalationReason);
+        await this.escalationService.escalate(
+          hollon,
+          task,
+          result.escalationReason,
+        );
       } else if (result.status === 'failed') {
         await this.handleTaskFailure(hollon, task, result);
       }
@@ -2496,7 +2560,10 @@ export class HollonOrchestratorService {
   /**
    * 단일 태스크 실행
    */
-  private async executeTask(hollon: Hollon, task: Task): Promise<TaskExecutionResult> {
+  private async executeTask(
+    hollon: Hollon,
+    task: Task,
+  ): Promise<TaskExecutionResult> {
     // 1. 복잡도 분석 (서브태스크 분할 필요 여부)
     const analysis = await this.taskAnalyzer.analyze(task, hollon);
 
@@ -2508,16 +2575,17 @@ export class HollonOrchestratorService {
     }
 
     // 2. 프롬프트 합성 (6계층)
-    const composedPrompt = await this.promptComposer.composePrompt(hollon.id, task.id);
+    const composedPrompt = await this.promptComposer.composePrompt(
+      hollon.id,
+      task.id,
+    );
 
     // 3. Brain Provider 획득 및 실행
     const brain = await this.brainFactory.getProviderForHollon(hollon);
 
     const response = await brain.execute({
       systemPrompt: composedPrompt.systemPrompt,
-      messages: [
-        { role: 'user', content: this.buildTaskPrompt(task) },
-      ],
+      messages: [{ role: 'user', content: this.buildTaskPrompt(task) }],
       workingDirectory: hollon.role?.allowedPaths?.[0],
       timeout: this.calculateTimeout(analysis.estimatedComplexity),
     });
@@ -2688,7 +2756,7 @@ interface TaskExecutionResult {
 
 태스크 복잡도 분석 및 분할 결정:
 
-```typescript
+````typescript
 @Injectable()
 export class TaskAnalyzerService {
   constructor(
@@ -2746,7 +2814,13 @@ export class TaskAnalyzerService {
     if (hasSubtasks) score += 1;
 
     // 키워드 기반 복잡도
-    const complexKeywords = ['refactor', 'migrate', 'architecture', 'integration', 'security'];
+    const complexKeywords = [
+      'refactor',
+      'migrate',
+      'architecture',
+      'integration',
+      'security',
+    ];
     const titleLower = task.title.toLowerCase();
     const descLower = (task.description || '').toLowerCase();
 
@@ -2791,19 +2865,25 @@ JSON 형식으로 응답해주세요.
 `.trim();
   }
 
-  private parseAnalysisResponse(content: string, fallbackScore: number): TaskAnalysis {
+  private parseAnalysisResponse(
+    content: string,
+    fallbackScore: number,
+  ): TaskAnalysis {
     try {
       // JSON 블록 추출
-      const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) ||
-                        content.match(/\{[\s\S]*\}/);
+      const jsonMatch =
+        content.match(/```json\n?([\s\S]*?)\n?```/) ||
+        content.match(/\{[\s\S]*\}/);
 
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[1] || jsonMatch[0]);
         return {
           shouldSplit: parsed.shouldSplit || parsed.splitRequired || false,
-          estimatedComplexity: parsed.complexity || parsed.estimatedComplexity || fallbackScore,
+          estimatedComplexity:
+            parsed.complexity || parsed.estimatedComplexity || fallbackScore,
           estimatedTokens: parsed.estimatedTokens || 2000,
-          estimatedMinutes: parsed.estimatedMinutes || parsed.estimatedTime || 15,
+          estimatedMinutes:
+            parsed.estimatedMinutes || parsed.estimatedTime || 15,
           requiredDomains: parsed.requiredDomains || parsed.domains || [],
           suggestedSubtasks: parsed.subtasks || parsed.suggestedSubtasks || [],
         };
@@ -2918,7 +2998,7 @@ export class SubtaskCreationService {
     return createdTasks;
   }
 }
-```
+````
 
 ### 8.3 에스컬레이션 서비스 (SSOT 8.3 구현)
 
@@ -2980,7 +3060,11 @@ export class EscalationService {
     return {
       handled: false,
       level: EscalationLevel.HUMAN,
-      pendingApprovalId: await this.createHumanApprovalRequest(hollon, task, reason),
+      pendingApprovalId: await this.createHumanApprovalRequest(
+        hollon,
+        task,
+        reason,
+      ),
     };
   }
 
@@ -3220,7 +3304,11 @@ ${reason}
     task: Task,
     reason: string,
   ): Promise<EscalationResult> {
-    const approvalId = await this.createHumanApprovalRequest(hollon, task, reason);
+    const approvalId = await this.createHumanApprovalRequest(
+      hollon,
+      task,
+      reason,
+    );
 
     return {
       handled: true, // 요청은 생성됨
@@ -3264,7 +3352,10 @@ ${reason}
     return candidates[0] || null;
   }
 
-  private async getRetryCount(hollonId: string, taskId: string): Promise<number> {
+  private async getRetryCount(
+    hollonId: string,
+    taskId: string,
+  ): Promise<number> {
     // 태스크 로그에서 재시도 횟수 조회
     // 실제 구현 시 task_logs 테이블 활용
     return 0;
@@ -3295,7 +3386,7 @@ interface EscalationResult {
 
 자율 운영의 품질 검증:
 
-```typescript
+````typescript
 @Injectable()
 export class QualityGateService {
   constructor(
@@ -3308,7 +3399,10 @@ export class QualityGateService {
   /**
    * 태스크 완료 품질 검증
    */
-  async validate(task: Task, response: BrainResponse): Promise<ValidationResult> {
+  async validate(
+    task: Task,
+    response: BrainResponse,
+  ): Promise<ValidationResult> {
     const gates: GateCheck[] = [
       this.checkOutputExists(response),
       this.checkOutputFormat(task, response),
@@ -3317,22 +3411,22 @@ export class QualityGateService {
       await this.checkDependencies(task),
     ];
 
-    const failedGates = gates.filter(g => !g.passed);
+    const failedGates = gates.filter((g) => !g.passed);
 
     if (failedGates.length === 0) {
       return { passed: true };
     }
 
     // 실패한 게이트 분석
-    const canRetry = failedGates.some(g => g.canRetry);
-    const reasons = failedGates.map(g => g.reason).join('; ');
+    const canRetry = failedGates.some((g) => g.canRetry);
+    const reasons = failedGates.map((g) => g.reason).join('; ');
 
     return {
       passed: false,
       canRetry,
       reason: reasons,
       feedback: this.generateFeedback(failedGates),
-      failedGates: failedGates.map(g => g.name),
+      failedGates: failedGates.map((g) => g.name),
     };
   }
 
@@ -3391,7 +3485,10 @@ export class QualityGateService {
   /**
    * Gate 3: 비용 예산 검증
    */
-  private async checkCostBudget(task: Task, response: BrainResponse): Promise<GateCheck> {
+  private async checkCostBudget(
+    task: Task,
+    response: BrainResponse,
+  ): Promise<GateCheck> {
     if (!response.costCents) {
       return { name: 'cost_budget', passed: true, canRetry: false, reason: '' };
     }
@@ -3402,7 +3499,8 @@ export class QualityGateService {
       relations: ['project', 'project.team', 'project.team.organization'],
     });
 
-    const dailyLimit = project?.project?.team?.organization?.costLimitDailyCents;
+    const dailyLimit =
+      project?.project?.team?.organization?.costLimitDailyCents;
     if (!dailyLimit) {
       return { name: 'cost_budget', passed: true, canRetry: false, reason: '' };
     }
@@ -3444,7 +3542,8 @@ export class QualityGateService {
     }
 
     // 기한 임박 경고 (24시간 이내)
-    const hoursRemaining = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+    const hoursRemaining =
+      (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
     if (hoursRemaining < 24) {
       // 경고만, 실패 아님
       return {
@@ -3468,7 +3567,9 @@ export class QualityGateService {
       .innerJoin('task_dependencies', 'td', 'td.depends_on_task_id = t.id')
       .where('td.task_id = :taskId', { taskId: task.id })
       .andWhere('td.dependency_type = :type', { type: 'blocks' })
-      .andWhere('t.status NOT IN (:...doneStatuses)', { doneStatuses: ['done', 'cancelled'] })
+      .andWhere('t.status NOT IN (:...doneStatuses)', {
+        doneStatuses: ['done', 'cancelled'],
+      })
       .getMany();
 
     if (blockers.length > 0) {
@@ -3476,7 +3577,7 @@ export class QualityGateService {
         name: 'dependencies',
         passed: false,
         canRetry: false,
-        reason: `블로킹 태스크 미완료: ${blockers.map(b => `#${b.number}`).join(', ')}`,
+        reason: `블로킹 태스크 미완료: ${blockers.map((b) => `#${b.number}`).join(', ')}`,
       };
     }
 
@@ -3487,7 +3588,7 @@ export class QualityGateService {
    * 실패 피드백 생성
    */
   private generateFeedback(failedGates: GateCheck[]): string {
-    const feedbackParts = failedGates.map(gate => {
+    const feedbackParts = failedGates.map((gate) => {
       switch (gate.name) {
         case 'output_exists':
           return '결과물을 생성해주세요.';
@@ -3508,15 +3609,34 @@ export class QualityGateService {
   }
 
   private isCodeRelatedTask(task: Task): boolean {
-    const codeKeywords = ['구현', 'implement', '개발', 'develop', '코드', 'code', 'fix', '수정', 'refactor'];
+    const codeKeywords = [
+      '구현',
+      'implement',
+      '개발',
+      'develop',
+      '코드',
+      'code',
+      'fix',
+      '수정',
+      'refactor',
+    ];
     const text = `${task.title} ${task.description || ''}`.toLowerCase();
-    return codeKeywords.some(k => text.includes(k));
+    return codeKeywords.some((k) => text.includes(k));
   }
 
   private isAnalysisTask(task: Task): boolean {
-    const analysisKeywords = ['분석', 'analysis', '조사', 'research', '검토', 'review', '설계', 'design'];
+    const analysisKeywords = [
+      '분석',
+      'analysis',
+      '조사',
+      'research',
+      '검토',
+      'review',
+      '설계',
+      'design',
+    ];
     const text = `${task.title} ${task.description || ''}`.toLowerCase();
-    return analysisKeywords.some(k => text.includes(k));
+    return analysisKeywords.some((k) => text.includes(k));
   }
 }
 
@@ -3535,7 +3655,7 @@ interface ValidationResult {
   feedback?: string;
   failedGates?: string[];
 }
-```
+````
 
 ---
 
@@ -3705,7 +3825,7 @@ export class Hollon {
   @JoinColumn({ name: 'parent_id' })
   parent?: Hollon;
 
-  @OneToMany(() => Hollon, hollon => hollon.parent)
+  @OneToMany(() => Hollon, (hollon) => hollon.parent)
   children: Hollon[];
 
   @Column({
@@ -3913,6 +4033,7 @@ Week 5-6: 품질 및 안전장치
 ```
 
 **MVP 완료 기준**:
+
 - 단일 홀론이 태스크를 Pull하여 Brain Provider로 실행
 - 결과물 품질 검증 및 실패 시 재시도/에스컬레이션
 - 비용 한도 초과 시 작업 중단
@@ -3945,6 +4066,7 @@ Week 11-12: 협업 패턴
 ```
 
 **Phase 2 완료 기준**:
+
 - 3+ 홀론이 동시에 프로젝트 진행
 - 일일 스탠드업 리포트 자동 생성
 - 팀 간 의존성 요청 및 계약 체결
@@ -3973,6 +4095,7 @@ Week 17-18: 동적 우선순위 및 전략 변경 대응
 ```
 
 **Phase 3 완료 기준**:
+
 - 목표 입력 → 프로젝트/마일스톤/태스크 자동 생성
 - 피벗 선언 시 영향 분석 자동화
 
@@ -4027,13 +4150,13 @@ Week 29-30: 외부 연동
 
 ### 로드맵 요약
 
-| Phase | 기간 | 핵심 결과물 |
-|-------|------|------------|
-| **Phase 1** | 6주 | 자율 실행 엔진 |
-| **Phase 2** | 6주 | 협업 시스템 |
-| **Phase 3** | 6주 | 전략-실행 연결 |
-| **Phase 4** | 6주 | 학습 및 성장 |
-| **Phase 5** | 6주 | UI 및 외부 연동 |
+| Phase       | 기간 | 핵심 결과물     |
+| ----------- | ---- | --------------- |
+| **Phase 1** | 6주  | 자율 실행 엔진  |
+| **Phase 2** | 6주  | 협업 시스템     |
+| **Phase 3** | 6주  | 전략-실행 연결  |
+| **Phase 4** | 6주  | 학습 및 성장    |
+| **Phase 5** | 6주  | UI 및 외부 연동 |
 
 **총 예상 기간**: 30주 (약 7-8개월)
 
@@ -4114,7 +4237,10 @@ export class FactCheckService {
 ```typescript
 @Injectable()
 export class ConsistencyEnforcer {
-  async enforce(result: TaskResult, projectId: string): Promise<EnforcementResult> {
+  async enforce(
+    result: TaskResult,
+    projectId: string,
+  ): Promise<EnforcementResult> {
     const styleGuide = await this.getStyleGuide(projectId);
     const violations = await this.detectViolations(result, styleGuide);
 
@@ -4147,7 +4273,7 @@ export class StandupService {
     for (const team of teams) {
       const hollons = await this.getTeamHollons(team.id);
       const responses = await Promise.all(
-        hollons.map(h => this.collectStatus(h))
+        hollons.map((h) => this.collectStatus(h)),
       );
 
       const summary = await this.generateSummary(team, responses);
@@ -4173,7 +4299,8 @@ export class IncidentResponseService {
     const severity = this.classifySeverity(incident);
 
     // 2. 자동 대응
-    if (severity <= 2) { // P1, P2
+    if (severity <= 2) {
+      // P1, P2
       await this.pauseNonEssentialTasks();
       await this.notifyHumans(incident);
     }
@@ -4213,9 +4340,9 @@ export class PivotResponseService {
       affectedProjects,
       estimatedLoss,
       assets: {
-        reusable: assets.filter(a => a.classification === 'reusable'),
-        archive: assets.filter(a => a.classification === 'archive'),
-        discard: assets.filter(a => a.classification === 'discard'),
+        reusable: assets.filter((a) => a.classification === 'reusable'),
+        archive: assets.filter((a) => a.classification === 'archive'),
+        discard: assets.filter((a) => a.classification === 'discard'),
       },
       newTaskProposal: await this.proposeNewTasks(pivot.newGoalId),
     };
@@ -4344,7 +4471,10 @@ export class CodeReviewService {
       relatedTaskId: pr.taskId,
     });
 
-    this.eventEmitter.emit('pr.review_requested', { prId, reviewerId: reviewer.hollonId });
+    this.eventEmitter.emit('pr.review_requested', {
+      prId,
+      reviewerId: reviewer.hollonId,
+    });
 
     return pr;
   }
@@ -4352,7 +4482,9 @@ export class CodeReviewService {
   /**
    * 리뷰어 선택 로직
    */
-  private async selectReviewer(pr: TaskPullRequest): Promise<ReviewerSelection> {
+  private async selectReviewer(
+    pr: TaskPullRequest,
+  ): Promise<ReviewerSelection> {
     const authorTeamId = pr.authorHollon?.teamId;
 
     // 1. PR 유형에 따른 전문 리뷰어 필요 여부 판단
@@ -4479,7 +4611,10 @@ ${comments}
         relatedTaskId: pr.taskId,
       });
 
-      this.eventEmitter.emit('pr.changes_requested', { prId, reviewerHollonId });
+      this.eventEmitter.emit('pr.changes_requested', {
+        prId,
+        reviewerHollonId,
+      });
     }
 
     return this.prRepo.save(pr);
@@ -4559,63 +4694,71 @@ export class TechDebtService {
 
     // 1. TODO/FIXME 패턴 감지
     for (const todo of codeAnalysis.todos) {
-      debts.push(await this.createDebt({
-        title: `TODO: ${todo.content.substring(0, 100)}`,
-        description: todo.content,
-        debtType: 'code',
-        sourceTaskId: taskId,
-        sourceHollonId: hollonId,
-        sourceFile: todo.file,
-        sourceLine: todo.line,
-        estimatedFixHours: 1,
-        interestRate: 0.01,
-      }));
+      debts.push(
+        await this.createDebt({
+          title: `TODO: ${todo.content.substring(0, 100)}`,
+          description: todo.content,
+          debtType: 'code',
+          sourceTaskId: taskId,
+          sourceHollonId: hollonId,
+          sourceFile: todo.file,
+          sourceLine: todo.line,
+          estimatedFixHours: 1,
+          interestRate: 0.01,
+        }),
+      );
     }
 
     // 2. 복잡도 초과 감지
     for (const complex of codeAnalysis.complexFunctions) {
       if (complex.complexity > 15) {
-        debts.push(await this.createDebt({
-          title: `High complexity: ${complex.functionName}`,
-          description: `Cyclomatic complexity ${complex.complexity} exceeds threshold 15`,
-          debtType: 'code',
-          sourceTaskId: taskId,
-          sourceHollonId: hollonId,
-          sourceFile: complex.file,
-          estimatedFixHours: complex.complexity / 5,
-          interestRate: 0.02,
-          affectedFiles: [complex.file],
-        }));
+        debts.push(
+          await this.createDebt({
+            title: `High complexity: ${complex.functionName}`,
+            description: `Cyclomatic complexity ${complex.complexity} exceeds threshold 15`,
+            debtType: 'code',
+            sourceTaskId: taskId,
+            sourceHollonId: hollonId,
+            sourceFile: complex.file,
+            estimatedFixHours: complex.complexity / 5,
+            interestRate: 0.02,
+            affectedFiles: [complex.file],
+          }),
+        );
       }
     }
 
     // 3. 테스트 커버리지 미달 감지
     if (codeAnalysis.testCoverage < 80) {
-      debts.push(await this.createDebt({
-        title: `Test coverage below 80%: ${codeAnalysis.testCoverage}%`,
-        description: `Test coverage is ${codeAnalysis.testCoverage}%, should be at least 80%`,
-        debtType: 'test',
-        sourceTaskId: taskId,
-        sourceHollonId: hollonId,
-        estimatedFixHours: (80 - codeAnalysis.testCoverage) / 10,
-        interestRate: 0.03,
-        affectedFiles: codeAnalysis.uncoveredFiles,
-      }));
+      debts.push(
+        await this.createDebt({
+          title: `Test coverage below 80%: ${codeAnalysis.testCoverage}%`,
+          description: `Test coverage is ${codeAnalysis.testCoverage}%, should be at least 80%`,
+          debtType: 'test',
+          sourceTaskId: taskId,
+          sourceHollonId: hollonId,
+          estimatedFixHours: (80 - codeAnalysis.testCoverage) / 10,
+          interestRate: 0.03,
+          affectedFiles: codeAnalysis.uncoveredFiles,
+        }),
+      );
     }
 
     // 4. 린트 경고 무시 감지
     for (const suppression of codeAnalysis.lintSuppressions) {
-      debts.push(await this.createDebt({
-        title: `Lint suppression: ${suppression.rule}`,
-        description: suppression.comment,
-        debtType: 'code',
-        sourceTaskId: taskId,
-        sourceHollonId: hollonId,
-        sourceFile: suppression.file,
-        sourceLine: suppression.line,
-        estimatedFixHours: 0.5,
-        interestRate: 0.005,
-      }));
+      debts.push(
+        await this.createDebt({
+          title: `Lint suppression: ${suppression.rule}`,
+          description: suppression.comment,
+          debtType: 'code',
+          sourceTaskId: taskId,
+          sourceHollonId: hollonId,
+          sourceFile: suppression.file,
+          sourceLine: suppression.line,
+          estimatedFixHours: 0.5,
+          interestRate: 0.005,
+        }),
+      );
     }
 
     return debts;
@@ -4676,11 +4819,15 @@ export class TechDebtService {
     const query = this.debtRepo
       .createQueryBuilder('debt')
       .where('debt.organization_id = :orgId', { orgId: organizationId })
-      .andWhere('debt.status IN (:...statuses)', { statuses: ['identified', 'scheduled'] })
+      .andWhere('debt.status IN (:...statuses)', {
+        statuses: ['identified', 'scheduled'],
+      })
       .orderBy('debt.priority_score', 'DESC');
 
     if (options?.projectId) {
-      query.andWhere('debt.project_id = :projectId', { projectId: options.projectId });
+      query.andWhere('debt.project_id = :projectId', {
+        projectId: options.projectId,
+      });
     }
 
     if (options?.type) {
@@ -4773,7 +4920,10 @@ export class TechDebtService {
       where: { organizationId, status: In(['identified', 'scheduled']) },
     });
 
-    const totalDebt = debts.reduce((sum, d) => sum + d.estimatedFixHours + d.accumulatedInterest, 0);
+    const totalDebt = debts.reduce(
+      (sum, d) => sum + d.estimatedFixHours + d.accumulatedInterest,
+      0,
+    );
     const byType = this.groupByType(debts);
 
     const report = `
@@ -4785,15 +4935,22 @@ export class TechDebtService {
 
 | 유형 | 건수 | 예상 해결 시간 | 누적 이자 |
 |------|------|--------------|----------|
-${Object.entries(byType).map(([type, items]) => {
-  const hours = items.reduce((s, d) => s + d.estimatedFixHours, 0);
-  const interest = items.reduce((s, d) => s + d.accumulatedInterest, 0);
-  return `| ${type} | ${items.length} | ${hours.toFixed(1)}h | ${interest.toFixed(1)}h |`;
-}).join('\n')}
+${Object.entries(byType)
+  .map(([type, items]) => {
+    const hours = items.reduce((s, d) => s + d.estimatedFixHours, 0);
+    const interest = items.reduce((s, d) => s + d.accumulatedInterest, 0);
+    return `| ${type} | ${items.length} | ${hours.toFixed(1)}h | ${interest.toFixed(1)}h |`;
+  })
+  .join('\n')}
 
 ## 우선순위 TOP 5
 
-${debts.slice(0, 5).map((d, i) => `${i + 1}. **${d.title}** (Score: ${d.priorityScore.toFixed(1)})`).join('\n')}
+${debts
+  .slice(0, 5)
+  .map(
+    (d, i) => `${i + 1}. **${d.title}** (Score: ${d.priorityScore.toFixed(1)})`,
+  )
+  .join('\n')}
     `.trim();
 
     await this.documentService.create({
@@ -4808,11 +4965,14 @@ ${debts.slice(0, 5).map((d, i) => `${i + 1}. **${d.title}** (Score: ${d.priority
   }
 
   private groupByType(debts: TechDebt[]): Record<string, TechDebt[]> {
-    return debts.reduce((acc, debt) => {
-      acc[debt.debtType] = acc[debt.debtType] || [];
-      acc[debt.debtType].push(debt);
-      return acc;
-    }, {} as Record<string, TechDebt[]>);
+    return debts.reduce(
+      (acc, debt) => {
+        acc[debt.debtType] = acc[debt.debtType] || [];
+        acc[debt.debtType].push(debt);
+        return acc;
+      },
+      {} as Record<string, TechDebt[]>,
+    );
   }
 }
 
@@ -4839,10 +4999,19 @@ interface ScheduledDebts {
 
 interface CodeAnalysisResult {
   todos: Array<{ content: string; file: string; line: number }>;
-  complexFunctions: Array<{ functionName: string; complexity: number; file: string }>;
+  complexFunctions: Array<{
+    functionName: string;
+    complexity: number;
+    file: string;
+  }>;
   testCoverage: number;
   uncoveredFiles: string[];
-  lintSuppressions: Array<{ rule: string; comment: string; file: string; line: number }>;
+  lintSuppressions: Array<{
+    rule: string;
+    comment: string;
+    file: string;
+    line: number;
+  }>;
 }
 ```
 
@@ -4891,7 +5060,8 @@ export class DocumentRetrievalService {
     const queryEmbedding = await this.embeddingService.embed(query.text);
 
     // pgvector cosine similarity 검색
-    const results = await this.embeddingRepo.query(`
+    const results = await this.embeddingRepo.query(
+      `
       SELECT
         de.document_id,
         d.name,
@@ -4908,15 +5078,17 @@ export class DocumentRetrievalService {
         AND ($4::text[] IS NULL OR d.keywords && $4)
       ORDER BY de.embedding <=> $1::vector
       LIMIT $5
-    `, [
-      JSON.stringify(queryEmbedding),
-      query.organizationId,
-      query.scope ?? null,
-      query.filterKeywords ?? null,
-      query.limit ?? 10,
-    ]);
+    `,
+      [
+        JSON.stringify(queryEmbedding),
+        query.organizationId,
+        query.scope ?? null,
+        query.filterKeywords ?? null,
+        query.limit ?? 10,
+      ],
+    );
 
-    return results.map(r => ({
+    return results.map((r) => ({
       documentId: r.document_id,
       name: r.name,
       summary: r.summary,
@@ -4943,7 +5115,7 @@ export class DocumentRetrievalService {
         },
         take: 3,
       });
-      seedIds = keywordMatches.map(d => d.id);
+      seedIds = keywordMatches.map((d) => d.id);
     }
 
     if (!seedIds.length) return [];
@@ -4952,7 +5124,7 @@ export class DocumentRetrievalService {
     const visited = new Set<string>();
     const results: ScoredDocument[] = [];
     const queue: Array<{ id: string; depth: number; pathScore: number }> =
-      seedIds.map(id => ({ id, depth: 0, pathScore: 1.0 }));
+      seedIds.map((id) => ({ id, depth: 0, pathScore: 1.0 }));
 
     while (queue.length > 0) {
       const { id, depth, pathScore } = queue.shift()!;
@@ -4962,16 +5134,14 @@ export class DocumentRetrievalService {
 
       // 관련 문서 조회
       const relationships = await this.relationshipRepo.find({
-        where: [
-          { sourceDocumentId: id },
-          { targetDocumentId: id },
-        ],
+        where: [{ sourceDocumentId: id }, { targetDocumentId: id }],
       });
 
       for (const rel of relationships) {
-        const relatedId = rel.sourceDocumentId === id
-          ? rel.targetDocumentId
-          : rel.sourceDocumentId;
+        const relatedId =
+          rel.sourceDocumentId === id
+            ? rel.targetDocumentId
+            : rel.sourceDocumentId;
 
         if (visited.has(relatedId)) continue;
 
@@ -4981,7 +5151,9 @@ export class DocumentRetrievalService {
 
         queue.push({ id: relatedId, depth: depth + 1, pathScore: newScore });
 
-        const doc = await this.documentRepo.findOne({ where: { id: relatedId } });
+        const doc = await this.documentRepo.findOne({
+          where: { id: relatedId },
+        });
         if (doc) {
           results.push({
             documentId: doc.id,
@@ -4995,7 +5167,9 @@ export class DocumentRetrievalService {
       }
     }
 
-    return results.sort((a, b) => b.score - a.score).slice(0, query.limit ?? 10);
+    return results
+      .sort((a, b) => b.score - a.score)
+      .slice(0, query.limit ?? 10);
   }
 
   /**
@@ -5027,7 +5201,8 @@ export class DocumentRetrievalService {
       const existing = scores.get(doc.documentId);
       if (existing) {
         existing.score += rrfScore;
-        existing.doc.relationship = existing.doc.relationship ?? doc.relationship;
+        existing.doc.relationship =
+          existing.doc.relationship ?? doc.relationship;
       } else {
         scores.set(doc.documentId, { score: rrfScore, doc });
       }
@@ -5104,7 +5279,9 @@ export class DocumentRetrievalService {
       });
 
       for (const rel of related) {
-        const overlap = document.keywords.filter(k => rel.keywords?.includes(k)).length;
+        const overlap = document.keywords.filter((k) =>
+          rel.keywords?.includes(k),
+        ).length;
         const confidence = Math.min(overlap / document.keywords.length, 0.8);
 
         if (confidence >= 0.3) {
@@ -5123,19 +5300,20 @@ export class DocumentRetrievalService {
 
   private getRelationshipWeight(type: string): number {
     const weights: Record<string, number> = {
-      'depends_on': 1.0,
-      'references': 0.8,
-      'supersedes': 0.6,
-      'related_to': 0.4,
+      depends_on: 1.0,
+      references: 0.8,
+      supersedes: 0.6,
+      related_to: 0.4,
     };
     return weights[type] ?? 0.5;
   }
 
   private extractKeywords(text: string): string[] {
     // 간단한 키워드 추출 (실제 구현에서는 NLP 사용)
-    return text.toLowerCase()
+    return text
+      .toLowerCase()
       .split(/\s+/)
-      .filter(word => word.length > 3)
+      .filter((word) => word.length > 3)
       .slice(0, 5);
   }
 }
@@ -5212,7 +5390,7 @@ export class EmbeddingService {
       model: 'text-embedding-3-small',
       input: texts,
     });
-    return response.data.map(d => d.embedding);
+    return response.data.map((d) => d.embedding);
   }
 }
 ```
@@ -5258,15 +5436,12 @@ export class PerformanceEvaluationService {
     startDate: Date,
     endDate: Date,
   ): Promise<HollonPerformanceSummary> {
-    const [
-      productivityMetrics,
-      qualityMetrics,
-      collaborationMetrics,
-    ] = await Promise.all([
-      this.calculateProductivity(hollonId, startDate, endDate),
-      this.calculateQuality(hollonId, startDate, endDate),
-      this.calculateCollaboration(hollonId, startDate, endDate),
-    ]);
+    const [productivityMetrics, qualityMetrics, collaborationMetrics] =
+      await Promise.all([
+        this.calculateProductivity(hollonId, startDate, endDate),
+        this.calculateQuality(hollonId, startDate, endDate),
+        this.calculateCollaboration(hollonId, startDate, endDate),
+      ]);
 
     // 가중 평균 계산
     const overallScore =
@@ -5320,12 +5495,17 @@ export class PerformanceEvaluationService {
       },
     });
 
-    const completed = tasks.filter(t => t.status === 'done');
-    const storyPoints = completed.reduce((sum, t) => sum + (t.storyPoints ?? 0), 0);
+    const completed = tasks.filter((t) => t.status === 'done');
+    const storyPoints = completed.reduce(
+      (sum, t) => sum + (t.storyPoints ?? 0),
+      0,
+    );
 
     const completionTimes = completed
-      .filter(t => t.startedAt && t.completedAt)
-      .map(t => (t.completedAt!.getTime() - t.startedAt!.getTime()) / 3600000);
+      .filter((t) => t.startedAt && t.completedAt)
+      .map(
+        (t) => (t.completedAt!.getTime() - t.startedAt!.getTime()) / 3600000,
+      );
 
     const avgCompletionHours = completionTimes.length
       ? completionTimes.reduce((a, b) => a + b, 0) / completionTimes.length
@@ -5333,7 +5513,10 @@ export class PerformanceEvaluationService {
 
     // 생산성 점수 (0-100)
     const completionRate = tasks.length ? completed.length / tasks.length : 0;
-    const score = Math.min(100, completionRate * 100 + Math.min(storyPoints, 20) * 2);
+    const score = Math.min(
+      100,
+      completionRate * 100 + Math.min(storyPoints, 20) * 2,
+    );
 
     return {
       tasksAssigned: tasks.length,
@@ -5358,11 +5541,15 @@ export class PerformanceEvaluationService {
       },
     });
 
-    const reviewComments = prs.reduce((sum, pr) =>
-      sum + (pr.reviewComments?.split('\n').length ?? 0), 0);
+    const reviewComments = prs.reduce(
+      (sum, pr) => sum + (pr.reviewComments?.split('\n').length ?? 0),
+      0,
+    );
 
-    const approvedFirst = prs.filter(pr =>
-      pr.status === 'merged' && !pr.reviewComments?.includes('changes_requested')
+    const approvedFirst = prs.filter(
+      (pr) =>
+        pr.status === 'merged' &&
+        !pr.reviewComments?.includes('changes_requested'),
     ).length;
 
     // 재오픈된 태스크
@@ -5377,7 +5564,10 @@ export class PerformanceEvaluationService {
 
     // 품질 점수
     const firstPassRate = prs.length ? approvedFirst / prs.length : 1;
-    const score = Math.max(0, 100 * firstPassRate - reopened * 10 - reviewComments * 0.5);
+    const score = Math.max(
+      0,
+      100 * firstPassRate - reopened * 10 - reviewComments * 0.5,
+    );
 
     return {
       reopenedCount: reopened,
@@ -5410,10 +5600,11 @@ export class PerformanceEvaluationService {
     });
 
     // 협업 점수
-    const score = Math.min(100,
+    const score = Math.min(
+      100,
       50 + // 기본점
-      Math.min(messagesSent, 50) * 0.5 + // 소통
-      reviewsGiven * 5 // 리뷰 기여
+        Math.min(messagesSent, 50) * 0.5 + // 소통
+        reviewsGiven * 5, // 리뷰 기여
     );
 
     return {
@@ -5462,13 +5653,13 @@ interface CollaborationMetrics {
 
 ## 변경 이력
 
-| 날짜 | 버전 | 변경 내용 |
-|------|------|----------|
-| 2024-12-04 | 1.0.0 | ssot.md에서 분리하여 초기 문서 작성 |
-| 2024-12-04 | 1.1.0 | 자율 운영 지원: Document-Memory 통합, 프롬프트 계층 합성, Task Pool, NestJS 구조 |
-| 2024-12-04 | 1.2.0 | 홀론 오케스트레이션: HollonOrchestratorService, TaskAnalyzerService, EscalationService, QualityGateService 추가 |
-| 2024-12-04 | 1.3.0 | SSOT에서 구현 로드맵 이동, LLM 한계 극복 서비스 상세, 협업 서비스 상세 추가 |
-| 2024-12-04 | 1.4.0 | 목차 업데이트 (섹션 6-12 추가) |
-| 2024-12-04 | 1.5.0 | Task-PR 연결 테이블, 기술 부채 테이블, CodeReviewService, TechDebtService 추가 |
+| 날짜       | 버전  | 변경 내용                                                                                                                                          |
+| ---------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2024-12-04 | 1.0.0 | ssot.md에서 분리하여 초기 문서 작성                                                                                                                |
+| 2024-12-04 | 1.1.0 | 자율 운영 지원: Document-Memory 통합, 프롬프트 계층 합성, Task Pool, NestJS 구조                                                                   |
+| 2024-12-04 | 1.2.0 | 홀론 오케스트레이션: HollonOrchestratorService, TaskAnalyzerService, EscalationService, QualityGateService 추가                                    |
+| 2024-12-04 | 1.3.0 | SSOT에서 구현 로드맵 이동, LLM 한계 극복 서비스 상세, 협업 서비스 상세 추가                                                                        |
+| 2024-12-04 | 1.4.0 | 목차 업데이트 (섹션 6-12 추가)                                                                                                                     |
+| 2024-12-04 | 1.5.0 | Task-PR 연결 테이블, 기술 부채 테이블, CodeReviewService, TechDebtService 추가                                                                     |
 | 2024-12-04 | 1.6.0 | 하이브리드 RAG (document_embeddings, document_relationships 테이블, DocumentRetrievalService, EmbeddingService), PerformanceEvaluationService 추가 |
-| 2024-12-04 | 1.7.0 | 안전장치 구현: tasks 테이블에 depth/affected_files 추가, TaskPoolService 파일 충돌 방지, SubtaskCreationService depth 제한 |
+| 2024-12-04 | 1.7.0 | 안전장치 구현: tasks 테이블에 depth/affected_files 추가, TaskPoolService 파일 충돌 방지, SubtaskCreationService depth 제한                         |
