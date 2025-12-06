@@ -14,5 +14,5 @@
   "coverageDirectory": "../coverage-integration",
   "maxWorkers": 1,
   "forceExit": true,
-  "detectOpenHandles": false
+  "detectOpenHandles": true
 }

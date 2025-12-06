@@ -14,5 +14,5 @@
   "coverageDirectory": "../coverage-e2e",
   "maxWorkers": 1,
   "forceExit": true,
-  "detectOpenHandles": false
+  "detectOpenHandles": true
 }
