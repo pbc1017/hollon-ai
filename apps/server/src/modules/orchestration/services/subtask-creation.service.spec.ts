@@ -38,7 +38,7 @@ describe('SubtaskCreationService', () => {
   });
 
   afterEach(async () => {
-    jest.clearAllMocks();
+    jest.resetAllMocks(); // Use resetAllMocks to clear both history AND queued return values
     if (module) {
       await module.close();
     }
@@ -432,7 +432,8 @@ describe('SubtaskCreationService', () => {
         .mockResolvedValueOnce([
           { id: 'grandchild1', parentTaskId: 'child1' } as Task,
         ])
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([]) // child2 has no children
+        .mockResolvedValueOnce([]); // grandchild1 has no children
 
       const result = await service.getSubtaskTree('parent');
 
