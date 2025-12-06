@@ -75,6 +75,7 @@ describe('SubtaskCreationService', () => {
     it('should create subtasks successfully', async () => {
       mockTaskRepo.findOne.mockResolvedValueOnce(mockParentTask); // Parent task lookup
       mockTaskRepo.findOne.mockResolvedValueOnce(mockParentTask); // Depth calculation
+      mockTaskRepo.findOne.mockResolvedValueOnce(mockParentTask); // updateParentTaskStatus lookup
       mockTaskRepo.create.mockImplementation((task) => task); // Mock create to return the task object
       mockTaskRepo.save.mockImplementation((task) =>
         Promise.resolve({ ...task, id: `subtask-${Math.random()}` }),
@@ -161,6 +162,7 @@ describe('SubtaskCreationService', () => {
 
       mockTaskRepo.findOne.mockResolvedValueOnce(taskWith8Subtasks); // Parent lookup
       mockTaskRepo.findOne.mockResolvedValueOnce(taskWith8Subtasks); // Depth calc
+      mockTaskRepo.findOne.mockResolvedValueOnce(taskWith8Subtasks); // updateParentTaskStatus lookup
       mockTaskRepo.create.mockImplementation((task) => task);
       mockTaskRepo.save.mockImplementation((task) =>
         Promise.resolve({ ...task, id: `subtask-${Math.random()}` }),
@@ -181,6 +183,7 @@ describe('SubtaskCreationService', () => {
     it('should handle partial failures when creating subtasks', async () => {
       mockTaskRepo.findOne.mockResolvedValueOnce(mockParentTask); // Parent lookup
       mockTaskRepo.findOne.mockResolvedValueOnce(mockParentTask); // Depth calc
+      mockTaskRepo.findOne.mockResolvedValueOnce(mockParentTask); // updateParentTaskStatus lookup
       mockTaskRepo.create.mockImplementation((task) => task);
       mockTaskRepo.save
         .mockResolvedValueOnce({ ...subtaskDefinitions[0], id: 'subtask-1' })
@@ -206,7 +209,10 @@ describe('SubtaskCreationService', () => {
         subtasks: [],
       };
 
-      mockTaskRepo.findOne.mockResolvedValue(deepTask);
+      // When both validations are disabled, only parent lookup is called
+      mockTaskRepo.findOne.mockResolvedValueOnce(deepTask); // Parent lookup
+      // NO depth calculation (validateDepth: false)
+      mockTaskRepo.findOne.mockResolvedValueOnce(deepTask); // updateParentTaskStatus lookup
       mockTaskRepo.create.mockImplementation((task) => task);
       mockTaskRepo.save.mockImplementation((task) =>
         Promise.resolve({ ...task, id: `subtask-${Math.random()}` }),
