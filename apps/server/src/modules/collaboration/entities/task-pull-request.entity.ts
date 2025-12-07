@@ -42,7 +42,7 @@ export class TaskPullRequest extends BaseEntity {
   @Column({ length: 255 })
   repository: string;
 
-  @Column({ length: 255, name: 'branch_name', nullable: true })
+  @Column({ name: 'branch_name', type: 'varchar', length: 255, nullable: true })
   branchName: string | null;
 
   @Column({
@@ -52,14 +52,14 @@ export class TaskPullRequest extends BaseEntity {
   })
   status: PullRequestStatus;
 
-  @Column({ name: 'author_hollon_id', nullable: true })
+  @Column({ name: 'author_hollon_id', type: 'uuid', nullable: true })
   authorHollonId: string | null;
 
   @ManyToOne(() => Hollon, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'author_hollon_id' })
   authorHollon: Hollon | null;
 
-  @Column({ name: 'reviewer_hollon_id', nullable: true })
+  @Column({ name: 'reviewer_hollon_id', type: 'uuid', nullable: true })
   reviewerHollonId: string | null;
 
   @ManyToOne(() => Hollon, { nullable: true, onDelete: 'SET NULL' })

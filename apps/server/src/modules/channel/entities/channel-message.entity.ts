@@ -29,7 +29,7 @@ export class ChannelMessage {
   })
   senderType: ParticipantType;
 
-  @Column({ type: 'uuid', name: 'sender_id', nullable: true })
+  @Column({ name: 'sender_id', type: 'uuid', nullable: true })
   senderId: string | null;
 
   @Column('text')
@@ -38,7 +38,7 @@ export class ChannelMessage {
   @Column({ type: 'jsonb', default: {} })
   metadata: Record<string, any>;
 
-  @Column({ type: 'uuid', name: 'thread_parent_id', nullable: true })
+  @Column({ name: 'thread_parent_id', type: 'uuid', nullable: true })
   threadParentId: string | null;
 
   @ManyToOne(() => ChannelMessage, { nullable: true })

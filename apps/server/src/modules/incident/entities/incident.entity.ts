@@ -44,21 +44,21 @@ export class Incident extends BaseEntity {
   })
   status: IncidentStatus;
 
-  @Column({ name: 'reporter_hollon_id', nullable: true })
+  @Column({ name: 'reporter_hollon_id', type: 'uuid', nullable: true })
   reporterHollonId: string | null;
 
   @ManyToOne(() => Hollon, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'reporter_hollon_id' })
   reporterHollon?: Hollon;
 
-  @Column({ name: 'owner_hollon_id', nullable: true })
+  @Column({ name: 'owner_hollon_id', type: 'uuid', nullable: true })
   ownerHollonId: string | null;
 
   @ManyToOne(() => Hollon, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'owner_hollon_id' })
   ownerHollon?: Hollon;
 
-  @Column({ name: 'channel_id', nullable: true })
+  @Column({ name: 'channel_id', type: 'uuid', nullable: true })
   channelId: string | null;
 
   @Column({ type: 'jsonb', default: {} })

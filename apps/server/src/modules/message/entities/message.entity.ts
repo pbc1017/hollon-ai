@@ -40,7 +40,7 @@ export class Message {
   })
   fromType: ParticipantType;
 
-  @Column({ type: 'uuid', name: 'from_id', nullable: true })
+  @Column({ name: 'from_id', type: 'uuid', nullable: true })
   fromId: string | null;
 
   @Column({
@@ -76,7 +76,7 @@ export class Message {
   @Column({ type: 'timestamp', name: 'read_at', nullable: true })
   readAt: Date | null;
 
-  @Column({ type: 'uuid', name: 'replied_to_id', nullable: true })
+  @Column({ name: 'replied_to_id', type: 'uuid', nullable: true })
   repliedToId: string | null;
 
   @ManyToOne(() => Message, { nullable: true })

@@ -31,10 +31,10 @@ export class Document extends BaseEntity {
   @Column({ name: 'project_id' })
   projectId: string;
 
-  @Column({ name: 'hollon_id', nullable: true })
+  @Column({ name: 'hollon_id', type: 'uuid', nullable: true })
   hollonId: string;
 
-  @Column({ name: 'task_id', nullable: true })
+  @Column({ name: 'task_id', type: 'uuid', nullable: true })
   taskId: string;
 
   @Column({ type: 'text', array: true, nullable: true })

@@ -47,13 +47,13 @@ export class Hollon extends BaseEntity {
   })
   lifecycle: HollonLifecycle;
 
-  @Column({ name: 'created_by_hollon_id', nullable: true })
+  @Column({ name: 'created_by_hollon_id', type: 'uuid', nullable: true })
   createdByHollonId: string | null;
 
   @Column({ name: 'organization_id' })
   organizationId: string;
 
-  @Column({ name: 'team_id', nullable: true })
+  @Column({ name: 'team_id', type: 'uuid', nullable: true })
   teamId: string | null;
 
   @Column({ name: 'role_id' })
@@ -89,7 +89,7 @@ export class Hollon extends BaseEntity {
   @Column({ name: 'last_active_at', type: 'timestamp', nullable: true })
   lastActiveAt: Date;
 
-  @Column({ name: 'current_task_id', nullable: true })
+  @Column({ name: 'current_task_id', type: 'uuid', nullable: true })
   currentTaskId: string;
 
   // Relations

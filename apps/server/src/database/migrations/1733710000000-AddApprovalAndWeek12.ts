@@ -14,16 +14,10 @@ export class AddApprovalAndWeek121733710000000 implements MigrationInterface {
       ADD COLUMN "created_by_hollon_id" uuid;
     `);
 
-    // Approval request enums
-    await queryRunner.query(`
-      CREATE TYPE "approval_status_enum" AS ENUM (
-        'pending',
-        'approved',
-        'rejected',
-        'cancelled'
-      );
-    `);
+    // Drop old approval_requests table from InitialSchema (we'll recreate with new structure)
+    await queryRunner.query(`DROP TABLE IF EXISTS "approval_requests" CASCADE`);
 
+    // Approval request type enum (approval_status_enum already exists from InitialSchema)
     await queryRunner.query(`
       CREATE TYPE "approval_request_type_enum" AS ENUM (
         'create_permanent_hollon',
@@ -33,7 +27,7 @@ export class AddApprovalAndWeek121733710000000 implements MigrationInterface {
       );
     `);
 
-    // Approval requests table
+    // Approval requests table (recreated with new structure)
     await queryRunner.query(`
       CREATE TABLE "approval_requests" (
         "id" uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -194,12 +188,11 @@ export class AddApprovalAndWeek121733710000000 implements MigrationInterface {
       DROP COLUMN IF EXISTS "lifecycle";
     `);
 
-    // Drop enums
+    // Drop enums (don't drop approval_status_enum as it's from InitialSchema)
     await queryRunner.query(`DROP TYPE IF EXISTS "incident_status_enum"`);
     await queryRunner.query(`DROP TYPE IF EXISTS "incident_severity_enum"`);
     await queryRunner.query(`DROP TYPE IF EXISTS "contract_status_enum"`);
     await queryRunner.query(`DROP TYPE IF EXISTS "approval_request_type_enum"`);
-    await queryRunner.query(`DROP TYPE IF EXISTS "approval_status_enum"`);
     await queryRunner.query(`DROP TYPE IF EXISTS "hollon_lifecycle_enum"`);
   }
 }

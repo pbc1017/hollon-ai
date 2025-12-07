@@ -45,14 +45,14 @@ export class CollaborationSession extends BaseEntity {
   @JoinColumn({ name: 'requester_hollon_id' })
   requesterHollon: Hollon;
 
-  @Column({ name: 'collaborator_hollon_id', nullable: true })
+  @Column({ name: 'collaborator_hollon_id', type: 'uuid', nullable: true })
   collaboratorHollonId: string | null;
 
   @ManyToOne(() => Hollon, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'collaborator_hollon_id' })
   collaboratorHollon: Hollon | null;
 
-  @Column({ name: 'task_id', nullable: true })
+  @Column({ name: 'task_id', type: 'uuid', nullable: true })
   taskId: string | null;
 
   @ManyToOne(() => Task, { nullable: true, onDelete: 'CASCADE' })

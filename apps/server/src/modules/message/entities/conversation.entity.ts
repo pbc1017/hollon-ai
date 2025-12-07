@@ -35,7 +35,7 @@ export class Conversation {
   @Column({ type: 'uuid', name: 'participant2_id' })
   participant2Id: string;
 
-  @Column({ type: 'uuid', name: 'last_message_id', nullable: true })
+  @Column({ name: 'last_message_id', type: 'uuid', nullable: true })
   lastMessageId: string | null;
 
   @ManyToOne(() => Message, { nullable: true })

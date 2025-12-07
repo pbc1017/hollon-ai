@@ -29,7 +29,7 @@ export class Channel {
   @JoinColumn({ name: 'organization_id' })
   organization: Organization;
 
-  @Column({ type: 'uuid', name: 'team_id', nullable: true })
+  @Column({ name: 'team_id', type: 'uuid', nullable: true })
   teamId: string | null;
 
   @ManyToOne(() => Team, { nullable: true })
@@ -57,7 +57,7 @@ export class Channel {
   })
   createdByType: ParticipantType;
 
-  @Column({ type: 'uuid', name: 'created_by_id', nullable: true })
+  @Column({ name: 'created_by_id', type: 'uuid', nullable: true })
   createdById: string | null;
 
   @CreateDateColumn({ name: 'created_at' })

@@ -30,7 +30,7 @@ export class ApprovalRequest extends BaseEntity {
   @Column({ type: 'jsonb', default: {} })
   metadata: Record<string, any>;
 
-  @Column({ name: 'requested_by', nullable: true })
+  @Column({ name: 'requested_by', type: 'uuid', nullable: true })
   requestedBy: string | null;
 
   @Column({
@@ -40,13 +40,13 @@ export class ApprovalRequest extends BaseEntity {
   })
   status: ApprovalStatus;
 
-  @Column({ name: 'approved_by', nullable: true })
+  @Column({ name: 'approved_by', type: 'uuid', nullable: true })
   approvedBy: string | null;
 
   @Column({ name: 'approved_at', type: 'timestamp', nullable: true })
   approvedAt: Date | null;
 
-  @Column({ name: 'rejected_by', nullable: true })
+  @Column({ name: 'rejected_by', type: 'uuid', nullable: true })
   rejectedBy: string | null;
 
   @Column({ name: 'rejected_at', type: 'timestamp', nullable: true })

@@ -18,10 +18,10 @@ export class CostRecord extends BaseEntity {
   @Column({ name: 'organization_id' })
   organizationId: string;
 
-  @Column({ name: 'hollon_id', nullable: true })
+  @Column({ name: 'hollon_id', type: 'uuid', nullable: true })
   hollonId: string;
 
-  @Column({ name: 'task_id', nullable: true })
+  @Column({ name: 'task_id', type: 'uuid', nullable: true })
   taskId: string;
 
   @Column({

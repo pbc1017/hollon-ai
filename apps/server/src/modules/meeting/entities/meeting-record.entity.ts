@@ -30,7 +30,7 @@ export class MeetingRecord {
   @JoinColumn({ name: 'organization_id' })
   organization: Organization;
 
-  @Column({ type: 'uuid', name: 'team_id', nullable: true })
+  @Column({ name: 'team_id', type: 'uuid', nullable: true })
   teamId: string | null;
 
   @ManyToOne(() => Team, { nullable: true })

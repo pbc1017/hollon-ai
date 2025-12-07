@@ -26,10 +26,10 @@ export class ApprovalRequest extends BaseEntity {
   @Column({ name: 'organization_id' })
   organizationId: string;
 
-  @Column({ name: 'hollon_id', nullable: true })
+  @Column({ name: 'hollon_id', type: 'uuid', nullable: true })
   hollonId: string;
 
-  @Column({ name: 'task_id', nullable: true })
+  @Column({ name: 'task_id', type: 'uuid', nullable: true })
   taskId: string;
 
   @Column({
@@ -55,10 +55,10 @@ export class ApprovalRequest extends BaseEntity {
   @Column({ type: 'jsonb', nullable: true })
   context: Record<string, unknown>;
 
-  @Column({ name: 'requested_by_hollon_id', nullable: true })
+  @Column({ name: 'requested_by_hollon_id', type: 'uuid', nullable: true })
   requestedByHollonId: string;
 
-  @Column({ name: 'reviewed_by_user_id', nullable: true })
+  @Column({ name: 'reviewed_by_user_id', type: 'uuid', nullable: true })
   reviewedByUserId: string; // Future: link to User entity
 
   @Column({ name: 'reviewed_at', type: 'timestamp', nullable: true })
