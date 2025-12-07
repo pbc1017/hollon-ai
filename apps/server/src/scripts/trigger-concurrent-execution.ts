@@ -32,10 +32,10 @@ async function triggerConcurrentExecution() {
     const hollonService = app.get(HollonService);
     const taskService = app.get(TaskService);
 
-    // Find Dogfooding Hollons
+    // Find Dogfooding Hollons (all 5 Phase 2 hollons)
     const hollons = await hollonService.findAll();
     const dogfoodingHollons = hollons.filter((h) =>
-      ['DevBot-1', 'DevBot-2', 'ReviewBot'].includes(h.name),
+      ['Alpha', 'Beta', 'DevBot-1', 'DevBot-2', 'ReviewBot'].includes(h.name),
     );
 
     if (dogfoodingHollons.length === 0) {
