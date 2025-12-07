@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 import configuration from './config/configuration';
 import { databaseConfig } from './config/database.config';
 import { HealthModule } from './modules/health/health.module';
@@ -16,6 +17,7 @@ import { PostgresListenerModule } from './modules/postgres-listener/postgres-lis
 import { MessageModule } from './modules/message/message.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { ChannelModule } from './modules/channel/channel.module';
+import { MeetingModule } from './modules/meeting/meeting.module';
 
 @Module({
   imports: [
@@ -35,6 +37,7 @@ import { ChannelModule } from './modules/channel/channel.module';
     }),
 
     // Infrastructure modules (Global)
+    ScheduleModule.forRoot(),
     PostgresListenerModule,
 
     // Feature modules
@@ -50,6 +53,7 @@ import { ChannelModule } from './modules/channel/channel.module';
     MessageModule,
     RealtimeModule,
     ChannelModule,
+    MeetingModule,
   ],
 })
 export class AppModule {}
