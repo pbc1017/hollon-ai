@@ -18,6 +18,7 @@ import { MessageModule } from './modules/message/message.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { ChannelModule } from './modules/channel/channel.module';
 import { MeetingModule } from './modules/meeting/meeting.module';
+import { CollaborationModule } from './modules/collaboration/collaboration.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { MeetingModule } from './modules/meeting/meeting.module';
     RealtimeModule,
     ChannelModule,
     MeetingModule,
+    CollaborationModule,
   ],
 })
 export class AppModule {}
