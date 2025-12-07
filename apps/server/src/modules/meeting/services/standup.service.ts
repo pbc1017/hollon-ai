@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThanOrEqual } from 'typeorm';
+import { Repository, MoreThanOrEqual, In } from 'typeorm';
 import { MeetingRecord, MeetingType } from '../entities/meeting-record.entity';
 import { Team } from '../../team/entities/team.entity';
-import { Hollon } from '../../hollon/entities/hollon.entity';
+import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
 import { Task } from '../../task/entities/task.entity';
 import { StandupResponse } from '../dto/standup-response.dto';
 import { ChannelService } from '../../channel/channel.service';
@@ -89,14 +89,17 @@ export class StandupService {
   }
 
   /**
-   * Get active hollons in a team
+   * 팀의 활성 홀론 목록 조회
+   * @param teamId 팀 ID
+   * @returns 활성 상태(IDLE, WORKING)인 홀론 배열
    */
   private async getActiveTeamHollons(teamId: string): Promise<Hollon[]> {
     return this.hollonRepo.find({
       where: {
         teamId,
-        status: 'idle' as any, // Active hollons
+        status: In([HollonStatus.IDLE, HollonStatus.WORKING]),
       },
+      relations: ['role'],
     });
   }
 

@@ -23,7 +23,10 @@
     "clean": "rm -rf dist",
     "db:migrate": "dotenv -e ../../.env.local -e ../../.env -- ts-node --project ./tsconfig.json -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:run -d ./src/config/typeorm.config.ts",
     "db:migrate:generate": "dotenv -e ../../.env.local -e ../../.env -- ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:generate -d ./src/config/typeorm.config.ts",
-    "db:seed": "dotenv -e ../../.env.local -e ../../.env -- ts-node src/database/seed.ts"
+    "db:seed": "dotenv -e ../../.env.local -e ../../.env -- ts-node src/database/seed.ts",
+    "dogfood:assign": "dotenv -e ../../.env.local -e ../../.env -- ts-node src/scripts/assign-dogfooding-task.ts",
+    "dogfood:trigger": "dotenv -e ../../.env.local -e ../../.env -- ts-node src/scripts/trigger-devbot-execution.ts",
+    "dogfood:concurrent": "dotenv -e ../../.env.local -e ../../.env -- ts-node src/scripts/trigger-concurrent-execution.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

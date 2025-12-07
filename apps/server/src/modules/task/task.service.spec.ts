@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { TaskService } from './task.service';
 import {
   Task,
@@ -12,7 +11,6 @@ import { NotFoundException, BadRequestException } from '@nestjs/common';
 
 describe('TaskService', () => {
   let service: TaskService;
-  let _repository: Repository<Task>;
 
   const mockTaskRepository = {
     create: jest.fn(),
@@ -49,7 +47,6 @@ describe('TaskService', () => {
     }).compile();
 
     service = module.get<TaskService>(TaskService);
-    _repository = module.get<Repository<Task>>(getRepositoryToken(Task));
 
     // Reset all mocks
     jest.clearAllMocks();

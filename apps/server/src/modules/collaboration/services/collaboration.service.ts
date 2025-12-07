@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import {
   CollaborationSession,
   CollaborationStatus,
+  CollaborationType,
 } from '../entities/collaboration-session.entity';
 import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
 import { MessageService } from '../../message/message.service';
@@ -37,7 +38,10 @@ export class CollaborationService {
     );
 
     // 1. 적합한 협력자 찾기
-    const collaborator = await this.findSuitableCollaborator(request);
+    const collaborator = await this.findSuitableCollaborator(
+      request,
+      requesterHollonId,
+    );
 
     // 2. 세션 생성
     const session = await this.sessionRepo.save({
@@ -204,14 +208,20 @@ export class CollaborationService {
 
   /**
    * 협력자 찾기
+   * 우선순위:
+   * 1. 요청자 자신은 제외
+   * 2. 같은 팀 내 홀론 우선 (+10점)
+   * 3. 협업 유형에 따라 적합한 역할/스킬 기반 매칭 (+5~15점)
    */
   private async findSuitableCollaborator(
-    _request: CollaborationRequestDto,
+    request: CollaborationRequestDto,
+    requesterHollonId: string,
   ): Promise<Hollon | null> {
-    // 가용한 홀론 중에서 선택 (간단한 버전)
+    // 1. 가용한 홀론 조회 (IDLE 상태, role과 team 관계 포함)
     const availableHollons = await this.hollonRepo.find({
       where: { status: HollonStatus.IDLE },
-      take: 10,
+      relations: ['role', 'team'],
+      take: 50, // 충분한 후보군 확보
     });
 
     if (availableHollons.length === 0) {
@@ -219,9 +229,111 @@ export class CollaborationService {
       return null;
     }
 
-    // 단순하게 첫 번째 가용 홀론 선택
-    // TODO: 역할, 스킬, 가용성 기반으로 매칭 개선
-    return availableHollons[0];
+    // 2. 요청자 자신을 제외
+    const candidates = availableHollons.filter(
+      (h) => h.id !== requesterHollonId,
+    );
+
+    if (candidates.length === 0) {
+      this.logger.warn(
+        'No available collaborators (all candidates are requester)',
+      );
+      return null;
+    }
+
+    // 3. 협업 유형별 선호 capability 정의
+    const preferredCapabilities = this.getPreferredCapabilities(request.type);
+
+    // 4. 협업 유형에 따른 우선순위 정렬
+    const prioritized = candidates.sort((a, b) => {
+      let scoreA = 0;
+      let scoreB = 0;
+
+      // 같은 팀이면 +10점
+      if (request.preferredTeamId) {
+        if (a.teamId === request.preferredTeamId) scoreA += 10;
+        if (b.teamId === request.preferredTeamId) scoreB += 10;
+      }
+
+      // 역할 기반 점수: capability 매칭
+      scoreA += this.calculateCapabilityScore(
+        a.role?.capabilities,
+        preferredCapabilities,
+      );
+      scoreB += this.calculateCapabilityScore(
+        b.role?.capabilities,
+        preferredCapabilities,
+      );
+
+      return scoreB - scoreA;
+    });
+
+    this.logger.debug(
+      `Found ${prioritized.length} candidates for collaboration, selected: ${prioritized[0].name}`,
+    );
+
+    return prioritized[0];
+  }
+
+  /**
+   * 협업 유형별 선호하는 capabilities 반환
+   */
+  private getPreferredCapabilities(type: CollaborationType): string[] {
+    switch (type) {
+      case CollaborationType.CODE_REVIEW:
+        return [
+          'code-review',
+          'testing',
+          'quality-assurance',
+          'typescript',
+          'java',
+        ];
+      case CollaborationType.PAIR_PROGRAMMING:
+        return ['typescript', 'nestjs', 'java', 'react', 'programming'];
+      case CollaborationType.DEBUGGING:
+        return ['debugging', 'testing', 'troubleshooting', 'monitoring'];
+      case CollaborationType.KNOWLEDGE_SHARING:
+        return ['documentation', 'mentoring', 'architecture', 'design'];
+      case CollaborationType.ARCHITECTURE_REVIEW:
+        return [
+          'architecture',
+          'system-design',
+          'design-patterns',
+          'infrastructure',
+        ];
+      default:
+        return [];
+    }
+  }
+
+  /**
+   * capability 매칭 점수 계산
+   * 매칭되는 capability가 많을수록 높은 점수
+   */
+  private calculateCapabilityScore(
+    hollonCapabilities: string[] | undefined,
+    preferredCapabilities: string[],
+  ): number {
+    if (!hollonCapabilities || hollonCapabilities.length === 0) {
+      return 0;
+    }
+
+    const normalizedHollonCaps = hollonCapabilities.map((c) => c.toLowerCase());
+    const normalizedPreferredCaps = preferredCapabilities.map((c) =>
+      c.toLowerCase(),
+    );
+
+    let matchCount = 0;
+    for (const cap of normalizedPreferredCaps) {
+      if (
+        normalizedHollonCaps.some((hc) => hc.includes(cap) || cap.includes(hc))
+      ) {
+        matchCount++;
+      }
+    }
+
+    // 매칭 하나당 5점, 최대 15점
+    return Math.min(matchCount * 5, 15);
   }
 
   /**

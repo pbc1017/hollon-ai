@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { HollonService } from './hollon.service';
 import {
   Hollon,
@@ -17,8 +16,6 @@ import { NotFoundException } from '@nestjs/common';
 
 describe('HollonService', () => {
   let service: HollonService;
-  let _repository: Repository<Hollon>;
-  let _approvalService: ApprovalService;
 
   const mockHollonRepository = {
     create: jest.fn(),
@@ -61,8 +58,6 @@ describe('HollonService', () => {
     }).compile();
 
     service = module.get<HollonService>(HollonService);
-    _repository = module.get<Repository<Hollon>>(getRepositoryToken(Hollon));
-    _approvalService = module.get<ApprovalService>(ApprovalService);
 
     jest.clearAllMocks();
   });

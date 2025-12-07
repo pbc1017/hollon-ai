@@ -22,4 +22,8 @@ export class CollaborationRequestDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, any>;
+
+  @IsOptional()
+  @IsUUID()
+  preferredTeamId?: string;
 }

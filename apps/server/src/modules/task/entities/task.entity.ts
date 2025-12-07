@@ -94,8 +94,9 @@ export class Task extends BaseEntity {
   // 안전장치: 파일 충돌 방지
   @Column({
     name: 'affected_files',
-    type: 'jsonb',
-    default: [],
+    type: 'text',
+    array: true,
+    default: '{}',
   })
   affectedFiles: string[];
 

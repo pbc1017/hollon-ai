@@ -7,6 +7,12 @@ import {
 } from '../entities/cross-team-contract.entity';
 import { DependencyRequestDto } from '../dto/dependency-request.dto';
 import { ContractNegotiationDto } from '../dto/contract-negotiation.dto';
+import { MessageService } from '../../message/message.service';
+import {
+  MessageType,
+  ParticipantType,
+} from '../../message/entities/message.entity';
+import { Hollon } from '../../hollon/entities/hollon.entity';
 
 @Injectable()
 export class CrossTeamCollaborationService {
@@ -15,6 +21,9 @@ export class CrossTeamCollaborationService {
   constructor(
     @InjectRepository(CrossTeamContract)
     private readonly contractRepo: Repository<CrossTeamContract>,
+    @InjectRepository(Hollon)
+    private readonly hollonRepo: Repository<Hollon>,
+    private readonly messageService: MessageService,
   ) {}
 
   /**
@@ -39,11 +48,12 @@ export class CrossTeamCollaborationService {
       status: ContractStatus.PENDING,
     });
 
-    // 2. 대상 팀에게 알림 (팀 채널로 전송하거나 팀의 첫 번째 홀론에게 전송)
-    // TODO: 팀 리더 개념 추가 시 수정 필요
-    // 현재는 시스템 알림으로만 처리
-    this.logger.log(
-      `Dependency request sent to team ${targetTeamId}: ${contract.id}`,
+    // 2. 대상 팀의 홀론들에게 알림 발송
+    await this.notifyTargetTeamHollons(
+      targetTeamId,
+      requesterTeamId,
+      contract,
+      request,
     );
 
     this.logger.log(`Contract created: ${contract.id}`);
@@ -151,5 +161,59 @@ export class CrossTeamCollaborationService {
       relations: ['requesterTeam', 'targetTeam'],
       order: { createdAt: 'DESC' },
     });
+  }
+
+  /**
+   * 대상 팀의 모든 홀론들에게 의존성 요청 알림 발송
+   */
+  private async notifyTargetTeamHollons(
+    targetTeamId: string,
+    requesterTeamId: string,
+    contract: CrossTeamContract,
+    request: DependencyRequestDto,
+  ): Promise<void> {
+    // 대상 팀의 홀론 목록 조회
+    const targetHollons = await this.hollonRepo.find({
+      where: { teamId: targetTeamId },
+    });
+
+    if (targetHollons.length === 0) {
+      this.logger.warn(
+        `No hollons found in target team ${targetTeamId} for dependency request notification`,
+      );
+      return;
+    }
+
+    // 각 홀론에게 알림 메시지 발송
+    const notificationPromises = targetHollons.map((hollon) =>
+      this.messageService
+        .send({
+          fromType: ParticipantType.SYSTEM,
+          fromId: undefined,
+          toType: ParticipantType.HOLLON,
+          toId: hollon.id,
+          messageType: MessageType.DELEGATION_REQUEST,
+          content: `팀 간 의존성 요청이 도착했습니다.\n\n요청 팀: ${requesterTeamId}\n설명: ${request.description}\n산출물: ${request.deliverables.join(', ')}${request.deadline ? `\n요청 마감일: ${request.deadline}` : ''}`,
+          metadata: {
+            contractId: contract.id,
+            requesterTeamId,
+            targetTeamId,
+            deliverables: request.deliverables,
+            requestedDeadline: request.deadline,
+          },
+          requiresResponse: true,
+        })
+        .catch((error) => {
+          this.logger.error(
+            `Failed to send notification to hollon ${hollon.id}: ${error.message}`,
+          );
+        }),
+    );
+
+    await Promise.all(notificationPromises);
+
+    this.logger.log(
+      `Dependency request notifications sent to ${targetHollons.length} hollons in team ${targetTeamId} for contract ${contract.id}`,
+    );
   }
 }
