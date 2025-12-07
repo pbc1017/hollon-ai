@@ -3,14 +3,14 @@ import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { MeetingRecord, MeetingType } from '../entities/meeting-record.entity';
-import { Project } from '../../project/entities/project.entity';
+import { Cycle, CycleStatus } from '../../project/entities/cycle.entity';
 import { Task, TaskStatus } from '../../task/entities/task.entity';
 import { Hollon } from '../../hollon/entities/hollon.entity';
 import { format, startOfWeek, endOfWeek } from 'date-fns';
 
-interface ProjectMetrics {
-  projectId: string;
-  projectName: string;
+interface CycleMetrics {
+  cycleId: string;
+  cycleName: string;
   totalTasks: number;
   completedTasks: number;
   inProgressTasks: number;
@@ -43,8 +43,8 @@ export class RetrospectiveService {
   constructor(
     @InjectRepository(MeetingRecord)
     private readonly meetingRepo: Repository<MeetingRecord>,
-    @InjectRepository(Project)
-    private readonly projectRepo: Repository<Project>,
+    @InjectRepository(Cycle)
+    private readonly cycleRepo: Repository<Cycle>,
     @InjectRepository(Task)
     private readonly taskRepo: Repository<Task>,
     @InjectRepository(Hollon)
@@ -59,10 +59,10 @@ export class RetrospectiveService {
     this.logger.log('Running retrospective...');
 
     try {
-      const completedProjects = await this.findCompletedThisWeek();
+      const completedCycles = await this.findCompletedThisWeek();
 
-      for (const project of completedProjects) {
-        await this.runRetrospectiveForProject(project);
+      for (const cycle of completedCycles) {
+        await this.runRetrospectiveForCycle(cycle);
       }
 
       this.logger.log('Retrospective completed');
@@ -72,41 +72,41 @@ export class RetrospectiveService {
   }
 
   /**
-   * Find projects completed this week
+   * Find cycles completed this week
    */
-  private async findCompletedThisWeek(): Promise<Project[]> {
+  private async findCompletedThisWeek(): Promise<Cycle[]> {
     const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
     const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
 
-    return this.projectRepo.find({
+    return this.cycleRepo.find({
       where: {
-        status: 'completed' as any,
-        updatedAt: Between(weekStart, weekEnd) as any,
+        status: CycleStatus.COMPLETED,
+        completedAt: Between(weekStart, weekEnd) as any,
       },
-      relations: ['organization'],
+      relations: ['project', 'project.organization'],
     });
   }
 
   /**
-   * Run retrospective for a specific project
+   * Run retrospective for a specific cycle
    */
-  async runRetrospectiveForProject(
-    project: Project,
-  ): Promise<MeetingRecord | null> {
-    this.logger.log(`Running retrospective for project: ${project.name}`);
+  async runRetrospectiveForCycle(cycle: Cycle): Promise<MeetingRecord | null> {
+    this.logger.log(
+      `Running retrospective for cycle: ${cycle.name || `Cycle ${cycle.number}`}`,
+    );
 
-    // Collect project metrics
-    const metrics = await this.collectProjectMetrics(project);
+    // Collect cycle metrics
+    const metrics = await this.collectCycleMetrics(cycle);
 
     // Collect hollon feedback
-    const feedback = await this.collectHollonFeedback(project);
+    const feedback = await this.collectHollonFeedback(cycle);
 
     // Analyze improvements
     const improvements = await this.analyzeImprovements(metrics, feedback);
 
     // Generate retrospective document
     const retroDoc = this.formatRetrospectiveDocument(
-      project,
+      cycle,
       metrics,
       feedback,
       improvements,
@@ -114,27 +114,27 @@ export class RetrospectiveService {
 
     // Save meeting record
     const meeting = await this.meetingRepo.save({
-      organizationId: project.organizationId,
+      organizationId: cycle.project.organizationId,
       teamId: null,
       meetingType: MeetingType.RETROSPECTIVE,
-      title: `Retrospective - ${project.name} - ${format(new Date(), 'yyyy-MM-dd')}`,
+      title: `Retrospective - ${cycle.name || `Cycle ${cycle.number}`} - ${format(new Date(), 'yyyy-MM-dd')}`,
       content: retroDoc,
       metadata: { metrics, feedback, improvements },
       completedAt: new Date(),
     });
 
-    this.logger.log(`Retrospective completed for project: ${project.name}`);
+    this.logger.log(
+      `Retrospective completed for cycle: ${cycle.name || `Cycle ${cycle.number}`}`,
+    );
     return meeting;
   }
 
   /**
-   * Collect project metrics
+   * Collect cycle metrics
    */
-  private async collectProjectMetrics(
-    project: Project,
-  ): Promise<ProjectMetrics> {
+  private async collectCycleMetrics(cycle: Cycle): Promise<CycleMetrics> {
     const tasks = await this.taskRepo.find({
-      where: { projectId: project.id },
+      where: { cycleId: cycle.id },
     });
 
     const completedTasks = tasks.filter(
@@ -173,8 +173,8 @@ export class RetrospectiveService {
       tasks.length > 0 ? completedTasks.length / tasks.length : 0;
 
     return {
-      projectId: project.id,
-      projectName: project.name,
+      cycleId: cycle.id,
+      cycleName: cycle.name || `Cycle ${cycle.number}`,
       totalTasks: tasks.length,
       completedTasks: completedTasks.length,
       inProgressTasks: inProgressTasks.length,
@@ -189,12 +189,10 @@ export class RetrospectiveService {
   /**
    * Collect feedback from hollons
    */
-  private async collectHollonFeedback(
-    project: Project,
-  ): Promise<HollonFeedback[]> {
-    // Get tasks for this project
+  private async collectHollonFeedback(cycle: Cycle): Promise<HollonFeedback[]> {
+    // Get tasks for this cycle
     const tasks = await this.taskRepo.find({
-      where: { projectId: project.id },
+      where: { cycleId: cycle.id },
     });
 
     // Group by hollon
@@ -253,7 +251,7 @@ export class RetrospectiveService {
    * Analyze improvements based on metrics and feedback
    */
   private async analyzeImprovements(
-    metrics: ProjectMetrics,
+    metrics: CycleMetrics,
     feedback: HollonFeedback[],
   ): Promise<Improvement[]> {
     const improvements: Improvement[] = [];
@@ -321,18 +319,18 @@ export class RetrospectiveService {
    * Format retrospective document
    */
   private formatRetrospectiveDocument(
-    project: Project,
-    metrics: ProjectMetrics,
+    cycle: Cycle,
+    metrics: CycleMetrics,
     feedback: HollonFeedback[],
     improvements: Improvement[],
   ): string {
     const lines: string[] = [];
 
-    lines.push(`# Retrospective - ${project.name}`);
+    lines.push(`# Retrospective - ${cycle.name || `Cycle ${cycle.number}`}`);
     lines.push(`Date: ${format(new Date(), 'yyyy-MM-dd')}`);
     lines.push('');
 
-    lines.push('## Project Metrics');
+    lines.push('## Cycle Metrics');
     lines.push(`- Total Tasks: ${metrics.totalTasks}`);
     lines.push(`- Completed: ${metrics.completedTasks}`);
     lines.push(`- In Progress: ${metrics.inProgressTasks}`);
@@ -384,7 +382,7 @@ export class RetrospectiveService {
       const lowPriority = improvements.filter((i) => i.priority === 'low');
 
       if (highPriority.length > 0) {
-        lines.push('### 🔴 High Priority');
+        lines.push('### High Priority');
         highPriority.forEach((imp) => {
           lines.push(`- [${imp.category}] ${imp.description}`);
         });
@@ -392,7 +390,7 @@ export class RetrospectiveService {
       }
 
       if (mediumPriority.length > 0) {
-        lines.push('### 🟡 Medium Priority');
+        lines.push('### Medium Priority');
         mediumPriority.forEach((imp) => {
           lines.push(`- [${imp.category}] ${imp.description}`);
         });
@@ -400,7 +398,7 @@ export class RetrospectiveService {
       }
 
       if (lowPriority.length > 0) {
-        lines.push('### 🟢 Low Priority');
+        lines.push('### Low Priority');
         lowPriority.forEach((imp) => {
           lines.push(`- [${imp.category}] ${imp.description}`);
         });

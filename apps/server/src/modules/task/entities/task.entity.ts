@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Project } from '../../project/entities/project.entity';
+import { Cycle } from '../../project/entities/cycle.entity';
 import { Hollon } from '../../hollon/entities/hollon.entity';
 
 export enum TaskStatus {
@@ -74,6 +75,9 @@ export class Task extends BaseEntity {
   @Column({ name: 'project_id' })
   projectId: string;
 
+  @Column({ name: 'cycle_id', nullable: true })
+  cycleId: string | null;
+
   @Column({ name: 'assigned_hollon_id', nullable: true })
   assignedHollonId: string | null;
 
@@ -136,6 +140,13 @@ export class Task extends BaseEntity {
   @ManyToOne(() => Project, (project) => project.tasks, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'project_id' })
   project: Project;
+
+  @ManyToOne(() => Cycle, (cycle) => cycle.tasks, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'cycle_id' })
+  cycle: Cycle;
 
   @ManyToOne(() => Hollon, (hollon) => hollon.assignedTasks, {
     nullable: true,

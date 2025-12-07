@@ -3,14 +3,14 @@ import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MeetingRecord, MeetingType } from '../entities/meeting-record.entity';
-import { Project } from '../../project/entities/project.entity';
+import { Cycle, CycleStatus } from '../../project/entities/cycle.entity';
 import { Task, TaskStatus } from '../../task/entities/task.entity';
 import { Hollon } from '../../hollon/entities/hollon.entity';
 import { format, subWeeks } from 'date-fns';
 
 interface LastSprintAnalysis {
-  projectId: string;
-  projectName: string;
+  cycleId: string;
+  cycleName: string;
   totalTasks: number;
   completedTasks: number;
   completionRate: number;
@@ -34,8 +34,8 @@ export class SprintPlanningService {
   constructor(
     @InjectRepository(MeetingRecord)
     private readonly meetingRepo: Repository<MeetingRecord>,
-    @InjectRepository(Project)
-    private readonly projectRepo: Repository<Project>,
+    @InjectRepository(Cycle)
+    private readonly cycleRepo: Repository<Cycle>,
     @InjectRepository(Task)
     private readonly taskRepo: Repository<Task>,
     @InjectRepository(Hollon)
@@ -50,13 +50,13 @@ export class SprintPlanningService {
     this.logger.log('Running sprint planning...');
 
     try {
-      const activeProjects = await this.projectRepo.find({
-        where: { status: 'active' as any },
-        relations: ['organization'],
+      const activeCycles = await this.cycleRepo.find({
+        where: { status: CycleStatus.ACTIVE },
+        relations: ['project', 'project.organization'],
       });
 
-      for (const project of activeProjects) {
-        await this.runPlanningForProject(project);
+      for (const cycle of activeCycles) {
+        await this.runPlanningForCycle(cycle);
       }
 
       this.logger.log('Sprint planning completed');
@@ -66,34 +66,38 @@ export class SprintPlanningService {
   }
 
   /**
-   * Run sprint planning for a specific project
+   * Run sprint planning for a specific cycle
    */
-  async runPlanningForProject(project: Project): Promise<MeetingRecord | null> {
-    this.logger.log(`Running sprint planning for project: ${project.name}`);
+  async runPlanningForCycle(cycle: Cycle): Promise<MeetingRecord | null> {
+    this.logger.log(
+      `Running sprint planning for cycle: ${cycle.name || `Cycle ${cycle.number}`}`,
+    );
 
     // Analyze last sprint
-    const lastSprintAnalysis = await this.analyzeLastSprint(project);
+    const lastSprintAnalysis = await this.analyzeLastSprint(cycle);
 
     // Select tasks from backlog based on velocity
     const selectedTasks = await this.selectTasksForSprint(
-      project,
+      cycle,
       lastSprintAnalysis.velocity,
     );
 
     if (selectedTasks.length === 0) {
-      this.logger.warn(`No tasks selected for project: ${project.name}`);
+      this.logger.warn(
+        `No tasks selected for cycle: ${cycle.name || `Cycle ${cycle.number}`}`,
+      );
       return null;
     }
 
     // Propose task assignments
     const assignments = await this.proposeAssignments(
       selectedTasks,
-      project.id,
+      cycle.projectId,
     );
 
     // Generate planning document
     const planningDoc = this.formatPlanningDocument(
-      project,
+      cycle,
       lastSprintAnalysis,
       selectedTasks,
       assignments,
@@ -101,38 +105,38 @@ export class SprintPlanningService {
 
     // Save meeting record
     const meeting = await this.meetingRepo.save({
-      organizationId: project.organizationId,
+      organizationId: cycle.project.organizationId,
       teamId: null,
       meetingType: MeetingType.SPRINT_PLANNING,
-      title: `Sprint Planning - ${project.name} - ${format(new Date(), 'yyyy-MM-dd')}`,
+      title: `Sprint Planning - ${cycle.name || `Cycle ${cycle.number}`} - ${format(new Date(), 'yyyy-MM-dd')}`,
       content: planningDoc,
       metadata: { lastSprintAnalysis, selectedTasks, assignments },
       completedAt: new Date(),
     });
 
-    this.logger.log(`Sprint planning completed for project: ${project.name}`);
+    this.logger.log(
+      `Sprint planning completed for cycle: ${cycle.name || `Cycle ${cycle.number}`}`,
+    );
     return meeting;
   }
 
   /**
    * Analyze last sprint to calculate velocity
    */
-  private async analyzeLastSprint(
-    project: Project,
-  ): Promise<LastSprintAnalysis> {
+  private async analyzeLastSprint(cycle: Cycle): Promise<LastSprintAnalysis> {
     const oneWeekAgo = subWeeks(new Date(), 1);
 
-    // Get tasks completed in the last week
+    // Get tasks completed in the last week for this cycle
     const completedTasks = await this.taskRepo
       .createQueryBuilder('task')
-      .where('task.projectId = :projectId', { projectId: project.id })
+      .where('task.cycleId = :cycleId', { cycleId: cycle.id })
       .andWhere('task.status = :status', { status: TaskStatus.COMPLETED })
       .andWhere('task.completedAt >= :since', { since: oneWeekAgo })
       .getMany();
 
-    // Get all tasks in project
+    // Get all tasks in cycle
     const allTasks = await this.taskRepo.count({
-      where: { projectId: project.id },
+      where: { cycleId: cycle.id },
     });
 
     const totalPoints = completedTasks.reduce((sum, task) => {
@@ -156,8 +160,8 @@ export class SprintPlanningService {
     const completionRate = allTasks > 0 ? completedTasks.length / allTasks : 0;
 
     return {
-      projectId: project.id,
-      projectName: project.name,
+      cycleId: cycle.id,
+      cycleName: cycle.name || `Cycle ${cycle.number}`,
       totalTasks: allTasks,
       completedTasks: completedTasks.length,
       completionRate,
@@ -170,12 +174,12 @@ export class SprintPlanningService {
    * Select tasks from backlog based on velocity
    */
   private async selectTasksForSprint(
-    project: Project,
+    cycle: Cycle,
     velocity: number,
   ): Promise<Task[]> {
-    // Get backlog tasks (ready status, ordered by priority)
+    // Get backlog tasks for this cycle's project (ready status, ordered by priority)
     const backlogTasks = await this.taskRepo.find({
-      where: { projectId: project.id, status: TaskStatus.READY },
+      where: { projectId: cycle.projectId, status: TaskStatus.READY },
       order: { priority: 'DESC', createdAt: 'ASC' },
       take: 20,
     });
@@ -247,14 +251,14 @@ export class SprintPlanningService {
    * Format planning document
    */
   private formatPlanningDocument(
-    project: Project,
+    cycle: Cycle,
     analysis: LastSprintAnalysis,
     selectedTasks: Task[],
     assignments: TaskAssignment[],
   ): string {
     const lines: string[] = [];
 
-    lines.push(`# Sprint Planning - ${project.name}`);
+    lines.push(`# Sprint Planning - ${cycle.name || `Cycle ${cycle.number}`}`);
     lines.push(`Date: ${format(new Date(), 'yyyy-MM-dd')}`);
     lines.push('');
 
