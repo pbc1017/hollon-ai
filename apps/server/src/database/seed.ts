@@ -10,6 +10,11 @@ import {
   ProjectStatus,
 } from '../modules/project/entities/project.entity';
 import { BrainProviderConfig } from '../modules/brain-provider/entities/brain-provider-config.entity';
+import {
+  Task,
+  TaskStatus,
+  TaskPriority,
+} from '../modules/task/entities/task.entity';
 
 // Load environment variables from project root
 const projectRoot = resolve(__dirname, '../../../..');
@@ -209,6 +214,57 @@ async function seed() {
       `✅ Project created: ${phase1Project.name} (${phase1Project.id})`,
     );
 
+    // 7. Create Tasks
+    console.log('📝 Creating tasks...');
+    const taskRepo = dataSource.getRepository(Task);
+
+    const task1 = taskRepo.create({
+      projectId: phase1Project.id,
+      title: 'README.md 파일 작성',
+      description: `프로젝트의 README.md 파일을 작성하세요.
+내용:
+- 프로젝트 소개 (Hollon-AI는 재귀적 멀티 에이전트 시스템입니다)
+- 주요 기능 (자율 태스크 실행, 협업 시스템, 품질 검증)
+- 빠른 시작 가이드
+- 기술 스택 (NestJS, TypeORM, PostgreSQL, Claude Code)`,
+      status: TaskStatus.READY,
+      priority: TaskPriority.P3_MEDIUM,
+      affectedFiles: ['README.md'],
+    });
+
+    const task2 = taskRepo.create({
+      projectId: phase1Project.id,
+      title: 'Organization 엔티티에 contextPrompt 필드 추가',
+      description: `Organization 엔티티에 contextPrompt 필드를 추가하여 조직 수준의 프롬프트를 저장할 수 있도록 합니다.
+요구사항:
+- organization.entity.ts 파일 수정
+- contextPrompt 필드 추가 (type: text, nullable: true)
+- 마이그레이션 파일 생성
+- 단위 테스트 작성`,
+      status: TaskStatus.READY,
+      priority: TaskPriority.P2_HIGH,
+      affectedFiles: [
+        'src/modules/organization/entities/organization.entity.ts',
+      ],
+    });
+
+    const task3 = taskRepo.create({
+      projectId: phase1Project.id,
+      title: 'Health check 엔드포인트 개선',
+      description: `Health check 엔드포인트를 개선하여 더 자세한 시스템 상태 정보를 제공합니다.
+추가할 정보:
+- 데이터베이스 연결 상태
+- 활성 홀론 수
+- 진행중인 태스크 수
+- 메모리 사용량`,
+      status: TaskStatus.READY,
+      priority: TaskPriority.P4_LOW,
+      affectedFiles: ['src/modules/health/health.controller.ts'],
+    });
+
+    await taskRepo.save([task1, task2, task3]);
+    console.log(`✅ Tasks created: 3 tasks for ${phase1Project.name}`);
+
     console.log('\n🎉 Database seeding completed successfully!');
     console.log('\n📊 Summary:');
     console.log(`   Organization: ${org.name}`);
@@ -216,10 +272,11 @@ async function seed() {
     console.log(`   Team: ${coreTeam.name}`);
     console.log(`   Hollons: 2 (Alpha, Beta)`);
     console.log(`   Project: ${phase1Project.name}`);
+    console.log(`   Tasks: 3 (README, Entity field, Health check)`);
     console.log('\n💡 Next steps:');
-    console.log('   1. Create tasks for the project');
-    console.log('   2. Start hollons to pull and execute tasks');
-    console.log('   3. Monitor progress and costs\n');
+    console.log('   1. Start the server: npm run dev');
+    console.log('   2. Hollons will automatically pull and execute tasks');
+    console.log('   3. Monitor progress via API or WebSocket\n');
   } catch (error) {
     console.error('❌ Error seeding database:', error);
     throw error;
