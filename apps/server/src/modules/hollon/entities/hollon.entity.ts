@@ -22,6 +22,11 @@ export enum HollonStatus {
   OFFLINE = 'offline',
 }
 
+export enum HollonLifecycle {
+  PERMANENT = 'permanent',
+  TEMPORARY = 'temporary',
+}
+
 @Entity('hollons')
 @Index(['organizationId', 'status'])
 export class Hollon extends BaseEntity {
@@ -34,6 +39,16 @@ export class Hollon extends BaseEntity {
     default: HollonStatus.IDLE,
   })
   status: HollonStatus;
+
+  @Column({
+    type: 'enum',
+    enum: HollonLifecycle,
+    default: HollonLifecycle.PERMANENT,
+  })
+  lifecycle: HollonLifecycle;
+
+  @Column({ name: 'created_by_hollon_id', nullable: true })
+  createdByHollonId: string | null;
 
   @Column({ name: 'organization_id' })
   organizationId: string;

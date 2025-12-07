@@ -19,6 +19,9 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
 import { ChannelModule } from './modules/channel/channel.module';
 import { MeetingModule } from './modules/meeting/meeting.module';
 import { CollaborationModule } from './modules/collaboration/collaboration.module';
+import { ApprovalModule } from './modules/approval/approval.module';
+import { CrossTeamCollaborationModule } from './modules/cross-team-collaboration/cross-team-collaboration.module';
+import { IncidentModule } from './modules/incident/incident.module';
 
 @Module({
   imports: [
@@ -56,6 +59,9 @@ import { CollaborationModule } from './modules/collaboration/collaboration.modul
     ChannelModule,
     MeetingModule,
     CollaborationModule,
+    ApprovalModule,
+    CrossTeamCollaborationModule,
+    IncidentModule,
   ],
 })
 export class AppModule {}
