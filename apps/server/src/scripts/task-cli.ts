@@ -118,6 +118,45 @@ async function findProject(
   return byNameContains || null;
 }
 
+// Find task by partial UUID or full UUID
+async function findTask(
+  taskRepo: any,
+  identifier: string,
+): Promise<Task | null> {
+  if (isUUID(identifier)) {
+    return taskRepo.findOne({ where: { id: identifier } });
+  }
+  // Try by partial UUID
+  const tasks = await taskRepo.find();
+  return (
+    tasks.find((t: Task) =>
+      t.id.toLowerCase().startsWith(identifier.toLowerCase()),
+    ) || null
+  );
+}
+
+// Find hollon by name or partial UUID
+async function findHollon(
+  hollonRepo: any,
+  identifier: string,
+): Promise<Hollon | null> {
+  if (isUUID(identifier)) {
+    return hollonRepo.findOne({ where: { id: identifier } });
+  }
+  const hollons = await hollonRepo.find();
+  // Try by name first
+  const byName = hollons.find(
+    (h: Hollon) => h.name.toLowerCase() === identifier.toLowerCase(),
+  );
+  if (byName) return byName;
+  // Try by partial UUID
+  return (
+    hollons.find((h: Hollon) =>
+      h.id.toLowerCase().startsWith(identifier.toLowerCase()),
+    ) || null
+  );
+}
+
 function formatTask(task: Task, verbose = false): string {
   const statusColor = statusColors[task.status] || colors.reset;
   const priorityColor = priorityColors[task.priority] || colors.reset;
@@ -178,8 +217,15 @@ async function main() {
           query.andWhere('task.status = :status', { status: flags.status });
         }
         if (flags.project) {
+          const project = await findProject(projectRepo, flags.project);
+          if (!project) {
+            console.error(
+              `${colors.red}Error: Project not found: ${flags.project}${colors.reset}`,
+            );
+            process.exit(1);
+          }
           query.andWhere('task.project_id = :projectId', {
-            projectId: flags.project,
+            projectId: project.id,
           });
         }
         if (flags.hollon) {
@@ -295,28 +341,33 @@ async function main() {
       }
 
       case 'assign': {
-        const [taskId, hollonId] = positional;
-        if (!taskId || !hollonId) {
+        const [taskIdentifier, hollonIdentifier] = positional;
+        if (!taskIdentifier || !hollonIdentifier) {
           console.error(
             `${colors.red}Error: Task ID and Hollon ID required${colors.reset}`,
           );
           console.log('Usage: npm run task -- assign TASK_ID HOLLON_ID');
+          console.log('  (supports partial UUID or hollon name)');
           process.exit(1);
         }
 
-        const task = await taskRepo.findOne({ where: { id: taskId } });
+        const task = await findTask(taskRepo, taskIdentifier);
         if (!task) {
-          console.error(`${colors.red}Error: Task not found${colors.reset}`);
+          console.error(
+            `${colors.red}Error: Task not found: ${taskIdentifier}${colors.reset}`,
+          );
           process.exit(1);
         }
 
-        const hollon = await hollonRepo.findOne({ where: { id: hollonId } });
+        const hollon = await findHollon(hollonRepo, hollonIdentifier);
         if (!hollon) {
-          console.error(`${colors.red}Error: Hollon not found${colors.reset}`);
+          console.error(
+            `${colors.red}Error: Hollon not found: ${hollonIdentifier}${colors.reset}`,
+          );
           process.exit(1);
         }
 
-        task.assignedHollonId = hollonId;
+        task.assignedHollonId = hollon.id;
         if (task.status === TaskStatus.PENDING) {
           task.status = TaskStatus.READY;
         }
