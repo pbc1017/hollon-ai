@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -108,24 +109,46 @@ export class HollonService {
 
     let depth = 0;
 
-    // 부모 홀론이 있으면 깊이 계산 및 체크
+    // 부모 홀론이 있으면 권한 검증 및 깊이 계산
     if (config.createdBy) {
       const parentHollon = await this.hollonRepo.findOne({
         where: { id: config.createdBy },
       });
 
-      if (parentHollon) {
-        // 안전장치: 최대 깊이 체크 (임시 홀론만)
-        if (parentHollon.lifecycle === HollonLifecycle.TEMPORARY) {
-          if (parentHollon.depth >= MAX_TEMPORARY_HOLLON_DEPTH) {
-            throw new BadRequestException(
-              `Maximum temporary hollon depth (${MAX_TEMPORARY_HOLLON_DEPTH}) exceeded`,
-            );
-          }
-          depth = parentHollon.depth + 1;
-        }
-        // 영구 홀론이 만든 임시 홀론은 depth 0부터 시작
+      // 권한 검증 1: 생성자 홀론 존재 확인
+      if (!parentHollon) {
+        throw new NotFoundException(
+          `Creator hollon #${config.createdBy} not found`,
+        );
       }
+
+      // 권한 검증 2: 조직 일치 확인
+      if (parentHollon.organizationId !== config.organizationId) {
+        throw new ForbiddenException(
+          'Cannot create hollon in a different organization',
+        );
+      }
+
+      // 권한 검증 3: 생성자 홀론 상태 확인 (활성 상태만 생성 가능)
+      if (
+        parentHollon.status !== HollonStatus.IDLE &&
+        parentHollon.status !== HollonStatus.WORKING
+      ) {
+        throw new BadRequestException(
+          `Creator hollon must be in IDLE or WORKING status, current: ${parentHollon.status}`,
+        );
+      }
+
+      // 안전장치: 최대 깊이 체크 (임시 홀론만)
+      if (parentHollon.lifecycle === HollonLifecycle.TEMPORARY) {
+        if (parentHollon.depth >= MAX_TEMPORARY_HOLLON_DEPTH) {
+          throw new BadRequestException(
+            `Maximum temporary hollon depth (${MAX_TEMPORARY_HOLLON_DEPTH}) exceeded`,
+          );
+        }
+        depth = parentHollon.depth + 1;
+      }
+      // 영구 홀론이 만든 임시 홀론은 depth 0부터 시작
     }
 
     // 임시 홀론만 자율 생성 가능
