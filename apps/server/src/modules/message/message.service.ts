@@ -99,6 +99,117 @@ export class MessageService {
   }
 
   /**
+   * Find a single message by ID
+   */
+  async findOne(id: string): Promise<Message> {
+    const message = await this.messageRepo.findOne({
+      where: { id },
+      relations: ['repliedTo'],
+    });
+
+    if (!message) {
+      throw new NotFoundException(`Message with ID ${id} not found`);
+    }
+
+    return message;
+  }
+
+  /**
+   * Find all messages with optional filters
+   */
+  async findAll(filters?: {
+    fromType?: string;
+    fromId?: string;
+    toType?: string;
+    toId?: string;
+    messageType?: string;
+    isRead?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<Message[]> {
+    const queryBuilder = this.messageRepo.createQueryBuilder('message');
+
+    if (filters?.fromType) {
+      queryBuilder.andWhere('message.from_type = :fromType', {
+        fromType: filters.fromType,
+      });
+    }
+
+    if (filters?.fromId) {
+      queryBuilder.andWhere('message.from_id = :fromId', {
+        fromId: filters.fromId,
+      });
+    }
+
+    if (filters?.toType) {
+      queryBuilder.andWhere('message.to_type = :toType', {
+        toType: filters.toType,
+      });
+    }
+
+    if (filters?.toId) {
+      queryBuilder.andWhere('message.to_id = :toId', {
+        toId: filters.toId,
+      });
+    }
+
+    if (filters?.messageType) {
+      queryBuilder.andWhere('message.message_type = :messageType', {
+        messageType: filters.messageType,
+      });
+    }
+
+    if (filters?.isRead !== undefined) {
+      queryBuilder.andWhere('message.is_read = :isRead', {
+        isRead: filters.isRead,
+      });
+    }
+
+    const limit = filters?.limit ?? 50;
+    const offset = filters?.offset ?? 0;
+
+    return queryBuilder
+      .orderBy('message.created_at', 'DESC')
+      .skip(offset)
+      .take(limit)
+      .getMany();
+  }
+
+  /**
+   * Update a message
+   */
+  async update(
+    id: string,
+    updates: Partial<
+      Pick<Message, 'content' | 'metadata' | 'requiresResponse'>
+    >,
+  ): Promise<Message> {
+    const message = await this.findOne(id);
+
+    if (updates.content !== undefined) {
+      message.content = updates.content;
+    }
+
+    if (updates.metadata !== undefined) {
+      message.metadata = updates.metadata;
+    }
+
+    if (updates.requiresResponse !== undefined) {
+      message.requiresResponse = updates.requiresResponse;
+    }
+
+    return this.messageRepo.save(message);
+  }
+
+  /**
+   * Remove a message
+   */
+  async remove(id: string): Promise<void> {
+    const message = await this.findOne(id);
+    await this.messageRepo.remove(message);
+  }
+
+  /**
    * Get conversation history between two participants
    */
   async getConversationHistory(
