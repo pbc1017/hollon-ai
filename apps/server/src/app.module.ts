@@ -12,6 +12,8 @@ import { ProjectModule } from './modules/project/project.module';
 import { TaskModule } from './modules/task/task.module';
 import { BrainProviderModule } from './modules/brain-provider/brain-provider.module';
 import { OrchestrationModule } from './modules/orchestration/orchestration.module';
+import { PostgresListenerModule } from './modules/postgres-listener/postgres-listener.module';
+import { MessageModule } from './modules/message/message.module';
 
 @Module({
   imports: [
@@ -30,6 +32,9 @@ import { OrchestrationModule } from './modules/orchestration/orchestration.modul
       inject: [ConfigService],
     }),
 
+    // Infrastructure modules (Global)
+    PostgresListenerModule,
+
     // Feature modules
     HealthModule,
     OrganizationModule,
@@ -40,6 +45,7 @@ import { OrchestrationModule } from './modules/orchestration/orchestration.modul
     TaskModule,
     BrainProviderModule,
     OrchestrationModule,
+    MessageModule,
   ],
 })
 export class AppModule {}
