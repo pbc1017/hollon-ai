@@ -22,6 +22,7 @@ import { CollaborationModule } from './modules/collaboration/collaboration.modul
 import { ApprovalModule } from './modules/approval/approval.module';
 import { CrossTeamCollaborationModule } from './modules/cross-team-collaboration/cross-team-collaboration.module';
 import { IncidentModule } from './modules/incident/incident.module';
+import { ConflictResolutionModule } from './modules/conflict-resolution/conflict-resolution.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { IncidentModule } from './modules/incident/incident.module';
     ApprovalModule,
     CrossTeamCollaborationModule,
     IncidentModule,
+    ConflictResolutionModule,
   ],
 })
 export class AppModule {}
