@@ -75,16 +75,16 @@ export class Task extends BaseEntity {
   @Column({ name: 'project_id' })
   projectId: string;
 
-  @Column({ name: 'cycle_id', nullable: true })
+  @Column({ name: 'cycle_id', type: 'uuid', nullable: true })
   cycleId: string | null;
 
-  @Column({ name: 'assigned_hollon_id', nullable: true })
+  @Column({ name: 'assigned_hollon_id', type: 'uuid', nullable: true })
   assignedHollonId: string | null;
 
-  @Column({ name: 'parent_task_id', nullable: true })
+  @Column({ name: 'parent_task_id', type: 'uuid', nullable: true })
   parentTaskId: string | null;
 
-  @Column({ name: 'creator_hollon_id', nullable: true })
+  @Column({ name: 'creator_hollon_id', type: 'uuid', nullable: true })
   creatorHollonId: string | null;
 
   // 안전장치: 서브태스크 재귀 제한
@@ -94,8 +94,7 @@ export class Task extends BaseEntity {
   // 안전장치: 파일 충돌 방지
   @Column({
     name: 'affected_files',
-    type: 'text',
-    array: true,
+    type: 'jsonb',
     default: [],
   })
   affectedFiles: string[];
@@ -103,8 +102,7 @@ export class Task extends BaseEntity {
   // 메타데이터
   @Column({
     name: 'acceptance_criteria',
-    type: 'text',
-    array: true,
+    type: 'jsonb',
     nullable: true,
   })
   acceptanceCriteria?: string[];
@@ -117,7 +115,7 @@ export class Task extends BaseEntity {
   })
   estimatedComplexity?: 'low' | 'medium' | 'high' | null;
 
-  @Column({ type: 'text', array: true, nullable: true })
+  @Column({ type: 'jsonb', nullable: true })
   tags?: string[];
 
   @Column({ name: 'retry_count', default: 0 })
