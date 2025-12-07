@@ -33,8 +33,33 @@ export class RealtimeGateway
   afterInit(): void {
     this.logger.log('WebSocket Gateway initialized');
 
-    // Subscribe to global channels
-    this.setupGlobalChannels();
+    // Subscribe to global channels after PostgreSQL LISTEN is ready
+    this.setupGlobalChannelsWithRetry();
+  }
+
+  private async setupGlobalChannelsWithRetry(
+    maxAttempts = 10,
+    delayMs = 1000,
+  ): Promise<void> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await this.setupGlobalChannels();
+        this.logger.log('Global channels subscribed successfully');
+        return;
+      } catch (error) {
+        if (attempt < maxAttempts) {
+          this.logger.warn(
+            `Failed to setup global channels (attempt ${attempt}/${maxAttempts}). Retrying in ${delayMs}ms...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        } else {
+          this.logger.error(
+            'Failed to setup global channels after max attempts',
+            error,
+          );
+        }
+      }
+    }
   }
 
   @UseGuards(WsAuthGuard)
@@ -145,36 +170,28 @@ export class RealtimeGateway
   /**
    * Setup global PostgreSQL LISTEN channels
    */
-  private setupGlobalChannels(): void {
+  private async setupGlobalChannels(): Promise<void> {
     // Listen to hollon status changes
-    this.pgListener
-      .subscribe('holon_status_changed', (payload) => {
-        this.server
-          .to(`org:${payload.organization_id}`)
-          .emit('holon_status_changed', payload);
-      })
-      .catch((err) => {
-        this.logger.error('Failed to subscribe to holon_status_changed', err);
-      });
+    await this.pgListener.subscribe('holon_status_changed', (payload) => {
+      this.server
+        .to(`org:${payload.organization_id}`)
+        .emit('holon_status_changed', payload);
+    });
 
     // Listen to approval requests
-    this.pgListener
-      .subscribe('approval_requested', (payload) => {
-        // Send to organization room
-        this.server
-          .to(`org:${payload.organization_id}`)
-          .emit('approval_requested', payload);
+    await this.pgListener.subscribe('approval_requested', (payload) => {
+      // Send to organization room
+      this.server
+        .to(`org:${payload.organization_id}`)
+        .emit('approval_requested', payload);
 
-        // Send to specific hollon if available
-        if (payload.holon_id) {
-          this.server
-            .to(`hollon:${payload.holon_id}`)
-            .emit('approval_requested', payload);
-        }
-      })
-      .catch((err) => {
-        this.logger.error('Failed to subscribe to approval_requested', err);
-      });
+      // Send to specific hollon if available
+      if (payload.holon_id) {
+        this.server
+          .to(`hollon:${payload.holon_id}`)
+          .emit('approval_requested', payload);
+      }
+    });
   }
 
   /**
