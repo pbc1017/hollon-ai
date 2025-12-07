@@ -50,6 +50,10 @@ export class Hollon extends BaseEntity {
   @Column({ name: 'created_by_hollon_id', type: 'uuid', nullable: true })
   createdByHollonId: string | null;
 
+  // 안전장치: 임시 홀론 재귀 생성 깊이 (영구 홀론은 depth 제한 없음)
+  @Column({ default: 0 })
+  depth: number;
+
   @Column({ name: 'organization_id' })
   organizationId: string;
 

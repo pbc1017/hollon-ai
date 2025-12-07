@@ -198,9 +198,15 @@ describe('HollonService', () => {
         ...config,
         lifecycle: HollonLifecycle.TEMPORARY,
         createdByHollonId: 'hollon-parent',
+        depth: 1,
         status: HollonStatus.IDLE,
       };
 
+      mockHollonRepository.findOne.mockResolvedValue({
+        id: 'hollon-parent',
+        lifecycle: HollonLifecycle.TEMPORARY,
+        depth: 0,
+      });
       mockHollonRepository.create.mockReturnValue(tempHollon);
       mockHollonRepository.save.mockResolvedValue({
         id: 'temp-hollon-id',
@@ -211,7 +217,64 @@ describe('HollonService', () => {
 
       expect(result.lifecycle).toBe(HollonLifecycle.TEMPORARY);
       expect(result.createdByHollonId).toBe('hollon-parent');
+      expect(result.depth).toBe(1);
       expect(mockApprovalService.create).not.toHaveBeenCalled();
+    });
+
+    it('should throw error if max temporary hollon depth exceeded', async () => {
+      const config = {
+        name: 'Too Deep Hollon',
+        organizationId: 'org-123',
+        teamId: 'team-123',
+        roleId: 'role-123',
+        brainProviderId: 'claude_code',
+        createdBy: 'hollon-parent',
+      };
+
+      mockHollonRepository.findOne.mockResolvedValue({
+        id: 'hollon-parent',
+        lifecycle: HollonLifecycle.TEMPORARY,
+        depth: 3,
+      });
+
+      await expect(service.createTemporary(config)).rejects.toThrow(
+        'Maximum temporary hollon depth (3) exceeded',
+      );
+    });
+
+    it('should allow permanent hollon to create temporary hollon at depth 0', async () => {
+      const config = {
+        name: 'Temp from Permanent',
+        organizationId: 'org-123',
+        teamId: 'team-123',
+        roleId: 'role-123',
+        brainProviderId: 'claude_code',
+        createdBy: 'permanent-hollon',
+      };
+
+      const tempHollon = {
+        ...config,
+        lifecycle: HollonLifecycle.TEMPORARY,
+        createdByHollonId: 'permanent-hollon',
+        depth: 0,
+        status: HollonStatus.IDLE,
+      };
+
+      mockHollonRepository.findOne.mockResolvedValue({
+        id: 'permanent-hollon',
+        lifecycle: HollonLifecycle.PERMANENT,
+        depth: 5, // 영구 홀론의 depth는 제한 없음
+      });
+      mockHollonRepository.create.mockReturnValue(tempHollon);
+      mockHollonRepository.save.mockResolvedValue({
+        id: 'temp-hollon-id',
+        ...tempHollon,
+      });
+
+      const result = await service.createTemporary(config);
+
+      expect(result.depth).toBe(0); // 영구 홀론이 만든 임시 홀론은 depth 0
+      expect(result.lifecycle).toBe(HollonLifecycle.TEMPORARY);
     });
   });
 

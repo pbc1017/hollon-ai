@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -97,8 +101,33 @@ export class HollonService {
   /**
    * 임시 홀론 생성 (자율 가능)
    * ssot.md 6.2: 임시 홀론 생성/종료는 홀론이 자율적으로 수행
+   * 안전장치: 최대 3단계 깊이까지만 임시 홀론 생성 가능
    */
   async createTemporary(config: CreateTemporaryHollonDto): Promise<Hollon> {
+    const MAX_TEMPORARY_HOLLON_DEPTH = 3;
+
+    let depth = 0;
+
+    // 부모 홀론이 있으면 깊이 계산 및 체크
+    if (config.createdBy) {
+      const parentHollon = await this.hollonRepo.findOne({
+        where: { id: config.createdBy },
+      });
+
+      if (parentHollon) {
+        // 안전장치: 최대 깊이 체크 (임시 홀론만)
+        if (parentHollon.lifecycle === HollonLifecycle.TEMPORARY) {
+          if (parentHollon.depth >= MAX_TEMPORARY_HOLLON_DEPTH) {
+            throw new BadRequestException(
+              `Maximum temporary hollon depth (${MAX_TEMPORARY_HOLLON_DEPTH}) exceeded`,
+            );
+          }
+          depth = parentHollon.depth + 1;
+        }
+        // 영구 홀론이 만든 임시 홀론은 depth 0부터 시작
+      }
+    }
+
     // 임시 홀론만 자율 생성 가능
     const hollon = this.hollonRepo.create({
       name: config.name,
@@ -109,6 +138,7 @@ export class HollonService {
       systemPrompt: config.systemPrompt || undefined,
       lifecycle: HollonLifecycle.TEMPORARY,
       createdByHollonId: config.createdBy || null,
+      depth,
       status: HollonStatus.IDLE,
     });
     return this.hollonRepo.save(hollon);

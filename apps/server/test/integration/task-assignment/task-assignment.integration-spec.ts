@@ -193,11 +193,10 @@ describe('Task Assignment Integration Tests', () => {
       expect(task.assignedHollonId).toBeNull();
 
       // Assign task to hollon
-      const assignedTask = await taskService.assignToHollon(
-        task.id,
-        testHollon1.id,
-      );
+      await taskService.assignToHollon(task.id, testHollon1.id);
 
+      // Reload task from DB to verify assignment
+      const assignedTask = await taskService.findOne(task.id);
       expect(assignedTask.assignedHollonId).toBe(testHollon1.id);
       expect(assignedTask.status).toBe(TaskStatus.IN_PROGRESS);
       expect(assignedTask.startedAt).toBeDefined();
@@ -304,11 +303,10 @@ describe('Task Assignment Integration Tests', () => {
         assignedHollonId: null,
       });
 
-      const retriedTask = await taskService.assignToHollon(
-        task.id,
-        testHollon2.id,
-      );
+      await taskService.assignToHollon(task.id, testHollon2.id);
 
+      // Reload to verify
+      const retriedTask = await taskService.findOne(task.id);
       expect(retriedTask.assignedHollonId).toBe(testHollon2.id);
       expect(retriedTask.status).toBe(TaskStatus.IN_PROGRESS);
       expect(retriedTask.retryCount).toBe(1); // Preserved from previous attempt
@@ -339,14 +337,8 @@ describe('Task Assignment Integration Tests', () => {
       expect(readyTasks2).toHaveLength(2);
 
       // Assign different tasks to different hollons
-      const assignedTask1 = await taskService.assignToHollon(
-        readyTasks1[0].id,
-        testHollon1.id,
-      );
-      const assignedTask2 = await taskService.assignToHollon(
-        readyTasks2[1].id,
-        testHollon2.id,
-      );
+      await taskService.assignToHollon(readyTasks1[0].id, testHollon1.id);
+      await taskService.assignToHollon(readyTasks2[1].id, testHollon2.id);
 
       // Update hollon statuses
       await hollonService.updateStatus(testHollon1.id, HollonStatus.WORKING);
@@ -355,6 +347,10 @@ describe('Task Assignment Integration Tests', () => {
       // Verify both hollons are working
       const hollon1 = await hollonService.findOne(testHollon1.id);
       const hollon2 = await hollonService.findOne(testHollon2.id);
+
+      // Reload tasks to verify
+      const assignedTask1 = await taskService.findOne(readyTasks1[0].id);
+      const assignedTask2 = await taskService.findOne(readyTasks2[1].id);
 
       expect(hollon1.status).toBe(HollonStatus.WORKING);
       expect(hollon2.status).toBe(HollonStatus.WORKING);
@@ -392,11 +388,10 @@ describe('Task Assignment Integration Tests', () => {
       expect(subtask.status).toBe(TaskStatus.PENDING);
 
       // Subtask can be assigned independently
-      const assignedSubtask = await taskService.assignToHollon(
-        subtask.id,
-        testHollon2.id,
-      );
+      await taskService.assignToHollon(subtask.id, testHollon2.id);
 
+      // Reload to verify
+      const assignedSubtask = await taskService.findOne(subtask.id);
       expect(assignedSubtask.assignedHollonId).toBe(testHollon2.id);
       expect(assignedSubtask.status).toBe(TaskStatus.IN_PROGRESS);
     });
