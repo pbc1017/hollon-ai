@@ -309,9 +309,11 @@ async function main() {
     const hollons = await hollonRepo.find();
     const hollonByName = new Map(hollons.map((h) => [h.name.toLowerCase(), h]));
 
-    // Create tasks
+    // Create tasks (first pass - create all tasks)
     const created: Task[] = [];
     const errors: string[] = [];
+    const taskByTitle = new Map<string, Task>();
+    const pendingDependencies: { task: Task; dependsOn: string[] }[] = [];
 
     for (const taskDef of backlog.tasks) {
       try {
@@ -344,8 +346,18 @@ async function main() {
         if (!dryRun) {
           const saved = await taskRepo.save(task);
           created.push(saved);
+          taskByTitle.set(saved.title.toLowerCase(), saved);
+
+          // Track dependencies for second pass
+          if (taskDef.dependsOn?.length) {
+            pendingDependencies.push({
+              task: saved,
+              dependsOn: taskDef.dependsOn,
+            });
+          }
         } else {
           created.push(task);
+          taskByTitle.set(task.title.toLowerCase(), task);
         }
 
         const priorityColor =
@@ -367,8 +379,40 @@ async function main() {
       }
     }
 
+    // Second pass - set up dependencies
+    if (!dryRun && pendingDependencies.length > 0) {
+      console.log(`\n${colors.cyan}Setting up dependencies...${colors.reset}`);
+
+      for (const { task, dependsOn } of pendingDependencies) {
+        const dependencies: Task[] = [];
+        for (const depTitle of dependsOn) {
+          const depTask = taskByTitle.get(depTitle.toLowerCase());
+          if (depTask) {
+            dependencies.push(depTask);
+          } else {
+            console.log(
+              `${colors.yellow}Warning: Dependency "${depTitle}" not found for task "${task.title}"${colors.reset}`,
+            );
+          }
+        }
+
+        if (dependencies.length > 0) {
+          task.dependencies = dependencies;
+          await taskRepo.save(task);
+          console.log(
+            `  ${colors.green}✓${colors.reset} ${task.title} ${colors.dim}→ depends on: ${dependencies.map((d) => d.title).join(', ')}${colors.reset}`,
+          );
+        }
+      }
+    }
+
     console.log(`\n${colors.bright}Summary${colors.reset}`);
     console.log(`  ${colors.green}Created: ${created.length}${colors.reset}`);
+    if (pendingDependencies.length > 0) {
+      console.log(
+        `  ${colors.cyan}Dependencies: ${pendingDependencies.length}${colors.reset}`,
+      );
+    }
     if (errors.length > 0) {
       console.log(`  ${colors.red}Errors: ${errors.length}${colors.reset}`);
     }

@@ -3,7 +3,9 @@ import {
   Column,
   ManyToOne,
   OneToMany,
+  ManyToMany,
   JoinColumn,
+  JoinTable,
   Index,
   Check,
 } from 'typeorm';
@@ -170,4 +172,18 @@ export class Task extends BaseEntity {
   })
   @JoinColumn({ name: 'creator_hollon_id' })
   creatorHollon: Hollon;
+
+  // Task Dependencies (DAG 구조)
+  // 이 태스크가 의존하는 태스크들 (선행 조건)
+  @ManyToMany(() => Task, (task) => task.dependentTasks)
+  @JoinTable({
+    name: 'task_dependencies',
+    joinColumn: { name: 'task_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'depends_on_id', referencedColumnName: 'id' },
+  })
+  dependencies: Task[];
+
+  // 이 태스크에 의존하는 태스크들 (후행 태스크)
+  @ManyToMany(() => Task, (task) => task.dependencies)
+  dependentTasks: Task[];
 }

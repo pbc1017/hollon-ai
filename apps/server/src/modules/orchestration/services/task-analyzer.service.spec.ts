@@ -46,6 +46,8 @@ describe('TaskAnalyzerService', () => {
     parentTask: undefined as any,
     subtasks: [],
     creatorHollon: undefined as any,
+    dependencies: [],
+    dependentTasks: [],
     ...overrides,
   });
 

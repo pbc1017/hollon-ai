@@ -80,6 +80,44 @@ function parseArgs(args: string[]): {
   return { command, positional, flags };
 }
 
+// UUID format validation helper
+const isUUID = (str: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+
+// Find project by name, partial UUID, or full UUID
+async function findProject(
+  projectRepo: any,
+  identifier?: string,
+): Promise<Project | null> {
+  if (!identifier) {
+    return projectRepo.findOne({ where: {} });
+  }
+
+  // Try full UUID first
+  if (isUUID(identifier)) {
+    return projectRepo.findOne({ where: { id: identifier } });
+  }
+
+  // Try by name (case-insensitive)
+  const projects = await projectRepo.find();
+  const byName = projects.find(
+    (p: Project) => p.name.toLowerCase() === identifier.toLowerCase(),
+  );
+  if (byName) return byName;
+
+  // Try by partial UUID (starts with)
+  const byPartialId = projects.find((p: Project) =>
+    p.id.toLowerCase().startsWith(identifier.toLowerCase()),
+  );
+  if (byPartialId) return byPartialId;
+
+  // Try by name containing the identifier
+  const byNameContains = projects.find((p: Project) =>
+    p.name.toLowerCase().includes(identifier.toLowerCase()),
+  );
+  return byNameContains || null;
+}
+
 function formatTask(task: Task, verbose = false): string {
   const statusColor = statusColors[task.status] || colors.reset;
   const priorityColor = priorityColors[task.priority] || colors.reset;
@@ -379,6 +417,226 @@ async function main() {
         break;
       }
 
+      case 'analyze': {
+        // 프로젝트 찾기 (이름, 부분 UUID, 전체 UUID 지원)
+        const project = await findProject(projectRepo, flags.project);
+        if (!project) {
+          console.error(
+            `${colors.red}Error: Project not found: ${flags.project || '(default)'}${colors.reset}`,
+          );
+          process.exit(1);
+        }
+        const projectId = project.id;
+        console.log(
+          `${colors.dim}Project: ${project.name} (${project.id.slice(0, 8)}...)${colors.reset}\n`,
+        );
+
+        // Ready/Pending 태스크 조회
+        const readyTasks = await taskRepo.find({
+          where: [
+            { projectId, status: TaskStatus.READY },
+            { projectId, status: TaskStatus.PENDING },
+          ],
+          relations: ['dependencies'],
+          order: { priority: 'ASC', createdAt: 'ASC' },
+        });
+
+        // 완료된 태스크 ID
+        const completedTasks = await taskRepo.find({
+          where: { projectId, status: TaskStatus.COMPLETED },
+          select: ['id'],
+        });
+        const completedIds = new Set(completedTasks.map((t) => t.id));
+
+        // 분석
+        const executableTasks: typeof readyTasks = [];
+        const blockedTasks: {
+          task: (typeof readyTasks)[0];
+          blockedBy: string[];
+        }[] = [];
+
+        for (const task of readyTasks) {
+          const deps = task.dependencies || [];
+          const uncompletedDeps = deps.filter((d) => !completedIds.has(d.id));
+          if (uncompletedDeps.length === 0) {
+            executableTasks.push(task);
+          } else {
+            blockedTasks.push({
+              task,
+              blockedBy: uncompletedDeps.map((d) => d.title),
+            });
+          }
+        }
+
+        // affectedFiles 충돌 감지
+        const fileToTasks = new Map<string, typeof readyTasks>();
+        for (const task of executableTasks) {
+          for (const file of task.affectedFiles || []) {
+            if (!fileToTasks.has(file)) fileToTasks.set(file, []);
+            fileToTasks.get(file)!.push(task);
+          }
+        }
+
+        const conflicts: { file: string; tasks: string[] }[] = [];
+        for (const [file, tasks] of fileToTasks.entries()) {
+          if (tasks.length > 1) {
+            conflicts.push({ file, tasks: tasks.map((t) => t.title) });
+          }
+        }
+
+        // 병렬 그룹 생성
+        const parallelGroups: (typeof readyTasks)[] = [];
+        const assigned = new Set<string>();
+
+        for (const task of executableTasks) {
+          if (assigned.has(task.id)) continue;
+
+          const group: typeof readyTasks = [task];
+          const usedFiles = new Set(task.affectedFiles || []);
+          assigned.add(task.id);
+
+          for (const other of executableTasks) {
+            if (assigned.has(other.id)) continue;
+            const otherFiles = other.affectedFiles || [];
+            if (!otherFiles.some((f) => usedFiles.has(f))) {
+              group.push(other);
+              otherFiles.forEach((f) => usedFiles.add(f));
+              assigned.add(other.id);
+            }
+          }
+
+          parallelGroups.push(group);
+        }
+
+        // 출력
+        console.log(
+          `\n${colors.bright}=== 병렬 실행 분석 ===${colors.reset}\n`,
+        );
+
+        console.log(
+          `${colors.cyan}실행 가능한 태스크 (${executableTasks.length}개):${colors.reset}`,
+        );
+        if (executableTasks.length === 0) {
+          console.log(`  ${colors.dim}(없음)${colors.reset}`);
+        } else {
+          executableTasks.forEach((t) => {
+            const pc = priorityColors[t.priority] || colors.reset;
+            const files = t.affectedFiles?.length
+              ? ` ${colors.dim}[${t.affectedFiles.join(', ')}]${colors.reset}`
+              : '';
+            console.log(
+              `  ${pc}[${t.priority}]${colors.reset} ${t.title}${files}`,
+            );
+          });
+        }
+
+        console.log(
+          `\n${colors.yellow}의존성으로 블록된 태스크 (${blockedTasks.length}개):${colors.reset}`,
+        );
+        if (blockedTasks.length === 0) {
+          console.log(`  ${colors.dim}(없음)${colors.reset}`);
+        } else {
+          blockedTasks.forEach(({ task, blockedBy }) => {
+            console.log(
+              `  ${colors.dim}[${task.priority}]${colors.reset} ${task.title}`,
+            );
+            console.log(
+              `       ${colors.red}← 대기: ${blockedBy.join(', ')}${colors.reset}`,
+            );
+          });
+        }
+
+        if (conflicts.length > 0) {
+          console.log(
+            `\n${colors.red}파일 충돌 (${conflicts.length}개):${colors.reset}`,
+          );
+          conflicts.forEach(({ file, tasks }) => {
+            console.log(
+              `  ${colors.yellow}${file}${colors.reset}: ${tasks.join(', ')}`,
+            );
+          });
+        }
+
+        console.log(
+          `\n${colors.green}병렬 실행 그룹 (${parallelGroups.length}개):${colors.reset}`,
+        );
+        parallelGroups.forEach((group, i) => {
+          console.log(
+            `\n  ${colors.bright}그룹 ${i + 1} (${group.length}개 동시 실행 가능):${colors.reset}`,
+          );
+          group.forEach((t) => {
+            const pc = priorityColors[t.priority] || colors.reset;
+            console.log(`    ${pc}[${t.priority}]${colors.reset} ${t.title}`);
+          });
+        });
+
+        // 홀론 목록
+        const idleHollons = await hollonRepo.find({
+          where: { status: HollonStatus.IDLE },
+        });
+        console.log(
+          `\n${colors.cyan}사용 가능한 홀론 (${idleHollons.length}개):${colors.reset}`,
+        );
+        idleHollons.forEach((h) => {
+          console.log(`  ${colors.green}●${colors.reset} ${h.name}`);
+        });
+
+        // 추천
+        if (parallelGroups.length > 0 && idleHollons.length > 0) {
+          const recommendedCount = Math.min(
+            parallelGroups[0].length,
+            idleHollons.length,
+          );
+          console.log(
+            `\n${colors.bright}추천: ${recommendedCount}개 태스크를 ${recommendedCount}개 홀론에 병렬 배정 가능${colors.reset}`,
+          );
+        }
+
+        console.log();
+        break;
+      }
+
+      case 'depend': {
+        const [taskId, dependsOnId] = positional;
+        if (!taskId || !dependsOnId) {
+          console.error(
+            `${colors.red}Error: Task ID and dependency ID required${colors.reset}`,
+          );
+          console.log('Usage: npm run task -- depend TASK_ID DEPENDS_ON_ID');
+          process.exit(1);
+        }
+
+        const task = await taskRepo.findOne({
+          where: { id: taskId },
+          relations: ['dependencies'],
+        });
+        if (!task) {
+          console.error(`${colors.red}Error: Task not found${colors.reset}`);
+          process.exit(1);
+        }
+
+        const dependsOn = await taskRepo.findOne({
+          where: { id: dependsOnId },
+        });
+        if (!dependsOn) {
+          console.error(
+            `${colors.red}Error: Dependency task not found${colors.reset}`,
+          );
+          process.exit(1);
+        }
+
+        if (!task.dependencies) task.dependencies = [];
+        if (!task.dependencies.find((d) => d.id === dependsOnId)) {
+          task.dependencies.push(dependsOn);
+          await taskRepo.save(task);
+        }
+
+        console.log(
+          `\n${colors.green}✓ Dependency added: "${task.title}" now depends on "${dependsOn.title}"${colors.reset}\n`,
+        );
+        break;
+      }
+
       case 'help':
       default:
         console.log(`
@@ -387,12 +645,12 @@ ${colors.bright}Task CLI - 태스크 관리 도구${colors.reset}
 ${colors.cyan}Commands:${colors.reset}
   list                        태스크 목록 조회
     --status STATUS           상태 필터 (pending, ready, in_progress, completed, failed)
-    --project PROJECT_ID      프로젝트 필터
+    --project NAME_OR_ID      프로젝트 필터 (이름 또는 UUID)
     --hollon HOLLON_ID        할당된 홀론 필터
     --verbose                 상세 정보 표시
 
   add "제목"                  새 태스크 추가
-    --project PROJECT_ID      프로젝트 ID (필수, 없으면 기본 프로젝트)
+    --project NAME_OR_ID      프로젝트 (이름 또는 UUID, 없으면 기본 프로젝트)
     --priority P1|P2|P3|P4    우선순위 (기본: P3)
     --status STATUS           상태 (기본: ready)
     --description "설명"      설명
@@ -411,6 +669,11 @@ ${colors.cyan}Commands:${colors.reset}
 
   delete TASK_ID              태스크 삭제
 
+  ${colors.green}analyze${colors.reset}                     병렬 실행 분석
+    --project NAME_OR_ID      프로젝트 (이름, 부분 UUID, 또는 전체 UUID)
+
+  ${colors.green}depend${colors.reset} TASK_ID DEPENDS_ON   태스크 의존성 추가
+
   hollons                     홀론 목록 조회
   projects                    프로젝트 목록 조회
 
@@ -419,6 +682,8 @@ ${colors.cyan}Examples:${colors.reset}
   npm run task -- add "MessageService 구현" --priority P2
   npm run task -- assign abc123 def456
   npm run task -- update abc123 --status in_progress
+  ${colors.green}npm run task -- analyze --project "Phase 2"${colors.reset}
+  ${colors.green}npm run task -- depend task1-id task2-id${colors.reset}
 `);
         break;
     }
