@@ -37,8 +37,8 @@ export class PostgresListenerService implements OnModuleInit, OnModuleDestroy {
       this.client = new pg.Client({
         host: this.configService.get<string>('DB_HOST'),
         port: this.configService.get<number>('DB_PORT'),
-        database: this.configService.get<string>('DB_DATABASE'),
-        user: this.configService.get<string>('DB_USERNAME'),
+        database: this.configService.get<string>('DB_NAME'),
+        user: this.configService.get<string>('DB_USER'),
         password: this.configService.get<string>('DB_PASSWORD'),
       });
 
