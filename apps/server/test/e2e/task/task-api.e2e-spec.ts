@@ -1,25 +1,25 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
-import { AppModule } from '../../src/app.module';
+import { AppModule } from '../../../src/app.module';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import {
   Task,
   TaskStatus,
   TaskPriority,
-} from '../../src/modules/task/entities/task.entity';
+} from '../../../src/modules/task/entities/task.entity';
 import {
   Project,
   ProjectStatus,
-} from '../../src/modules/project/entities/project.entity';
-import { Organization } from '../../src/modules/organization/entities/organization.entity';
+} from '../../../src/modules/project/entities/project.entity';
+import { Organization } from '../../../src/modules/organization/entities/organization.entity';
 import {
   Hollon,
   HollonStatus,
-} from '../../src/modules/hollon/entities/hollon.entity';
-import { Role } from '../../src/modules/role/entities/role.entity';
-import { Team } from '../../src/modules/team/entities/team.entity';
+} from '../../../src/modules/hollon/entities/hollon.entity';
+import { Role } from '../../../src/modules/role/entities/role.entity';
+import { Team } from '../../../src/modules/team/entities/team.entity';
 
 describe('Task API (e2e)', () => {
   let app: INestApplication;

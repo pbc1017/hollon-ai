@@ -1,17 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
-import { AppModule } from '../../src/app.module';
+import { AppModule } from '../../../src/app.module';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import {
   Hollon,
   HollonStatus,
   HollonLifecycle,
-} from '../../src/modules/hollon/entities/hollon.entity';
-import { Organization } from '../../src/modules/organization/entities/organization.entity';
-import { Role } from '../../src/modules/role/entities/role.entity';
-import { Team } from '../../src/modules/team/entities/team.entity';
+} from '../../../src/modules/hollon/entities/hollon.entity';
+import { Organization } from '../../../src/modules/organization/entities/organization.entity';
+import { Role } from '../../../src/modules/role/entities/role.entity';
+import { Team } from '../../../src/modules/team/entities/team.entity';
 
 describe('Hollon API (e2e)', () => {
   let app: INestApplication;

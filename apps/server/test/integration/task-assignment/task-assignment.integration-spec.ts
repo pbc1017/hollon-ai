@@ -1,29 +1,29 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TaskService } from '../../src/modules/task/task.service';
-import { HollonService } from '../../src/modules/hollon/hollon.service';
+import { TaskService } from '../../../src/modules/task/task.service';
+import { HollonService } from '../../../src/modules/hollon/hollon.service';
 import {
   Task,
   TaskStatus,
   TaskPriority,
-} from '../../src/modules/task/entities/task.entity';
+} from '../../../src/modules/task/entities/task.entity';
 import {
   Hollon,
   HollonStatus,
   HollonLifecycle,
-} from '../../src/modules/hollon/entities/hollon.entity';
+} from '../../../src/modules/hollon/entities/hollon.entity';
 import {
   Project,
   ProjectStatus,
-} from '../../src/modules/project/entities/project.entity';
-import { Organization } from '../../src/modules/organization/entities/organization.entity';
-import { Role } from '../../src/modules/role/entities/role.entity';
-import { Team } from '../../src/modules/team/entities/team.entity';
+} from '../../../src/modules/project/entities/project.entity';
+import { Organization } from '../../../src/modules/organization/entities/organization.entity';
+import { Role } from '../../../src/modules/role/entities/role.entity';
+import { Team } from '../../../src/modules/team/entities/team.entity';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { ApprovalService } from '../../src/modules/approval/approval.service';
-import { ApprovalRequest } from '../../src/modules/approval/entities/approval-request.entity';
+import { ApprovalService } from '../../../src/modules/approval/approval.service';
+import { ApprovalRequest } from '../../../src/modules/approval/entities/approval-request.entity';
 
 describe('Task Assignment Integration Tests', () => {
   let module: TestingModule;
@@ -59,7 +59,7 @@ describe('Task Assignment Integration Tests', () => {
             username: configService.get<string>('DB_USER'),
             password: configService.get<string>('DB_PASSWORD'),
             database: configService.get<string>('DB_NAME'),
-            entities: [__dirname + '/../../src/**/*.entity{.ts,.js}'],
+            entities: [__dirname + '/../../../src/**/*.entity{.ts,.js}'],
             synchronize: false,
           }),
         }),
@@ -189,8 +189,8 @@ describe('Task Assignment Integration Tests', () => {
         priority: TaskPriority.P3_MEDIUM,
       });
 
-      expect(task.status).toBe(TaskStatus.READY);
-      expect(task.assignedHollonId).toBeUndefined();
+      expect(task.status).toBe(TaskStatus.PENDING);
+      expect(task.assignedHollonId).toBeNull();
 
       // Assign task to hollon
       const assignedTask = await taskService.assignToHollon(
@@ -201,6 +201,9 @@ describe('Task Assignment Integration Tests', () => {
       expect(assignedTask.assignedHollonId).toBe(testHollon1.id);
       expect(assignedTask.status).toBe(TaskStatus.IN_PROGRESS);
       expect(assignedTask.startedAt).toBeDefined();
+
+      // Update hollon status (in real flow, orchestrator would do this)
+      await hollonService.updateStatus(testHollon1.id, HollonStatus.WORKING);
 
       // Verify hollon status updated
       const hollon = await hollonService.findOne(testHollon1.id);
@@ -257,6 +260,7 @@ describe('Task Assignment Integration Tests', () => {
       });
 
       await taskService.assignToHollon(task.id, testHollon1.id);
+      await hollonService.updateStatus(testHollon1.id, HollonStatus.WORKING);
 
       // Verify initial state
       let hollon = await hollonService.findOne(testHollon1.id);
@@ -294,9 +298,9 @@ describe('Task Assignment Integration Tests', () => {
       expect(failedTask.retryCount).toBe(1);
 
       // Retry by assigning to another hollon
-      // First, manually reset status to READY for retry
+      // First, manually reset status to PENDING for retry
       await taskRepo.update(task.id, {
-        status: TaskStatus.READY,
+        status: TaskStatus.PENDING,
         assignedHollonId: null,
       });
 
@@ -344,6 +348,10 @@ describe('Task Assignment Integration Tests', () => {
         testHollon2.id,
       );
 
+      // Update hollon statuses
+      await hollonService.updateStatus(testHollon1.id, HollonStatus.WORKING);
+      await hollonService.updateStatus(testHollon2.id, HollonStatus.WORKING);
+
       // Verify both hollons are working
       const hollon1 = await hollonService.findOne(testHollon1.id);
       const hollon2 = await hollonService.findOne(testHollon2.id);
@@ -381,7 +389,7 @@ describe('Task Assignment Integration Tests', () => {
 
       expect(subtask.depth).toBe(1);
       expect(subtask.parentTaskId).toBe(parentTask.id);
-      expect(subtask.status).toBe(TaskStatus.READY);
+      expect(subtask.status).toBe(TaskStatus.PENDING);
 
       // Subtask can be assigned independently
       const assignedSubtask = await taskService.assignToHollon(
