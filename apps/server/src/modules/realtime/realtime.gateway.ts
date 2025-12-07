@@ -1,0 +1,264 @@
+import {
+  WebSocketGateway,
+  WebSocketServer,
+  OnGatewayInit,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+  SubscribeMessage,
+} from '@nestjs/websockets';
+import { Logger, UseGuards } from '@nestjs/common';
+import { Server, Socket } from 'socket.io';
+import { PostgresListenerService } from '../postgres-listener/postgres-listener.service';
+import { WsAuthGuard } from './guards/ws-auth.guard';
+
+@WebSocketGateway({ cors: true })
+export class RealtimeGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
+  @WebSocketServer()
+  server: Server;
+
+  private readonly logger = new Logger(RealtimeGateway.name);
+  private readonly hollonSubscriptions = new Map<
+    string,
+    Set<(payload: any) => void>
+  >();
+  private readonly channelSubscriptions = new Map<
+    string,
+    Set<(payload: any) => void>
+  >();
+
+  constructor(private readonly pgListener: PostgresListenerService) {}
+
+  afterInit(): void {
+    this.logger.log('WebSocket Gateway initialized');
+
+    // Subscribe to global channels
+    this.setupGlobalChannels();
+  }
+
+  @UseGuards(WsAuthGuard)
+  handleConnection(client: Socket): void {
+    const clientId = client.id;
+    const organizationId = (client as any).organizationId;
+    const hollonId = (client as any).hollonId;
+
+    this.logger.log(
+      `Client connected: ${clientId} (org: ${organizationId}, hollon: ${hollonId})`,
+    );
+
+    // Join organization room
+    if (organizationId) {
+      client.join(`org:${organizationId}`);
+      this.logger.debug(`Client ${clientId} joined org:${organizationId}`);
+    }
+
+    // Join hollon room
+    if (hollonId) {
+      client.join(`hollon:${hollonId}`);
+      this.logger.debug(`Client ${clientId} joined hollon:${hollonId}`);
+    }
+  }
+
+  handleDisconnect(client: Socket): void {
+    const clientId = client.id;
+    const hollonId = (client as any).hollonId;
+
+    this.logger.log(`Client disconnected: ${clientId}`);
+
+    // Cleanup hollon-specific subscriptions
+    if (hollonId) {
+      this.cleanupHollonSubscriptions(hollonId);
+    }
+  }
+
+  /**
+   * Subscribe to hollon-specific channels
+   * Event: subscribe_holon
+   */
+  @SubscribeMessage('subscribe_holon')
+  handleSubscribeHolon(client: Socket, hollonId: string): void {
+    client.join(`hollon:${hollonId}`);
+    this.logger.debug(`Client ${client.id} subscribed to hollon:${hollonId}`);
+
+    // Subscribe to hollon's message channel
+    this.subscribeToHollonMessages(hollonId);
+  }
+
+  /**
+   * Unsubscribe from hollon-specific channels
+   * Event: unsubscribe_holon
+   */
+  @SubscribeMessage('unsubscribe_holon')
+  handleUnsubscribeHolon(client: Socket, hollonId: string): void {
+    client.leave(`hollon:${hollonId}`);
+    this.logger.debug(
+      `Client ${client.id} unsubscribed from hollon:${hollonId}`,
+    );
+  }
+
+  /**
+   * Subscribe to team channels
+   * Event: subscribe_team
+   */
+  @SubscribeMessage('subscribe_team')
+  handleSubscribeTeam(client: Socket, teamId: string): void {
+    client.join(`team:${teamId}`);
+    this.logger.debug(`Client ${client.id} subscribed to team:${teamId}`);
+  }
+
+  /**
+   * Unsubscribe from team channels
+   * Event: unsubscribe_team
+   */
+  @SubscribeMessage('unsubscribe_team')
+  handleUnsubscribeTeam(client: Socket, teamId: string): void {
+    client.leave(`team:${teamId}`);
+    this.logger.debug(`Client ${client.id} unsubscribed from team:${teamId}`);
+  }
+
+  /**
+   * Subscribe to channel
+   * Event: subscribe_channel
+   */
+  @SubscribeMessage('subscribe_channel')
+  handleSubscribeChannel(client: Socket, channelId: string): void {
+    client.join(`channel:${channelId}`);
+    this.logger.debug(`Client ${client.id} subscribed to channel:${channelId}`);
+
+    // Subscribe to channel message notifications
+    this.subscribeToChannelMessages(channelId);
+  }
+
+  /**
+   * Unsubscribe from channel
+   * Event: unsubscribe_channel
+   */
+  @SubscribeMessage('unsubscribe_channel')
+  handleUnsubscribeChannel(client: Socket, channelId: string): void {
+    client.leave(`channel:${channelId}`);
+    this.logger.debug(
+      `Client ${client.id} unsubscribed from channel:${channelId}`,
+    );
+  }
+
+  /**
+   * Setup global PostgreSQL LISTEN channels
+   */
+  private setupGlobalChannels(): void {
+    // Listen to hollon status changes
+    this.pgListener
+      .subscribe('holon_status_changed', (payload) => {
+        this.server
+          .to(`org:${payload.organization_id}`)
+          .emit('holon_status_changed', payload);
+      })
+      .catch((err) => {
+        this.logger.error('Failed to subscribe to holon_status_changed', err);
+      });
+
+    // Listen to approval requests
+    this.pgListener
+      .subscribe('approval_requested', (payload) => {
+        // Send to organization room
+        this.server
+          .to(`org:${payload.organization_id}`)
+          .emit('approval_requested', payload);
+
+        // Send to specific hollon if available
+        if (payload.holon_id) {
+          this.server
+            .to(`hollon:${payload.holon_id}`)
+            .emit('approval_requested', payload);
+        }
+      })
+      .catch((err) => {
+        this.logger.error('Failed to subscribe to approval_requested', err);
+      });
+  }
+
+  /**
+   * Subscribe to hollon-specific message notifications
+   */
+  private async subscribeToHollonMessages(hollonId: string): Promise<void> {
+    const channel = `holon_message_${hollonId}`;
+
+    // Avoid duplicate subscriptions
+    if (this.hollonSubscriptions.has(channel)) {
+      return;
+    }
+
+    const handler = (payload: any) => {
+      this.server.to(`hollon:${hollonId}`).emit('message_received', payload);
+    };
+
+    try {
+      await this.pgListener.subscribe(channel, handler);
+
+      // Store handler for cleanup
+      if (!this.hollonSubscriptions.has(channel)) {
+        this.hollonSubscriptions.set(channel, new Set());
+      }
+      this.hollonSubscriptions.get(channel)!.add(handler);
+
+      this.logger.debug(`Subscribed to ${channel}`);
+    } catch (error) {
+      this.logger.error(`Failed to subscribe to ${channel}`, error);
+    }
+  }
+
+  /**
+   * Subscribe to channel message notifications
+   */
+  private async subscribeToChannelMessages(channelId: string): Promise<void> {
+    const channel = `channel_message_${channelId}`;
+
+    // Avoid duplicate subscriptions
+    if (this.channelSubscriptions.has(channel)) {
+      return;
+    }
+
+    const handler = (payload: any) => {
+      this.server.to(`channel:${channelId}`).emit('channel_message', payload);
+    };
+
+    try {
+      await this.pgListener.subscribe(channel, handler);
+
+      // Store handler for cleanup
+      if (!this.channelSubscriptions.has(channel)) {
+        this.channelSubscriptions.set(channel, new Set());
+      }
+      this.channelSubscriptions.get(channel)!.add(handler);
+
+      this.logger.debug(`Subscribed to ${channel}`);
+    } catch (error) {
+      this.logger.error(`Failed to subscribe to ${channel}`, error);
+    }
+  }
+
+  /**
+   * Cleanup hollon subscriptions when no clients are connected
+   */
+  private async cleanupHollonSubscriptions(hollonId: string): Promise<void> {
+    const room = this.server.sockets.adapter.rooms.get(`hollon:${hollonId}`);
+
+    // If no more clients in this hollon room, unsubscribe
+    if (!room || room.size === 0) {
+      const channel = `holon_message_${hollonId}`;
+      const handlers = this.hollonSubscriptions.get(channel);
+
+      if (handlers) {
+        for (const handler of handlers) {
+          try {
+            await this.pgListener.unsubscribe(channel, handler);
+          } catch (error) {
+            this.logger.error(`Failed to unsubscribe from ${channel}`, error);
+          }
+        }
+        this.hollonSubscriptions.delete(channel);
+        this.logger.debug(`Unsubscribed from ${channel}`);
+      }
+    }
+  }
+}

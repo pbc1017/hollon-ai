@@ -14,6 +14,8 @@ import { BrainProviderModule } from './modules/brain-provider/brain-provider.mod
 import { OrchestrationModule } from './modules/orchestration/orchestration.module';
 import { PostgresListenerModule } from './modules/postgres-listener/postgres-listener.module';
 import { MessageModule } from './modules/message/message.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
+import { ChannelModule } from './modules/channel/channel.module';
 
 @Module({
   imports: [
@@ -46,6 +48,8 @@ import { MessageModule } from './modules/message/message.module';
     BrainProviderModule,
     OrchestrationModule,
     MessageModule,
+    RealtimeModule,
+    ChannelModule,
   ],
 })
 export class AppModule {}
