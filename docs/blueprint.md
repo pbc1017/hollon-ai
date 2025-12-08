@@ -341,7 +341,97 @@ CREATE TABLE conversation_history (
 );
 ```
 
-### 1.3 Project & Task Tables
+### 1.3 Goal Tables
+
+#### goals
+
+```sql
+CREATE TABLE goals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    team_id UUID REFERENCES teams(id) ON DELETE SET NULL,
+    parent_goal_id UUID REFERENCES goals(id) ON DELETE SET NULL,
+
+    -- 목표 정보
+    title VARCHAR(500) NOT NULL,
+    description TEXT,
+
+    -- OKR 타입
+    goal_type VARCHAR(20) NOT NULL DEFAULT 'objective'
+        CHECK (goal_type IN ('objective', 'key_result')),
+
+    -- 상태
+    status VARCHAR(20) NOT NULL DEFAULT 'draft'
+        CHECK (status IN ('draft', 'active', 'paused', 'completed', 'cancelled', 'archived')),
+
+    -- 진행도
+    progress_percent DECIMAL(5, 2) DEFAULT 0.0 CHECK (progress_percent >= 0 AND progress_percent <= 100),
+
+    -- 기간
+    start_date DATE,
+    target_date DATE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+
+    -- 우선순위
+    priority VARCHAR(20) DEFAULT 'medium'
+        CHECK (priority IN ('low', 'medium', 'high', 'critical')),
+
+    -- 측정 기준 (Key Result용)
+    metric_type VARCHAR(20)
+        CHECK (metric_type IN ('binary', 'numeric', 'percentage', 'custom')),
+    target_value DECIMAL(15, 4),
+    current_value DECIMAL(15, 4) DEFAULT 0,
+    unit VARCHAR(50),
+
+    -- 성공 기준
+    success_criteria JSONB DEFAULT '[]',
+
+    -- 소유자
+    owner_hollon_id UUID REFERENCES hollons(id) ON DELETE SET NULL,
+
+    -- 자동 분해 관련
+    auto_decomposed BOOLEAN DEFAULT false,
+    decomposition_strategy VARCHAR(50),  -- 'task_based', 'milestone_based', 'hybrid'
+
+    -- 자율 생성 관련 (Phase 5+)
+    auto_generated BOOLEAN DEFAULT false,
+    proposal_id UUID,  -- GoalProposal ID (미래)
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_by_hollon_id UUID REFERENCES hollons(id) ON DELETE SET NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_goals_org ON goals(organization_id);
+CREATE INDEX idx_goals_team ON goals(team_id);
+CREATE INDEX idx_goals_parent ON goals(parent_goal_id);
+CREATE INDEX idx_goals_status ON goals(status);
+CREATE INDEX idx_goals_owner ON goals(owner_hollon_id);
+CREATE INDEX idx_goals_auto_generated ON goals(auto_generated) WHERE auto_generated = true;
+```
+
+#### goal_progress_records
+
+```sql
+CREATE TABLE goal_progress_records (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    goal_id UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+
+    progress_percent DECIMAL(5, 2) NOT NULL,
+    current_value DECIMAL(15, 4),
+
+    note TEXT,
+    recorded_by UUID REFERENCES hollons(id) ON DELETE SET NULL,
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_goal_progress_goal ON goal_progress_records(goal_id);
+CREATE INDEX idx_goal_progress_date ON goal_progress_records(recorded_at DESC);
+```
+
+---
+
+### 1.4 Project & Task Tables
 
 #### projects
 
@@ -350,6 +440,9 @@ CREATE TABLE projects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     team_id UUID REFERENCES teams(id) ON DELETE SET NULL,
+
+    -- Goal 연결 (Phase 3+)
+    goal_id UUID REFERENCES goals(id) ON DELETE SET NULL,
 
     name VARCHAR(255) NOT NULL,
     identifier VARCHAR(10) NOT NULL,
@@ -372,9 +465,17 @@ CREATE TABLE projects (
 
 CREATE INDEX idx_projects_org ON projects(organization_id);
 CREATE INDEX idx_projects_team ON projects(team_id);
+CREATE INDEX idx_projects_goal ON projects(goal_id);
 ```
 
 #### milestones
+
+**Milestone은 위계적 부모-자식 관계가 아닌, Task의 선택적 그룹핑(폴더) 역할입니다:**
+
+- Project 내에서 Task를 논리적으로 묶는 컨테이너
+- Task의 `milestone_id`는 nullable - Milestone 없이도 Task 존재 가능
+- 사용 예시: "Phase 1", "MVP", "Beta Release" 등
+- Linear의 Milestone과 유사한 역할
 
 ```sql
 CREATE TABLE milestones (
@@ -434,7 +535,8 @@ CREATE INDEX idx_cycles_status ON cycles(status);
 ```sql
 CREATE TABLE tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID REFERENCES projects(id) ON DELETE CASCADE,  -- NULL 허용: 독립 Task 가능
 
     parent_task_id UUID REFERENCES tasks(id) ON DELETE CASCADE,
     milestone_id UUID REFERENCES milestones(id) ON DELETE SET NULL,
@@ -467,11 +569,13 @@ CREATE TABLE tasks (
     cancelled_at TIMESTAMP WITH TIME ZONE,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
-    UNIQUE(project_id, number)
+    UNIQUE(organization_id, number)  -- Organization 범위로 변경 (Project 없는 Task 지원)
 );
 
 -- 파일 충돌 감지용 인덱스
 CREATE INDEX idx_tasks_affected_files ON tasks USING GIN(affected_files);
+CREATE INDEX idx_tasks_organization ON tasks(organization_id);
+CREATE INDEX idx_tasks_project ON tasks(project_id);  -- NULL 가능하므로 부분 인덱스 고려 가능
 
 CREATE TABLE task_dependencies (
     task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
