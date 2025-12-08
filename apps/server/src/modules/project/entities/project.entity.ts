@@ -10,6 +10,7 @@ import { BaseEntity } from '../../../common/entities/base.entity';
 import { Organization } from '../../organization/entities/organization.entity';
 import { Task } from '../../task/entities/task.entity';
 import { Document } from '../../document/entities/document.entity';
+import { Goal } from '../../goal/entities/goal.entity';
 
 export enum ProjectStatus {
   ACTIVE = 'active',
@@ -46,6 +47,9 @@ export class Project extends BaseEntity {
   @Column({ type: 'jsonb', nullable: true, default: {}, name: 'metadata' })
   metadata: Record<string, unknown>;
 
+  @Column({ name: 'goal_id', nullable: true })
+  goalId: string;
+
   // Relations
   @ManyToOne(() => Organization, (org) => org.projects, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organization_id' })
@@ -56,4 +60,11 @@ export class Project extends BaseEntity {
 
   @OneToMany(() => Document, (doc) => doc.project)
   documents: Document[];
+
+  @ManyToOne(() => Goal, (goal) => goal.projects, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'goal_id' })
+  goal: Goal;
 }
