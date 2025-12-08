@@ -13,9 +13,13 @@ export class WsAuthGuard implements CanActivate {
     const client: Socket = context.switchToWs().getClient<Socket>();
 
     // TODO: Implement authentication
-    // For now, extract user/hollon info from query params or headers
-    const hollonId = client.handshake.query.hollonId as string;
-    const organizationId = client.handshake.query.organizationId as string;
+    // Extract user/hollon info from query params, auth object, or headers
+    const hollonId =
+      (client.handshake.auth?.hollonId as string) ||
+      (client.handshake.query.hollonId as string);
+    const organizationId =
+      (client.handshake.auth?.organizationId as string) ||
+      (client.handshake.query.organizationId as string);
 
     if (!organizationId) {
       throw new WsException('Missing organizationId in connection');

@@ -6,10 +6,9 @@ import {
   OnGatewayDisconnect,
   SubscribeMessage,
 } from '@nestjs/websockets';
-import { Logger, UseGuards } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { PostgresListenerService } from '../postgres-listener/postgres-listener.service';
-import { WsAuthGuard } from './guards/ws-auth.guard';
 
 @WebSocketGateway({ cors: true })
 export class RealtimeGateway
@@ -27,6 +26,7 @@ export class RealtimeGateway
     string,
     Set<(payload: any) => void>
   >();
+  private globalChannelsReady = false;
 
   constructor(private readonly pgListener: PostgresListenerService) {}
 
@@ -44,6 +44,7 @@ export class RealtimeGateway
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         await this.setupGlobalChannels();
+        this.globalChannelsReady = true;
         this.logger.log('Global channels subscribed successfully');
         return;
       } catch (error) {
@@ -62,21 +63,34 @@ export class RealtimeGateway
     }
   }
 
-  @UseGuards(WsAuthGuard)
   handleConnection(client: Socket): void {
     const clientId = client.id;
-    const organizationId = (client as any).organizationId;
-    const hollonId = (client as any).hollonId;
+
+    // Extract organizationId and hollonId from handshake
+    const hollonId =
+      (client.handshake.auth?.hollonId as string) ||
+      (client.handshake.query.hollonId as string);
+    const organizationId =
+      (client.handshake.auth?.organizationId as string) ||
+      (client.handshake.query.organizationId as string);
 
     this.logger.log(
       `Client connected: ${clientId} (org: ${organizationId}, hollon: ${hollonId})`,
     );
 
-    // Join organization room
-    if (organizationId) {
-      client.join(`org:${organizationId}`);
-      this.logger.debug(`Client ${clientId} joined org:${organizationId}`);
+    if (!organizationId) {
+      this.logger.error(`Client ${clientId} has no organizationId!`);
+      client.disconnect();
+      return;
     }
+
+    // Attach to client for later use
+    (client as any).organizationId = organizationId;
+    (client as any).hollonId = hollonId;
+
+    // Join organization room
+    client.join(`org:${organizationId}`);
+    this.logger.debug(`Client ${clientId} joined org:${organizationId}`);
 
     // Join hollon room
     if (hollonId) {
@@ -173,17 +187,31 @@ export class RealtimeGateway
   private async setupGlobalChannels(): Promise<void> {
     // Listen to hollon status changes
     await this.pgListener.subscribe('holon_status_changed', (payload) => {
+      this.logger.debug(
+        `Received holon_status_changed event:`,
+        JSON.stringify(payload),
+      );
       this.server
         .to(`org:${payload.organization_id}`)
         .emit('holon_status_changed', payload);
+      this.logger.debug(
+        `Emitted holon_status_changed to org:${payload.organization_id}`,
+      );
     });
 
     // Listen to approval requests
     await this.pgListener.subscribe('approval_requested', (payload) => {
+      this.logger.debug(
+        `Received approval_requested event:`,
+        JSON.stringify(payload),
+      );
       // Send to organization room
       this.server
         .to(`org:${payload.organization_id}`)
         .emit('approval_requested', payload);
+      this.logger.debug(
+        `Emitted approval_requested to org:${payload.organization_id}`,
+      );
 
       // Send to specific hollon if available
       if (payload.holon_id) {
@@ -192,6 +220,10 @@ export class RealtimeGateway
           .emit('approval_requested', payload);
       }
     });
+
+    this.logger.log(
+      'Subscribed to global channels: holon_status_changed, approval_requested',
+    );
   }
 
   /**
