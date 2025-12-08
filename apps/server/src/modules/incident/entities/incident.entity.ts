@@ -77,6 +77,22 @@ export class Incident extends BaseEntity {
   @Column({ name: 'resolution_summary', type: 'text', nullable: true })
   resolutionSummary: string | null;
 
+  @Column({ type: 'jsonb', nullable: true })
+  postmortem: {
+    summary: string;
+    rootCause: string;
+    impactAssessment: string;
+    timelineNarrative: string;
+    lessonsLearned: string[];
+    actionItems: Array<{
+      description: string;
+      assignee?: string;
+      dueDate?: string;
+      status: 'pending' | 'in_progress' | 'completed';
+    }>;
+    generatedAt: string;
+  } | null;
+
   @Column({ type: 'jsonb', default: {} })
   metadata: Record<string, any>;
 }
