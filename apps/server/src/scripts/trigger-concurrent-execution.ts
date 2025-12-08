@@ -17,7 +17,7 @@ interface ExecutionResult {
 }
 
 // Concurrency limit for Claude Code instances
-const MAX_CONCURRENT_HOLLONS = 3;
+const MAX_CONCURRENT_HOLLONS = 5;
 
 /**
  * Execute promises with concurrency limit
