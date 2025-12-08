@@ -205,20 +205,13 @@ export class RealtimeGateway
         `Received approval_requested event:`,
         JSON.stringify(payload),
       );
-      // Send to organization room
+      // Send to organization room only (not to hollon room to avoid duplicates)
       this.server
         .to(`org:${payload.organization_id}`)
         .emit('approval_requested', payload);
       this.logger.debug(
         `Emitted approval_requested to org:${payload.organization_id}`,
       );
-
-      // Send to specific hollon if available
-      if (payload.holon_id) {
-        this.server
-          .to(`hollon:${payload.holon_id}`)
-          .emit('approval_requested', payload);
-      }
     });
 
     this.logger.log(

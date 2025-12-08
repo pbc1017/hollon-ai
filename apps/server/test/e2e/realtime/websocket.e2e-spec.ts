@@ -294,11 +294,7 @@ describe('WebSocket (e2e)', () => {
     });
 
     it('should receive approval request events', (done) => {
-      let called = false;
       clientSocket.on('approval_requested', (payload) => {
-        if (called) return; // Prevent multiple calls
-        called = true;
-
         expect(payload).toBeDefined();
         expect(payload.organization_id).toBe(testOrganization.id);
         done();
