@@ -15,10 +15,10 @@ export const databaseConfig = (
     password: configService.get<string>('database.password'),
     database: configService.get<string>('database.name'),
     schema: configService.get<string>('database.schema', 'hollon'),
-    entities: [__dirname + '/../**/*.entity{.ts,.js}'],
-    migrations: [__dirname + '/../database/migrations/*{.ts,.js}'],
+    entities: [__dirname + '/../**/*.entity.{ts,js}'],
+    migrations: [__dirname + '/../database/migrations/*.{ts,js}'],
     dropSchema: false, // Keep data between restarts - schema already synced
-    synchronize: !isProduction, // TEMPORARY: Enable sync in dev for Dogfooding experiment
+    synchronize: false, // DISABLED: To avoid TypeORM sync issues
     migrationsRun: false, // 서버 시작 시 자동 마이그레이션 실행 안 함
     logging: !isProduction && !isTest,
     ssl: isProduction ? { rejectUnauthorized: false } : false,

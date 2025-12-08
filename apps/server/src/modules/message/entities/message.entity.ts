@@ -1,37 +1,28 @@
+import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
+import { BaseEntity } from '../../../common/entities/base.entity';
+import { Conversation } from './conversation.entity';
 import {
-  Entity,
-  Column,
-  PrimaryGeneratedColumn,
-  CreateDateColumn,
-  UpdateDateColumn,
-  ManyToOne,
-  JoinColumn,
-} from 'typeorm';
+  MessageType,
+  ParticipantType,
+  MessagePriority,
+} from '../enums/message.enums';
 
-export enum MessageType {
-  TASK_ASSIGNMENT = 'task_assignment',
-  TASK_UPDATE = 'task_update',
-  TASK_COMPLETION = 'task_completion',
-  QUESTION = 'question',
-  RESPONSE = 'response',
-  DELEGATION_REQUEST = 'delegation_request',
-  DELEGATION_APPROVAL = 'delegation_approval',
-  COLLABORATION_REQUEST = 'collaboration_request',
-  REVIEW_REQUEST = 'review_request',
-  CONFLICT_NOTIFICATION = 'conflict_notification',
-  GENERAL = 'general',
-}
-
-export enum ParticipantType {
-  HOLLON = 'hollon',
-  HUMAN = 'human',
-  SYSTEM = 'system',
-}
+// Re-export enums for backward compatibility
+export { MessageType, ParticipantType, MessagePriority };
 
 @Entity('messages')
-export class Message {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+@Index(['conversationId', 'createdAt'])
+@Index(['fromType', 'fromId'])
+@Index(['toType', 'toId'])
+export class Message extends BaseEntity {
+  @Column({ name: 'conversation_id', type: 'uuid' })
+  conversationId: string;
+
+  @ManyToOne(() => Conversation, (conversation) => conversation.messages, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'conversation_id' })
+  conversation: Conversation;
 
   @Column({
     type: 'enum',
@@ -61,6 +52,14 @@ export class Message {
   })
   messageType: MessageType;
 
+  @Column({
+    type: 'enum',
+    enum: MessagePriority,
+    name: 'priority',
+    default: MessagePriority.NORMAL,
+  })
+  priority: MessagePriority;
+
   @Column('text')
   content: string;
 
@@ -82,10 +81,4 @@ export class Message {
   @ManyToOne(() => Message, { nullable: true })
   @JoinColumn({ name: 'replied_to_id' })
   repliedTo?: Message;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
 }

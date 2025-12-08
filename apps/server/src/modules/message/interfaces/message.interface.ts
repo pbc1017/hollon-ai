@@ -1,4 +1,4 @@
-import { ParticipantType } from '../entities/message.entity';
+import { ParticipantType } from '../enums/message.enums';
 
 export interface Participant {
   type: ParticipantType;

@@ -1,20 +1,22 @@
 import {
   Entity,
   Column,
-  PrimaryGeneratedColumn,
-  CreateDateColumn,
-  UpdateDateColumn,
   ManyToOne,
+  OneToMany,
   JoinColumn,
+  Index,
 } from 'typeorm';
-import { ParticipantType } from './message.entity';
+import { BaseEntity } from '../../../common/entities/base.entity';
+import { ParticipantType, ConversationContext } from '../enums/message.enums';
 import { Message } from './message.entity';
 
-@Entity('conversations')
-export class Conversation {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+// Re-export for backward compatibility
+export { ConversationContext };
 
+@Entity('conversations')
+@Index(['participant1Type', 'participant1Id'])
+@Index(['participant2Type', 'participant2Id'])
+export class Conversation extends BaseEntity {
   @Column({
     type: 'enum',
     enum: ParticipantType,
@@ -35,6 +37,17 @@ export class Conversation {
   @Column({ type: 'uuid', name: 'participant2_id' })
   participant2Id: string;
 
+  @Column({
+    type: 'enum',
+    enum: ConversationContext,
+    name: 'context',
+    default: ConversationContext.GENERAL,
+  })
+  context: ConversationContext;
+
+  @Column({ name: 'context_id', type: 'uuid', nullable: true })
+  contextId: string | null;
+
   @Column({ name: 'last_message_id', type: 'uuid', nullable: true })
   lastMessageId: string | null;
 
@@ -45,9 +58,9 @@ export class Conversation {
   @Column({ type: 'timestamp', name: 'last_message_at', nullable: true })
   lastMessageAt: Date | null;
 
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  @Column({ name: 'unread_count', default: 0 })
+  unreadCount: number;
 
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  @OneToMany(() => Message, (message) => message.conversation)
+  messages: Message[];
 }
