@@ -12,9 +12,11 @@ import {
 import { GoalService } from './goal.service';
 import { GoalTrackingService } from './services/goal-tracking.service';
 import { GoalReviewService } from './services/goal-review.service';
+import { GoalDecompositionService } from './services/goal-decomposition.service';
 import { CreateGoalDto } from './dto/create-goal.dto';
 import { UpdateGoalDto } from './dto/update-goal.dto';
 import { RecordProgressDto } from './dto/record-progress.dto';
+import { DecompositionOptionsDto } from './dto/decomposition-options.dto';
 import { GoalStatus, GoalType } from './entities/goal.entity';
 
 @Controller('goals')
@@ -23,6 +25,7 @@ export class GoalController {
     private readonly goalService: GoalService,
     private readonly goalTrackingService: GoalTrackingService,
     private readonly goalReviewService: GoalReviewService,
+    private readonly goalDecompositionService: GoalDecompositionService,
   ) {}
 
   @Post()
@@ -113,5 +116,14 @@ export class GoalController {
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
   ) {
     return this.goalReviewService.runManualReview(organizationId);
+  }
+
+  // Goal Decomposition endpoint
+  @Post(':id/decompose')
+  decomposeGoal(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() options?: DecompositionOptionsDto,
+  ) {
+    return this.goalDecompositionService.decomposeGoal(id, options);
   }
 }

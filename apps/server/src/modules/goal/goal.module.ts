@@ -9,6 +9,8 @@ import { GoalService } from './goal.service';
 import { GoalController } from './goal.controller';
 import { GoalTrackingService } from './services/goal-tracking.service';
 import { GoalReviewService } from './services/goal-review.service';
+import { GoalDecompositionService } from './services/goal-decomposition.service';
+import { BrainProviderModule } from '../brain-provider/brain-provider.module';
 
 @Module({
   imports: [
@@ -19,9 +21,20 @@ import { GoalReviewService } from './services/goal-review.service';
       Project,
       Organization,
     ]),
+    BrainProviderModule,
   ],
   controllers: [GoalController],
-  providers: [GoalService, GoalTrackingService, GoalReviewService],
-  exports: [GoalService, GoalTrackingService, GoalReviewService],
+  providers: [
+    GoalService,
+    GoalTrackingService,
+    GoalReviewService,
+    GoalDecompositionService,
+  ],
+  exports: [
+    GoalService,
+    GoalTrackingService,
+    GoalReviewService,
+    GoalDecompositionService,
+  ],
 })
 export class GoalModule {}
