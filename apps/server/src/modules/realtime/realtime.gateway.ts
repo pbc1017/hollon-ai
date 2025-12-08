@@ -63,6 +63,13 @@ export class RealtimeGateway
     }
   }
 
+  /**
+   * Check if global channels are ready (for testing)
+   */
+  isGlobalChannelsReady(): boolean {
+    return this.globalChannelsReady;
+  }
+
   handleConnection(client: Socket): void {
     const clientId = client.id;
 

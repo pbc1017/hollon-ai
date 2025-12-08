@@ -10,6 +10,7 @@ import { Channel } from '../../../src/modules/channel/entities/channel.entity';
 import { Team } from '../../../src/modules/team/entities/team.entity';
 import { Role } from '../../../src/modules/role/entities/role.entity';
 import { PostgresListenerService } from '../../../src/modules/postgres-listener/postgres-listener.service';
+import { RealtimeGateway } from '../../../src/modules/realtime/realtime.gateway';
 import { ParticipantType } from '../../../src/modules/message/enums/message.enums';
 
 describe('WebSocket (e2e)', () => {
@@ -20,6 +21,7 @@ describe('WebSocket (e2e)', () => {
   let teamRepo: Repository<Team>;
   let roleRepo: Repository<Role>;
   let pgListener: PostgresListenerService;
+  let realtimeGateway: RealtimeGateway;
 
   let testOrganization: Organization;
   let testHollon: Hollon;
@@ -29,6 +31,19 @@ describe('WebSocket (e2e)', () => {
 
   let clientSocket: Socket;
   let serverUrl: string;
+
+  /**
+   * Helper function to wait for global channels to be ready
+   */
+  async function waitForGlobalChannels(maxWaitMs = 10000): Promise<void> {
+    const startTime = Date.now();
+    while (!realtimeGateway.isGlobalChannelsReady()) {
+      if (Date.now() - startTime > maxWaitMs) {
+        throw new Error('Timeout waiting for global channels to be ready');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -50,13 +65,14 @@ describe('WebSocket (e2e)', () => {
     const port = address.port;
     serverUrl = `http://localhost:${port}`;
 
-    // Get repositories
+    // Get repositories and services
     organizationRepo = moduleFixture.get(getRepositoryToken(Organization));
     hollonRepo = moduleFixture.get(getRepositoryToken(Hollon));
     channelRepo = moduleFixture.get(getRepositoryToken(Channel));
     teamRepo = moduleFixture.get(getRepositoryToken(Team));
     roleRepo = moduleFixture.get(getRepositoryToken(Role));
     pgListener = moduleFixture.get(PostgresListenerService);
+    realtimeGateway = moduleFixture.get(RealtimeGateway);
 
     // Create test data
     testOrganization = await organizationRepo.save({
@@ -91,7 +107,7 @@ describe('WebSocket (e2e)', () => {
     });
 
     // Wait for gateway to initialize and subscribe to global channels
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await waitForGlobalChannels();
   });
 
   afterAll(async () => {
@@ -283,14 +299,14 @@ describe('WebSocket (e2e)', () => {
         done();
       });
 
-      // Wait for gateway to subscribe to global channels, then trigger event
+      // Global channels are already ready, just need small delay for socket connection
       setTimeout(async () => {
         await pgListener.notify('holon_status_changed', {
           organization_id: testOrganization.id,
           holon_id: testHollon.id,
           status: 'working',
         });
-      }, 2000);
+      }, 200);
     });
 
     it('should receive approval request events', (done) => {
@@ -300,14 +316,14 @@ describe('WebSocket (e2e)', () => {
         done();
       });
 
-      // Wait for gateway to subscribe to global channels, then trigger event
+      // Global channels are already ready, just need small delay for socket connection
       setTimeout(async () => {
         await pgListener.notify('approval_requested', {
           organization_id: testOrganization.id,
           holon_id: testHollon.id,
           request_type: 'task_approval',
         });
-      }, 2000);
+      }, 200);
     });
 
     it('should receive messages in hollon room', (done) => {
@@ -396,10 +412,10 @@ describe('WebSocket (e2e)', () => {
         new Promise<void>((resolve) => clientSocket.on('connect', resolve)),
         new Promise<void>((resolve) => clientSocket2.on('connect', resolve)),
       ]).then(() => {
-        // Wait for gateway to subscribe to global channels
+        // Global channels are already ready, just need small delay for socket connection
         setTimeout(async () => {
           await pgListener.notify('holon_status_changed', expectedPayload);
-        }, 2000);
+        }, 200);
       });
     });
 
@@ -445,7 +461,7 @@ describe('WebSocket (e2e)', () => {
               clientSocket2.on('connect', resolve),
             ),
           ]).then(() => {
-            // Wait for gateway to subscribe to global channels
+            // Global channels are already ready, just need small delay for socket connection
             setTimeout(async () => {
               await pgListener.notify('holon_status_changed', {
                 organization_id: testOrganization.id,
@@ -459,7 +475,7 @@ describe('WebSocket (e2e)', () => {
                 await organizationRepo.remove(otherOrg);
                 done();
               }, 200);
-            }, 2000);
+            }, 200);
           });
         });
     });
