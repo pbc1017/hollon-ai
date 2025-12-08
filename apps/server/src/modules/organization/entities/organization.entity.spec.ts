@@ -26,9 +26,8 @@ describe('Organization Entity', () => {
       expect(organization.contextPrompt).toBeNull();
     });
 
-    it('should allow setting contextPrompt to undefined', () => {
-      organization.contextPrompt = undefined;
-
+    it('should have undefined contextPrompt initially', () => {
+      // TypeORM 엔티티는 초기화 전에는 undefined일 수 있음
       expect(organization.contextPrompt).toBeUndefined();
     });
 
