@@ -18,6 +18,21 @@ import { CollaborationRequestDto } from '../dto/collaboration-request.dto';
 export class CollaborationService {
   private readonly logger = new Logger(CollaborationService.name);
 
+  /**
+   * UUID format validator
+   */
+  private readonly uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  /**
+   * Validates UUID format and throws NotFoundException if invalid
+   */
+  private validateUuid(sessionId: string): void {
+    if (!this.uuidRegex.test(sessionId)) {
+      throw new NotFoundException(`Session ${sessionId} not found`);
+    }
+  }
+
   constructor(
     @InjectRepository(CollaborationSession)
     private readonly sessionRepo: Repository<CollaborationSession>,
@@ -75,6 +90,8 @@ export class CollaborationService {
    * 협업 요청 수락
    */
   async acceptCollaboration(sessionId: string): Promise<CollaborationSession> {
+    this.validateUuid(sessionId);
+
     const session = await this.sessionRepo.findOne({
       where: { id: sessionId },
       relations: ['requesterHollon', 'collaboratorHollon'],
@@ -111,6 +128,8 @@ export class CollaborationService {
     sessionId: string,
     reason?: string,
   ): Promise<CollaborationSession> {
+    this.validateUuid(sessionId);
+
     const session = await this.sessionRepo.findOne({
       where: { id: sessionId },
     });
@@ -144,6 +163,8 @@ export class CollaborationService {
    * 협업 세션 시작
    */
   async startSession(sessionId: string): Promise<CollaborationSession> {
+    this.validateUuid(sessionId);
+
     const session = await this.sessionRepo.findOne({
       where: { id: sessionId },
     });
@@ -170,6 +191,8 @@ export class CollaborationService {
     sessionId: string,
     outcome?: string,
   ): Promise<CollaborationSession> {
+    this.validateUuid(sessionId);
+
     const session = await this.sessionRepo.findOne({
       where: { id: sessionId },
     });
@@ -191,6 +214,8 @@ export class CollaborationService {
    * 협업 세션 취소
    */
   async cancelSession(sessionId: string): Promise<CollaborationSession> {
+    this.validateUuid(sessionId);
+
     const session = await this.sessionRepo.findOne({
       where: { id: sessionId },
     });
@@ -217,9 +242,22 @@ export class CollaborationService {
     request: CollaborationRequestDto,
     requesterHollonId: string,
   ): Promise<Hollon | null> {
-    // 1. 가용한 홀론 조회 (IDLE 상태, role과 team 관계 포함)
+    // 0. 요청자 홀론 조회하여 조직 ID 확인
+    const requesterHollon = await this.hollonRepo.findOne({
+      where: { id: requesterHollonId },
+    });
+
+    if (!requesterHollon) {
+      this.logger.warn(`Requester hollon ${requesterHollonId} not found`);
+      return null;
+    }
+
+    // 1. 가용한 홀론 조회 (IDLE 상태, 같은 조직, role과 team 관계 포함)
     const availableHollons = await this.hollonRepo.find({
-      where: { status: HollonStatus.IDLE },
+      where: {
+        status: HollonStatus.IDLE,
+        organizationId: requesterHollon.organizationId,
+      },
       relations: ['role', 'team'],
       take: 50, // 충분한 후보군 확보
     });
@@ -403,6 +441,8 @@ Please accept or reject this collaboration request.
    * 세션 조회
    */
   async getSession(sessionId: string): Promise<CollaborationSession> {
+    this.validateUuid(sessionId);
+
     const session = await this.sessionRepo.findOne({
       where: { id: sessionId },
       relations: ['requesterHollon', 'collaboratorHollon', 'task'],
