@@ -717,11 +717,11 @@ describe('MessageService', () => {
         mockQueryBuilder,
       );
 
-      await service.getInbox(ParticipantType.USER, 'user-123');
+      await service.getInbox(ParticipantType.HUMAN, 'user-123');
 
       expect(mockQueryBuilder.where).toHaveBeenCalledWith(
         'message.to_type = :toType',
-        { toType: ParticipantType.USER },
+        { toType: ParticipantType.HUMAN },
       );
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
         'message.to_id = :toId',
@@ -824,7 +824,7 @@ describe('MessageService', () => {
 
       await service.getConversationHistory(
         { type: ParticipantType.HOLLON, id: 'hollon-123' },
-        { type: ParticipantType.USER, id: 'user-456' },
+        { type: ParticipantType.HUMAN, id: 'user-456' },
       );
 
       // Should search for conversation in both directions
@@ -833,7 +833,7 @@ describe('MessageService', () => {
         {
           p1Type: ParticipantType.HOLLON,
           p1Id: 'hollon-123',
-          p2Type: ParticipantType.USER,
+          p2Type: ParticipantType.HUMAN,
           p2Id: 'user-456',
         },
       );
