@@ -219,7 +219,7 @@ async function seed() {
       description:
         '자율 실행 엔진 구현 - 홀론이 태스크를 Pull → 실행 → 완료하는 사이클',
       repositoryUrl: 'https://github.com/your-org/hollon-ai',
-      workingDirectory: '/path/to/hollon-ai',
+      workingDirectory: projectRoot, // Use actual project root path
       status: ProjectStatus.ACTIVE,
     });
     await projectRepo.save(phase1Project);
