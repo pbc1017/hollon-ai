@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { AppModule } from '../../src/app.module';
 import { DataSource } from 'typeorm';
-import * as request from 'supertest';
+import request from 'supertest';
 
 /**
  * Phase 1 POC End-to-End Test
