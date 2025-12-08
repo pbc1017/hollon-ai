@@ -49,7 +49,7 @@ describe('CollaborationService', () => {
   };
 
   const mockSession: Partial<CollaborationSession> = {
-    id: 'session-123',
+    id: '550e8400-e29b-41d4-a716-446655440000', // Valid UUID
     type: CollaborationType.CODE_REVIEW,
     status: CollaborationStatus.PENDING,
     requesterHollonId: 'hollon-123',
@@ -81,6 +81,9 @@ describe('CollaborationService', () => {
     service = module.get<CollaborationService>(CollaborationService);
 
     jest.clearAllMocks();
+
+    // Default mock for requester hollon (can be overridden in tests)
+    mockHollonRepository.findOne.mockResolvedValue(mockHollon);
   });
 
   it('should be defined', () => {
@@ -96,6 +99,7 @@ describe('CollaborationService', () => {
     };
 
     it('should create a collaboration session when collaborator is available', async () => {
+      mockHollonRepository.findOne.mockResolvedValue(mockHollon);
       mockHollonRepository.find.mockResolvedValue([mockCollaborator]);
       mockSessionRepository.save.mockResolvedValue({
         id: 'new-session-id',
@@ -111,8 +115,14 @@ describe('CollaborationService', () => {
 
       const result = await service.requestCollaboration('hollon-123', request);
 
+      expect(mockHollonRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'hollon-123' },
+      });
       expect(mockHollonRepository.find).toHaveBeenCalledWith({
-        where: { status: HollonStatus.IDLE },
+        where: {
+          status: HollonStatus.IDLE,
+          organizationId: 'org-123',
+        },
         relations: ['role', 'team'],
         take: 50,
       });
@@ -479,10 +489,12 @@ describe('CollaborationService', () => {
       });
       mockMessageService.send.mockResolvedValue({});
 
-      const result = await service.acceptCollaboration('session-123');
+      const result = await service.acceptCollaboration(
+        '550e8400-e29b-41d4-a716-446655440000',
+      );
 
       expect(mockSessionRepository.findOne).toHaveBeenCalledWith({
-        where: { id: 'session-123' },
+        where: { id: '550e8400-e29b-41d4-a716-446655440000' },
         relations: ['requesterHollon', 'collaboratorHollon'],
       });
       expect(mockSessionRepository.save).toHaveBeenCalledWith({
@@ -496,7 +508,7 @@ describe('CollaborationService', () => {
         toType: ParticipantType.HOLLON,
         messageType: MessageType.RESPONSE,
         content: expect.stringContaining('accepted'),
-        metadata: { sessionId: 'session-123' },
+        metadata: { sessionId: '550e8400-e29b-41d4-a716-446655440000' },
       });
       expect(result.status).toBe(CollaborationStatus.ACCEPTED);
     });
@@ -526,7 +538,7 @@ describe('CollaborationService', () => {
         status: CollaborationStatus.ACCEPTED,
       });
 
-      await service.acceptCollaboration('session-123');
+      await service.acceptCollaboration('550e8400-e29b-41d4-a716-446655440000');
 
       expect(mockMessageService.send).not.toHaveBeenCalled();
     });
@@ -547,7 +559,7 @@ describe('CollaborationService', () => {
       mockMessageService.send.mockResolvedValue({});
 
       const result = await service.rejectCollaboration(
-        'session-123',
+        '550e8400-e29b-41d4-a716-446655440000',
         'Too busy',
       );
 
@@ -563,7 +575,7 @@ describe('CollaborationService', () => {
         toType: ParticipantType.HOLLON,
         messageType: MessageType.RESPONSE,
         content: expect.stringContaining('rejected'),
-        metadata: { sessionId: 'session-123' },
+        metadata: { sessionId: '550e8400-e29b-41d4-a716-446655440000' },
       });
       expect(result.status).toBe(CollaborationStatus.REJECTED);
     });
@@ -593,10 +605,12 @@ describe('CollaborationService', () => {
       mockSessionRepository.save.mockResolvedValue(startedSession);
       mockMessageService.send.mockResolvedValue({});
 
-      const result = await service.startSession('session-123');
+      const result = await service.startSession(
+        '550e8400-e29b-41d4-a716-446655440000',
+      );
 
       expect(mockSessionRepository.findOne).toHaveBeenCalledWith({
-        where: { id: 'session-123' },
+        where: { id: '550e8400-e29b-41d4-a716-446655440000' },
       });
       expect(mockSessionRepository.save).toHaveBeenCalledWith({
         ...acceptedSession,
@@ -620,7 +634,7 @@ describe('CollaborationService', () => {
       });
       mockMessageService.send.mockResolvedValue({});
 
-      await service.startSession('session-123');
+      await service.startSession('550e8400-e29b-41d4-a716-446655440000');
 
       // Should send to requester
       expect(mockMessageService.send).toHaveBeenCalledWith(
@@ -673,12 +687,12 @@ describe('CollaborationService', () => {
       });
 
       const result = await service.completeSession(
-        'session-123',
+        '550e8400-e29b-41d4-a716-446655440000',
         'Successfully reviewed',
       );
 
       expect(mockSessionRepository.findOne).toHaveBeenCalledWith({
-        where: { id: 'session-123' },
+        where: { id: '550e8400-e29b-41d4-a716-446655440000' },
       });
       expect(mockSessionRepository.save).toHaveBeenCalledWith({
         ...activeSession,
@@ -704,7 +718,9 @@ describe('CollaborationService', () => {
         outcome: null,
       });
 
-      const result = await service.completeSession('session-123');
+      const result = await service.completeSession(
+        '550e8400-e29b-41d4-a716-446655440000',
+      );
 
       expect(mockSessionRepository.save).toHaveBeenCalledWith({
         ...activeSession,
@@ -736,7 +752,9 @@ describe('CollaborationService', () => {
         status: CollaborationStatus.CANCELLED,
       });
 
-      const result = await service.cancelSession('session-123');
+      const result = await service.cancelSession(
+        '550e8400-e29b-41d4-a716-446655440000',
+      );
 
       expect(mockSessionRepository.save).toHaveBeenCalledWith({
         ...pendingSession,
@@ -812,10 +830,12 @@ describe('CollaborationService', () => {
       };
       mockSessionRepository.findOne.mockResolvedValue(sessionWithRelations);
 
-      const result = await service.getSession('session-123');
+      const result = await service.getSession(
+        '550e8400-e29b-41d4-a716-446655440000',
+      );
 
       expect(mockSessionRepository.findOne).toHaveBeenCalledWith({
-        where: { id: 'session-123' },
+        where: { id: '550e8400-e29b-41d4-a716-446655440000' },
         relations: ['requesterHollon', 'collaboratorHollon', 'task'],
       });
       expect(result).toEqual(sessionWithRelations);

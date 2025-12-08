@@ -88,9 +88,14 @@ describe('RealtimeGateway', () => {
     });
 
     it('should not join hollon room when hollonId is not provided', () => {
-      const client = createMockSocket();
-      (client as any).organizationId = 'org-123';
-      (client as any).hollonId = undefined;
+      const client = createMockSocket({
+        handshake: {
+          query: {
+            organizationId: 'org-123',
+            // hollonId is not provided
+          },
+        },
+      } as any);
 
       gateway.handleConnection(client);
 
@@ -228,7 +233,7 @@ describe('RealtimeGateway', () => {
       );
     });
 
-    it('should emit approval_requested to both org and hollon rooms', async () => {
+    it('should emit approval_requested to organization room only', async () => {
       let capturedHandler: (payload: any) => void;
       mockPgListener.subscribe.mockImplementation(
         async (channel: string, handler: (payload: any) => void) => {
@@ -249,7 +254,10 @@ describe('RealtimeGateway', () => {
       capturedHandler!(payload);
 
       expect(mockServer.to).toHaveBeenCalledWith('org:org-123');
-      expect(mockServer.to).toHaveBeenCalledWith('hollon:hollon-123');
+      expect(mockServer.emit).toHaveBeenCalledWith(
+        'approval_requested',
+        payload,
+      );
     });
   });
 
