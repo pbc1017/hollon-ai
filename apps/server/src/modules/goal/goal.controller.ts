@@ -10,6 +10,8 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { GoalService } from './goal.service';
+import { GoalTrackingService } from './services/goal-tracking.service';
+import { GoalReviewService } from './services/goal-review.service';
 import { CreateGoalDto } from './dto/create-goal.dto';
 import { UpdateGoalDto } from './dto/update-goal.dto';
 import { RecordProgressDto } from './dto/record-progress.dto';
@@ -17,7 +19,11 @@ import { GoalStatus, GoalType } from './entities/goal.entity';
 
 @Controller('goals')
 export class GoalController {
-  constructor(private readonly goalService: GoalService) {}
+  constructor(
+    private readonly goalService: GoalService,
+    private readonly goalTrackingService: GoalTrackingService,
+    private readonly goalReviewService: GoalReviewService,
+  ) {}
 
   @Post()
   create(@Body() dto: CreateGoalDto) {
@@ -93,5 +99,19 @@ export class GoalController {
   @Get(':id/aggregated-progress')
   calculateAggregatedProgress(@Param('id', ParseUUIDPipe) id: string) {
     return this.goalService.calculateAggregatedProgress(id);
+  }
+
+  // Risk analysis endpoint
+  @Get(':id/risk-analysis')
+  analyzeGoalRisk(@Param('id', ParseUUIDPipe) id: string) {
+    return this.goalTrackingService.analyzeGoalRisk(id);
+  }
+
+  // Review endpoints
+  @Post('organizations/:organizationId/review')
+  runManualReview(
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
+  ) {
+    return this.goalReviewService.runManualReview(organizationId);
   }
 }
