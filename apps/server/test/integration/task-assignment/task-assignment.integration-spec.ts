@@ -51,7 +51,11 @@ describe('Task Assignment Integration Tests', () => {
       imports: [
         ConfigModule.forRoot({
           isGlobal: true,
-          envFilePath: ['.env.local', '.env'],
+          envFilePath: [
+            '../../../../.env.test',
+            '../../../../.env.local',
+            '../../../../.env',
+          ],
         }),
         TypeOrmModule.forRootAsync({
           inject: [ConfigService],
@@ -62,6 +66,7 @@ describe('Task Assignment Integration Tests', () => {
             username: configService.get<string>('DB_USER'),
             password: configService.get<string>('DB_PASSWORD'),
             database: configService.get<string>('DB_NAME'),
+            schema: configService.get<string>('DB_SCHEMA'),
             entities: [__dirname + '/../../../src/**/*.entity{.ts,.js}'],
             synchronize: false,
           }),
@@ -219,6 +224,7 @@ describe('Task Assignment Integration Tests', () => {
     it('should assign ready task to idle hollon', async () => {
       // Create a ready task
       const task = await taskService.create({
+        organizationId: testOrg.id,
         title: 'Test Task',
         description: 'Test task for assignment',
         projectId: testProject.id,
@@ -249,6 +255,7 @@ describe('Task Assignment Integration Tests', () => {
     it('should find only unassigned ready tasks', async () => {
       // Create tasks
       const task1 = await taskService.create({
+        organizationId: testOrg.id,
         title: 'Unassigned Task 1',
         description: 'Test',
         projectId: testProject.id,
@@ -256,6 +263,7 @@ describe('Task Assignment Integration Tests', () => {
       });
 
       const task2 = await taskService.create({
+        organizationId: testOrg.id,
         title: 'Unassigned Task 2',
         description: 'Test',
         projectId: testProject.id,
@@ -263,6 +271,7 @@ describe('Task Assignment Integration Tests', () => {
       });
 
       const task3 = await taskService.create({
+        organizationId: testOrg.id,
         title: 'Assigned Task',
         description: 'Test',
         projectId: testProject.id,
@@ -288,6 +297,7 @@ describe('Task Assignment Integration Tests', () => {
     it('should complete task and update hollon status', async () => {
       // Create and assign task
       const task = await taskService.create({
+        organizationId: testOrg.id,
         title: 'Test Task',
         description: 'Test',
         projectId: testProject.id,
@@ -317,6 +327,7 @@ describe('Task Assignment Integration Tests', () => {
     it('should handle task failure and retry', async () => {
       // Create and assign task
       const task = await taskService.create({
+        organizationId: testOrg.id,
         title: 'Failing Task',
         description: 'Test',
         projectId: testProject.id,
@@ -352,12 +363,14 @@ describe('Task Assignment Integration Tests', () => {
       // Create multiple tasks
       const _tasks = await Promise.all([
         taskService.create({
+          organizationId: testOrg.id,
           title: 'Task 1',
           description: 'Test',
           projectId: testProject.id,
           priority: TaskPriority.P3_MEDIUM,
         }),
         taskService.create({
+          organizationId: testOrg.id,
           title: 'Task 2',
           description: 'Test',
           projectId: testProject.id,
@@ -401,6 +414,7 @@ describe('Task Assignment Integration Tests', () => {
     it('should handle subtask creation and assignment', async () => {
       // Create parent task
       const parentTask = await taskService.create({
+        organizationId: testOrg.id,
         title: 'Parent Task',
         description: 'Test parent',
         projectId: testProject.id,
@@ -412,6 +426,7 @@ describe('Task Assignment Integration Tests', () => {
 
       // Create subtask
       const subtask = await taskService.create({
+        organizationId: testOrg.id,
         title: 'Subtask',
         description: 'Test subtask',
         projectId: testProject.id,
@@ -438,18 +453,21 @@ describe('Task Assignment Integration Tests', () => {
       // Create multiple tasks with different priorities
       await Promise.all([
         taskService.create({
+          organizationId: testOrg.id,
           title: 'Critical Bug',
           description: 'Fix production issue',
           projectId: testProject.id,
           priority: TaskPriority.P1_CRITICAL,
         }),
         taskService.create({
+          organizationId: testOrg.id,
           title: 'Feature Implementation',
           description: 'Add new feature',
           projectId: testProject.id,
           priority: TaskPriority.P3_MEDIUM,
         }),
         taskService.create({
+          organizationId: testOrg.id,
           title: 'Code Review',
           description: 'Review PR',
           projectId: testProject.id,
