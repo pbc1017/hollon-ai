@@ -189,14 +189,26 @@ describe('Task Assignment Integration Tests', () => {
   });
 
   afterEach(async () => {
-    // Cleanup in reverse dependency order
-    await taskRepo.delete({ projectId: testProject.id });
-    await hollonRepo.delete({ id: testHollon1.id });
-    await hollonRepo.delete({ id: testHollon2.id });
-    await projectRepo.delete({ id: testProject.id });
-    await teamRepo.delete({ id: testTeam.id });
-    await roleRepo.delete({ id: testRole.id });
-    await orgRepo.delete({ id: testOrg.id });
+    // Cleanup in reverse dependency order (with null checks)
+    if (testProject?.id) {
+      await taskRepo.delete({ projectId: testProject.id });
+      await projectRepo.delete({ id: testProject.id });
+    }
+    if (testHollon1?.id) {
+      await hollonRepo.delete({ id: testHollon1.id });
+    }
+    if (testHollon2?.id) {
+      await hollonRepo.delete({ id: testHollon2.id });
+    }
+    if (testTeam?.id) {
+      await teamRepo.delete({ id: testTeam.id });
+    }
+    if (testRole?.id) {
+      await roleRepo.delete({ id: testRole.id });
+    }
+    if (testOrg?.id) {
+      await orgRepo.delete({ id: testOrg.id });
+    }
   });
 
   afterAll(async () => {
