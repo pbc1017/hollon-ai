@@ -50,6 +50,9 @@ export interface TaskContext {
     id: string;
     title: string;
   }>;
+  // Retry context for self-correction
+  errorMessage?: string;
+  retryCount?: number;
 }
 
 /**
