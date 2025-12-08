@@ -128,7 +128,7 @@ export class PromptComposerService {
   private extractOrganizationContext(org: Organization): OrganizationContext {
     return {
       name: org.name,
-      description: org.description,
+      description: org.description ?? undefined,
       settings: org.settings as OrganizationContext['settings'],
     };
   }
@@ -164,6 +164,9 @@ export class PromptComposerService {
       acceptanceCriteria: task.acceptanceCriteria,
       affectedFiles: task.affectedFiles,
       dependencies: [], // TODO: Load from task dependencies
+      // Retry context for self-correction
+      errorMessage: task.errorMessage ?? undefined,
+      retryCount: task.retryCount,
     };
   }
 
@@ -327,6 +330,27 @@ ${context.description}`;
 
     if (context.dependencies && context.dependencies.length > 0) {
       taskPrompt += `\n\n## Dependencies:\nThis task depends on:\n${context.dependencies.map((d) => `- ${d.title} (${d.id})`).join('\n')}`;
+    }
+
+    // Include error context for retry attempts (self-correction)
+    if (context.retryCount && context.retryCount > 0 && context.errorMessage) {
+      taskPrompt += `\n\n## IMPORTANT: Previous Attempt Failed (Retry #${context.retryCount})
+
+Your previous attempt to complete this task failed with the following error:
+
+\`\`\`
+${context.errorMessage}
+\`\`\`
+
+**Please carefully analyze this error and fix it in your implementation.**
+
+Common issues to check:
+- TypeScript type errors: Ensure all types are correctly defined and compatible
+- Import errors: Verify all imports are correct and files exist
+- Nullable types: Use \`| null\` or \`| undefined\` appropriately
+- API contracts: Ensure method signatures match their usage
+
+Before submitting, verify your code compiles without errors by mentally checking types.`;
     }
 
     return taskPrompt;

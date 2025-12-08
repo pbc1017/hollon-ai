@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 import configuration from './config/configuration';
 import { databaseConfig } from './config/database.config';
 import { HealthModule } from './modules/health/health.module';
@@ -12,6 +13,16 @@ import { ProjectModule } from './modules/project/project.module';
 import { TaskModule } from './modules/task/task.module';
 import { BrainProviderModule } from './modules/brain-provider/brain-provider.module';
 import { OrchestrationModule } from './modules/orchestration/orchestration.module';
+import { PostgresListenerModule } from './modules/postgres-listener/postgres-listener.module';
+import { MessageModule } from './modules/message/message.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
+import { ChannelModule } from './modules/channel/channel.module';
+import { MeetingModule } from './modules/meeting/meeting.module';
+import { CollaborationModule } from './modules/collaboration/collaboration.module';
+import { ApprovalModule } from './modules/approval/approval.module';
+import { CrossTeamCollaborationModule } from './modules/cross-team-collaboration/cross-team-collaboration.module';
+import { IncidentModule } from './modules/incident/incident.module';
+import { ConflictResolutionModule } from './modules/conflict-resolution/conflict-resolution.module';
 
 @Module({
   imports: [
@@ -30,6 +41,12 @@ import { OrchestrationModule } from './modules/orchestration/orchestration.modul
       inject: [ConfigService],
     }),
 
+    // Infrastructure modules (Global)
+    ...(process.env.DISABLE_SCHEDULER !== 'true'
+      ? [ScheduleModule.forRoot()]
+      : []),
+    PostgresListenerModule,
+
     // Feature modules
     HealthModule,
     OrganizationModule,
@@ -40,6 +57,15 @@ import { OrchestrationModule } from './modules/orchestration/orchestration.modul
     TaskModule,
     BrainProviderModule,
     OrchestrationModule,
+    MessageModule,
+    RealtimeModule,
+    ChannelModule,
+    MeetingModule,
+    CollaborationModule,
+    ApprovalModule,
+    CrossTeamCollaborationModule,
+    IncidentModule,
+    ConflictResolutionModule,
   ],
 })
 export class AppModule {}

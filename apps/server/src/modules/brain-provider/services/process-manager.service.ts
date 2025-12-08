@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { spawn } from 'child_process';
+import { existsSync } from 'fs';
 import {
   IProcessManager,
   ProcessOptions,
@@ -20,18 +21,33 @@ export class ProcessManagerService implements IProcessManager {
       let stderr = '';
       let timedOut = false;
 
+      const cwd = options.cwd || process.cwd();
+
+      // Enhanced debug logging for ENOENT diagnosis
+      this.logger.debug(`[SPAWN DEBUG] Command: "${options.command}"`);
+      this.logger.debug(`[SPAWN DEBUG] Args: ${JSON.stringify(options.args)}`);
+      this.logger.debug(`[SPAWN DEBUG] CWD: "${cwd}"`);
       this.logger.debug(
-        `Spawning: ${options.command} ${options.args.join(' ')}`,
+        `[SPAWN DEBUG] Full command: ${options.command} ${options.args.join(' ')}`,
       );
+
+      // Check if command exists (for ENOENT debugging)
+      const commandExists = existsSync(options.command);
+      this.logger.debug(`[SPAWN DEBUG] Command path exists: ${commandExists}`);
+
+      const cwdExists = existsSync(cwd);
+      this.logger.debug(`[SPAWN DEBUG] CWD path exists: ${cwdExists}`);
 
       // Spawn the process
       const proc = spawn(options.command, options.args, {
-        cwd: options.cwd || process.cwd(),
+        cwd,
         env: process.env,
         // Explicit stdio configuration to prevent Claude Code Ink framework issues
         // 'pipe' allows us to capture stdout/stderr while preventing TTY detection errors
         stdio: ['pipe', 'pipe', 'pipe'],
       });
+
+      this.logger.debug(`[SPAWN DEBUG] Process spawned with PID: ${proc.pid}`);
 
       // Timeout handler
       const timeoutHandle = setTimeout(() => {
@@ -84,15 +100,29 @@ export class ProcessManagerService implements IProcessManager {
       });
 
       // Handle spawn errors (command not found, etc.)
-      proc.on('error', (err) => {
+      proc.on('error', (err: Error & { code?: string }) => {
         clearTimeout(timeoutHandle);
         const duration = Date.now() - startTime;
+
+        // Enhanced error logging for ENOENT
+        this.logger.error(`[SPAWN ERROR] Error code: ${err.code}`);
+        this.logger.error(`[SPAWN ERROR] Error message: ${err.message}`);
+        this.logger.error(`[SPAWN ERROR] Command: "${options.command}"`);
         this.logger.error(
-          `Process spawn error: ${err.message}, duration=${duration}ms`,
+          `[SPAWN ERROR] Args: ${JSON.stringify(options.args)}`,
         );
+        this.logger.error(`[SPAWN ERROR] CWD: "${cwd}"`);
+        this.logger.error(`[SPAWN ERROR] Duration: ${duration}ms`);
+
+        if (err.code === 'ENOENT') {
+          this.logger.error(
+            `[SPAWN ERROR] ENOENT - File not found. Check if command path is correct and executable exists.`,
+          );
+        }
+
         reject(
           new BrainExecutionError(
-            `Failed to spawn process: ${err.message}`,
+            `Failed to spawn process: ${err.message} (code: ${err.code})`,
             err.message,
           ),
         );

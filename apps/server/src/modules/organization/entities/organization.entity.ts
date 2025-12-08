@@ -10,7 +10,10 @@ export class Organization extends BaseEntity {
   name: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description: string | null;
+
+  @Column({ name: 'context_prompt', type: 'text', nullable: true })
+  contextPrompt: string | null;
 
   @Column({ type: 'jsonb', nullable: true, default: {} })
   settings: Record<string, unknown>;

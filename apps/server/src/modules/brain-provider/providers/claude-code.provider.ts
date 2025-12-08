@@ -36,8 +36,9 @@ export class ClaudeCodeProvider implements IBrainProvider {
       request.options?.timeoutMs || config.timeoutSeconds * 1000;
 
     // Build command arguments
+    // Note: --print 옵션 제거 - 실제 파일 수정이 가능하도록
     const args = [
-      '--print',
+      '-p', // prompt를 stdin으로 받음
       '--output-format',
       'text',
       '--dangerously-skip-permissions',
@@ -59,6 +60,16 @@ export class ClaudeCodeProvider implements IBrainProvider {
     this.logger.log(
       `Executing Claude Code: timeout=${timeoutMs}ms, ` +
         `estimated_cost=$${estimatedCost.totalCostCents.toFixed(4)}`,
+    );
+
+    // Enhanced debug logging for ENOENT diagnosis
+    this.logger.debug(`[CLAUDE DEBUG] claudePath: "${claudePath}"`);
+    this.logger.debug(
+      `[CLAUDE DEBUG] workingDirectory: "${request.context?.workingDirectory || 'not set'}"`,
+    );
+    this.logger.debug(`[CLAUDE DEBUG] args: ${JSON.stringify(args)}`);
+    this.logger.debug(
+      `[CLAUDE DEBUG] request.context: ${JSON.stringify(request.context)}`,
     );
 
     try {

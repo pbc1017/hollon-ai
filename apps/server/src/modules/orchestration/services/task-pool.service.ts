@@ -197,7 +197,7 @@ export class TaskPoolService {
         statuses: [TaskStatus.READY, TaskStatus.PENDING],
       })
       .andWhere('task.assigned_hollon_id IS NULL')
-      .andWhere('task.affected_files && :workedFiles', {
+      .andWhere('task.affected_files && ARRAY[:...workedFiles]::text[]', {
         workedFiles: Array.from(workedFiles),
       })
       .orderBy('task.priority', 'ASC')

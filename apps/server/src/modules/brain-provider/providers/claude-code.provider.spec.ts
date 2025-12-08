@@ -97,7 +97,7 @@ describe('ClaudeCodeProvider', () => {
       expect(mockProcessManager.spawn).toHaveBeenCalledWith(
         expect.objectContaining({
           command: 'claude',
-          args: expect.arrayContaining(['--print', '--output-format', 'text']),
+          args: expect.arrayContaining(['-p', '--output-format', 'text']),
           input: 'Say hello',
         }),
       );

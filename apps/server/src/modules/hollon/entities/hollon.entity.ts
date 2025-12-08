@@ -22,6 +22,11 @@ export enum HollonStatus {
   OFFLINE = 'offline',
 }
 
+export enum HollonLifecycle {
+  PERMANENT = 'permanent',
+  TEMPORARY = 'temporary',
+}
+
 @Entity('hollons')
 @Index(['organizationId', 'status'])
 export class Hollon extends BaseEntity {
@@ -35,10 +40,24 @@ export class Hollon extends BaseEntity {
   })
   status: HollonStatus;
 
+  @Column({
+    type: 'enum',
+    enum: HollonLifecycle,
+    default: HollonLifecycle.PERMANENT,
+  })
+  lifecycle: HollonLifecycle;
+
+  @Column({ name: 'created_by_hollon_id', type: 'uuid', nullable: true })
+  createdByHollonId: string | null;
+
+  // 안전장치: 임시 홀론 재귀 생성 깊이 (영구 홀론은 depth 제한 없음)
+  @Column({ default: 0 })
+  depth: number;
+
   @Column({ name: 'organization_id' })
   organizationId: string;
 
-  @Column({ name: 'team_id', nullable: true })
+  @Column({ name: 'team_id', type: 'uuid', nullable: true })
   teamId: string | null;
 
   @Column({ name: 'role_id' })
@@ -74,7 +93,7 @@ export class Hollon extends BaseEntity {
   @Column({ name: 'last_active_at', type: 'timestamp', nullable: true })
   lastActiveAt: Date;
 
-  @Column({ name: 'current_task_id', nullable: true })
+  @Column({ name: 'current_task_id', type: 'uuid', nullable: true })
   currentTaskId: string;
 
   // Relations

@@ -9,6 +9,7 @@ import { TaskPoolService } from './task-pool.service';
 import { TaskStatus } from '../../task/entities/task.entity';
 import { Organization } from '../../organization/entities/organization.entity';
 import { QualityGateService } from './quality-gate.service';
+import { EscalationService } from './escalation.service';
 
 describe('HollonOrchestratorService', () => {
   let service: HollonOrchestratorService;
@@ -46,6 +47,13 @@ describe('HollonOrchestratorService', () => {
     validateResult: jest.fn(),
   };
 
+  const mockEscalationService = {
+    escalate: jest.fn(),
+    determineEscalationLevel: jest.fn(),
+    getEscalationHistory: jest.fn(),
+    clearHistory: jest.fn(),
+  };
+
   beforeEach(async () => {
     module = await Test.createTestingModule({
       providers: [
@@ -77,6 +85,10 @@ describe('HollonOrchestratorService', () => {
         {
           provide: QualityGateService,
           useValue: mockQualityGate,
+        },
+        {
+          provide: EscalationService,
+          useValue: mockEscalationService,
         },
       ],
     }).compile();
@@ -278,9 +290,11 @@ describe('HollonOrchestratorService', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Brain failed');
+      // Hollon should return to IDLE after error to allow picking up new tasks
+      // ERROR state is reserved for unrecoverable situations
       expect(mockHollonRepo.update).toHaveBeenCalledWith(
         { id: 'hollon-1' },
-        { status: HollonStatus.ERROR },
+        { status: HollonStatus.IDLE },
       );
     });
 

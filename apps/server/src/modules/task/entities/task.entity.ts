@@ -3,12 +3,15 @@ import {
   Column,
   ManyToOne,
   OneToMany,
+  ManyToMany,
   JoinColumn,
+  JoinTable,
   Index,
   Check,
 } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Project } from '../../project/entities/project.entity';
+import { Cycle } from '../../project/entities/cycle.entity';
 import { Hollon } from '../../hollon/entities/hollon.entity';
 
 export enum TaskStatus {
@@ -74,13 +77,16 @@ export class Task extends BaseEntity {
   @Column({ name: 'project_id' })
   projectId: string;
 
-  @Column({ name: 'assigned_hollon_id', nullable: true })
+  @Column({ name: 'cycle_id', type: 'uuid', nullable: true })
+  cycleId: string | null;
+
+  @Column({ name: 'assigned_hollon_id', type: 'uuid', nullable: true })
   assignedHollonId: string | null;
 
-  @Column({ name: 'parent_task_id', nullable: true })
+  @Column({ name: 'parent_task_id', type: 'uuid', nullable: true })
   parentTaskId: string | null;
 
-  @Column({ name: 'creator_hollon_id', nullable: true })
+  @Column({ name: 'creator_hollon_id', type: 'uuid', nullable: true })
   creatorHollonId: string | null;
 
   // 안전장치: 서브태스크 재귀 제한
@@ -92,15 +98,14 @@ export class Task extends BaseEntity {
     name: 'affected_files',
     type: 'text',
     array: true,
-    default: [],
+    default: '{}',
   })
   affectedFiles: string[];
 
   // 메타데이터
   @Column({
     name: 'acceptance_criteria',
-    type: 'text',
-    array: true,
+    type: 'jsonb',
     nullable: true,
   })
   acceptanceCriteria?: string[];
@@ -113,7 +118,7 @@ export class Task extends BaseEntity {
   })
   estimatedComplexity?: 'low' | 'medium' | 'high' | null;
 
-  @Column({ type: 'text', array: true, nullable: true })
+  @Column({ type: 'jsonb', nullable: true })
   tags?: string[];
 
   @Column({ name: 'retry_count', default: 0 })
@@ -121,6 +126,13 @@ export class Task extends BaseEntity {
 
   @Column({ name: 'error_message', type: 'text', nullable: true })
   errorMessage?: string | null;
+
+  // 애자일 메트릭스
+  @Column({ name: 'story_points', type: 'integer', nullable: true, default: 0 })
+  storyPoints?: number;
+
+  @Column({ name: 'blocked_reason', type: 'text', nullable: true })
+  blockedReason?: string | null;
 
   // 타임스탬프
   @Column({ name: 'started_at', type: 'timestamp', nullable: true })
@@ -136,6 +148,13 @@ export class Task extends BaseEntity {
   @ManyToOne(() => Project, (project) => project.tasks, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'project_id' })
   project: Project;
+
+  @ManyToOne(() => Cycle, (cycle) => cycle.tasks, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'cycle_id' })
+  cycle: Cycle;
 
   @ManyToOne(() => Hollon, (hollon) => hollon.assignedTasks, {
     nullable: true,
@@ -160,4 +179,18 @@ export class Task extends BaseEntity {
   })
   @JoinColumn({ name: 'creator_hollon_id' })
   creatorHollon: Hollon;
+
+  // Task Dependencies (DAG 구조)
+  // 이 태스크가 의존하는 태스크들 (선행 조건)
+  @ManyToMany(() => Task, (task) => task.dependentTasks)
+  @JoinTable({
+    name: 'task_dependencies',
+    joinColumn: { name: 'task_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'depends_on_id', referencedColumnName: 'id' },
+  })
+  dependencies: Task[];
+
+  // 이 태스크에 의존하는 태스크들 (후행 태스크)
+  @ManyToMany(() => Task, (task) => task.dependencies)
+  dependentTasks: Task[];
 }

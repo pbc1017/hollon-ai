@@ -1,15 +1,38 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Hollon, HollonStatus } from './entities/hollon.entity';
+import {
+  Hollon,
+  HollonStatus,
+  HollonLifecycle,
+} from './entities/hollon.entity';
 import { CreateHollonDto } from './dto/create-hollon.dto';
 import { UpdateHollonDto } from './dto/update-hollon.dto';
+import { CreateTemporaryHollonDto } from './dto/create-temporary-hollon.dto';
+import { CreatePermanentHollonDto } from './dto/create-permanent-hollon.dto';
+import { ApprovalService } from '../approval/approval.service';
+import {
+  ApprovalRequest,
+  ApprovalRequestType,
+} from '../approval/entities/approval-request.entity';
+import { RoleService } from '../role/role.service';
+import { TeamService } from '../team/team.service';
+import { OrganizationService } from '../organization/organization.service';
 
 @Injectable()
 export class HollonService {
   constructor(
     @InjectRepository(Hollon)
     private readonly hollonRepo: Repository<Hollon>,
+    private readonly approvalService: ApprovalService,
+    private readonly roleService: RoleService,
+    private readonly teamService: TeamService,
+    private readonly organizationService: OrganizationService,
   ) {}
 
   async create(dto: CreateHollonDto): Promise<Hollon> {
@@ -79,6 +102,160 @@ export class HollonService {
 
   async remove(id: string): Promise<void> {
     const hollon = await this.findOne(id);
+    await this.hollonRepo.remove(hollon);
+  }
+
+  /**
+   * 임시 홀론 생성 (자율 가능)
+   * ssot.md 6.2: 임시 홀론 생성/종료는 홀론이 자율적으로 수행
+   * 안전장치: 최대 3단계 깊이까지만 임시 홀론 생성 가능
+   */
+  async createTemporary(config: CreateTemporaryHollonDto): Promise<Hollon> {
+    const MAX_TEMPORARY_HOLLON_DEPTH = 3;
+
+    let depth = 0;
+
+    // 권한 검증 1: Role 존재 확인
+    await this.roleService.findOne(config.roleId);
+
+    // 권한 검증 2: Organization 존재 및 설정 확인
+    const organization = await this.organizationService.findOne(
+      config.organizationId,
+    );
+
+    // 권한 검증 3: Team 존재 및 조직 일치 확인 (teamId가 있을 경우)
+    if (config.teamId) {
+      const team = await this.teamService.findOne(config.teamId);
+
+      if (team.organizationId !== config.organizationId) {
+        throw new ForbiddenException(
+          'Team does not belong to the specified organization',
+        );
+      }
+
+      // 권한 검증 4: 팀당 최대 홀론 수 검증
+      const maxHollonsPerTeam =
+        (organization.settings as { maxHollonsPerTeam?: number })
+          ?.maxHollonsPerTeam || 10;
+
+      const currentTeamHollonCount = await this.hollonRepo.count({
+        where: { teamId: config.teamId },
+      });
+
+      if (currentTeamHollonCount >= maxHollonsPerTeam) {
+        throw new BadRequestException(
+          `Team has reached maximum hollon limit (${maxHollonsPerTeam}). Cannot create more hollons.`,
+        );
+      }
+    }
+
+    // 부모 홀론이 있으면 권한 검증 및 깊이 계산
+    if (config.createdBy) {
+      const parentHollon = await this.hollonRepo.findOne({
+        where: { id: config.createdBy },
+      });
+
+      // 권한 검증 5: 생성자 홀론 존재 확인
+      if (!parentHollon) {
+        throw new NotFoundException(
+          `Creator hollon #${config.createdBy} not found`,
+        );
+      }
+
+      // 권한 검증 6: 생성자 홀론의 조직 일치 확인
+      if (parentHollon.organizationId !== config.organizationId) {
+        throw new ForbiddenException(
+          'Cannot create hollon in a different organization',
+        );
+      }
+
+      // 권한 검증 7: 생성자 홀론 상태 확인 (활성 상태만 생성 가능)
+      if (
+        parentHollon.status !== HollonStatus.IDLE &&
+        parentHollon.status !== HollonStatus.WORKING
+      ) {
+        throw new BadRequestException(
+          `Creator hollon must be in IDLE or WORKING status, current: ${parentHollon.status}`,
+        );
+      }
+
+      // 안전장치: 최대 깊이 체크 (임시 홀론만)
+      if (parentHollon.lifecycle === HollonLifecycle.TEMPORARY) {
+        if (parentHollon.depth >= MAX_TEMPORARY_HOLLON_DEPTH) {
+          throw new BadRequestException(
+            `Maximum temporary hollon depth (${MAX_TEMPORARY_HOLLON_DEPTH}) exceeded`,
+          );
+        }
+        depth = parentHollon.depth + 1;
+      }
+      // 영구 홀론이 만든 임시 홀론은 depth 0부터 시작
+    }
+
+    // 임시 홀론만 자율 생성 가능
+    const hollon = this.hollonRepo.create({
+      name: config.name,
+      organizationId: config.organizationId,
+      teamId: config.teamId || null,
+      roleId: config.roleId,
+      brainProviderId: config.brainProviderId || 'claude_code',
+      systemPrompt: config.systemPrompt || undefined,
+      lifecycle: HollonLifecycle.TEMPORARY,
+      createdByHollonId: config.createdBy || null,
+      depth,
+      status: HollonStatus.IDLE,
+    });
+    return this.hollonRepo.save(hollon);
+  }
+
+  /**
+   * 영구 홀론 생성 (인간 승인 필요)
+   * ssot.md 6.2: 영구 홀론 생성/삭제는 인간 승인 필요
+   */
+  async createPermanent(
+    config: CreatePermanentHollonDto,
+  ): Promise<ApprovalRequest> {
+    // 승인 요청 생성
+    const approvalRequest = await this.approvalService.create({
+      requestType: ApprovalRequestType.CREATE_PERMANENT_HOLLON,
+      description: `영구 홀론 생성 요청: ${config.name} (Role: ${config.roleName})`,
+      metadata: config,
+      requestedBy: config.createdBy,
+    });
+
+    return approvalRequest;
+  }
+
+  /**
+   * 영구 홀론 삭제 (인간 승인 필요)
+   */
+  async requestDeletePermanent(
+    hollonId: string,
+    requestedBy?: string,
+  ): Promise<ApprovalRequest> {
+    const hollon = await this.findOne(hollonId);
+
+    if (hollon.lifecycle !== HollonLifecycle.PERMANENT) {
+      throw new Error('Only permanent hollons require approval for deletion');
+    }
+
+    return this.approvalService.create({
+      requestType: ApprovalRequestType.DELETE_PERMANENT_HOLLON,
+      description: `영구 홀론 삭제 요청: ${hollon.name}`,
+      metadata: { hollonId, hollon },
+      requestedBy: requestedBy || undefined,
+    });
+  }
+
+  /**
+   * 임시 홀론 자동 삭제 (승인 불필요)
+   */
+  async deleteTemporary(hollonId: string): Promise<void> {
+    const hollon = await this.findOne(hollonId);
+
+    if (hollon.lifecycle !== HollonLifecycle.TEMPORARY) {
+      throw new Error('Only temporary hollons can be deleted without approval');
+    }
+
     await this.hollonRepo.remove(hollon);
   }
 }

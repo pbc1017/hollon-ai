@@ -6,7 +6,9 @@ import {
   Min,
   Max,
   MaxLength,
+  IsEnum,
 } from 'class-validator';
+import { HollonLifecycle } from '../entities/hollon.entity';
 
 export class CreateHollonDto {
   @IsString()
@@ -37,4 +39,8 @@ export class CreateHollonDto {
   @Min(1)
   @Max(5)
   maxConcurrentTasks?: number;
+
+  @IsOptional()
+  @IsEnum(HollonLifecycle)
+  lifecycle?: HollonLifecycle;
 }

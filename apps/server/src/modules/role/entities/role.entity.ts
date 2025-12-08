@@ -1,11 +1,21 @@
-import { Entity, Column, OneToMany, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  OneToMany,
+  ManyToOne,
+  JoinColumn,
+  Index,
+} from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Hollon } from '../../hollon/entities/hollon.entity';
 import { Organization } from '../../organization/entities/organization.entity';
 
 @Entity('roles')
+@Index('IDX_roles_organization_name', ['organizationId', 'name'], {
+  unique: true,
+})
 export class Role extends BaseEntity {
-  @Column({ length: 100, unique: true })
+  @Column({ length: 100 })
   name: string;
 
   @Column({ type: 'text', nullable: true })

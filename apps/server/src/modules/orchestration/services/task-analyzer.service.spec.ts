@@ -24,6 +24,7 @@ describe('TaskAnalyzerService', () => {
     status: TaskStatus.READY,
     priority: TaskPriority.P3_MEDIUM,
     projectId: 'project-1',
+    cycleId: null,
     assignedHollonId: null,
     parentTaskId: null,
     creatorHollonId: null,
@@ -40,10 +41,13 @@ describe('TaskAnalyzerService', () => {
     createdAt: new Date(),
     updatedAt: new Date(),
     project: undefined as any,
+    cycle: undefined as any,
     assignedHollon: undefined as any,
     parentTask: undefined as any,
     subtasks: [],
     creatorHollon: undefined as any,
+    dependencies: [],
+    dependentTasks: [],
     ...overrides,
   });
 

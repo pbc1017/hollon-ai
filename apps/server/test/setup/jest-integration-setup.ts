@@ -8,6 +8,7 @@
 // Load test environment variables
 process.env.NODE_ENV = 'test';
 process.env.LOG_LEVEL = 'error';
+process.env.DISABLE_SCHEDULER = 'true'; // Disable ScheduleModule in tests to avoid Reflector dependency issues
 
 // Extend Jest timeout for E2E tests
 jest.setTimeout(30000);
