@@ -39,6 +39,7 @@ tasks:
       - getConversationHistory(): 대화 기록 조회
     priority: P2
     type: implementation
+    status: completed
     affectedFiles:
       - 'src/modules/message/message.service.ts'
       - 'src/modules/message/dto/send-message.dto.ts'
@@ -56,6 +57,7 @@ tasks:
       - PATCH /messages/:id/read - 읽음 처리
     priority: P2
     type: implementation
+    status: completed
     affectedFiles:
       - 'src/modules/message/message.controller.ts'
     tags: [messaging, api, week7]
@@ -72,6 +74,7 @@ tasks:
       - 클라이언트 연결/해제 관리
     priority: P2
     type: implementation
+    status: completed
     affectedFiles:
       - 'src/modules/realtime/realtime.gateway.ts'
       - 'src/modules/realtime/realtime.module.ts'
@@ -106,6 +109,7 @@ tasks:
       - 채널에 요약 공유
     priority: P2
     type: implementation
+    status: completed
     affectedFiles:
       - 'src/modules/meeting/services/standup.service.ts'
     tags: [meeting, standup, week9]
@@ -178,6 +182,7 @@ tasks:
       - mergePullRequest(): PR 머지
     priority: P2
     type: implementation
+    status: completed
     affectedFiles:
       - 'src/modules/collaboration/services/code-review.service.ts'
       - 'src/modules/collaboration/entities/task-pull-request.entity.ts'
@@ -194,6 +199,7 @@ tasks:
       - createPermanent(): 영구 홀론 인간 승인 필요
     priority: P2
     type: implementation
+    status: completed
     affectedFiles:
       - 'src/modules/hollon/hollon.service.ts'
     tags: [hollon, permissions, week11]
@@ -210,6 +216,7 @@ tasks:
       - status: pending, negotiating, accepted, delivered
     priority: P2
     type: implementation
+    status: completed
     affectedFiles:
       - 'src/modules/cross-team-collaboration/entities/cross-team-contract.entity.ts'
     tags: [cross-team, entity, week12]
@@ -222,6 +229,7 @@ tasks:
       - confirmDelivery(): 이행 확인
     priority: P2
     type: implementation
+    status: completed
     affectedFiles:
       - 'src/modules/cross-team-collaboration/services/cross-team-collaboration.service.ts'
     tags: [cross-team, service, week12]
@@ -235,6 +243,7 @@ tasks:
       - generatePostmortem(): 포스트모템 생성
     priority: P2
     type: implementation
+    status: completed
     affectedFiles:
       - 'src/modules/incident/incident-response.service.ts'
       - 'src/modules/incident/entities/incident.entity.ts'
