@@ -26,7 +26,7 @@ export class GoalService {
     teamId?: string;
     status?: GoalStatus;
     goalType?: GoalType;
-    parentGoalId?: string;
+    parentGoalId?: string | null;
   }): Promise<Goal[]> {
     const query = this.goalRepo.createQueryBuilder('goal');
 
