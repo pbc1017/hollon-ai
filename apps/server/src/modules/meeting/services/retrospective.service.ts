@@ -78,55 +78,68 @@ export class RetrospectiveService {
     const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
     const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
 
-    return this.cycleRepo.find({
+    const cycles = await this.cycleRepo.find({
       where: {
         status: CycleStatus.COMPLETED,
-        completedAt: Between(weekStart, weekEnd) as any,
+        completedAt: Between(weekStart, weekEnd),
       },
       relations: ['project', 'project.organization'],
     });
+
+    this.logger.debug(`Found ${cycles.length} completed cycles this week`);
+    return cycles;
   }
 
   /**
    * Run retrospective for a specific cycle
    */
   async runRetrospectiveForCycle(cycle: Cycle): Promise<MeetingRecord | null> {
-    this.logger.log(
-      `Running retrospective for cycle: ${cycle.name || `Cycle ${cycle.number}`}`,
-    );
+    const cycleName = cycle.name || `Cycle ${cycle.number}`;
+    this.logger.log(`Running retrospective for cycle: ${cycleName}`);
 
-    // Collect cycle metrics
-    const metrics = await this.collectCycleMetrics(cycle);
+    try {
+      // Collect cycle metrics
+      const metrics = await this.collectCycleMetrics(cycle);
+      this.logger.debug(`Collected metrics for ${cycleName}`, metrics);
 
-    // Collect hollon feedback
-    const feedback = await this.collectHollonFeedback(cycle);
+      // Collect hollon feedback
+      const feedback = await this.collectHollonFeedback(cycle);
+      this.logger.debug(`Collected feedback from ${feedback.length} hollons`);
 
-    // Analyze improvements
-    const improvements = await this.analyzeImprovements(metrics, feedback);
+      // Analyze improvements
+      const improvements = await this.analyzeImprovements(metrics, feedback);
+      this.logger.debug(`Identified ${improvements.length} improvements`);
 
-    // Generate retrospective document
-    const retroDoc = this.formatRetrospectiveDocument(
-      cycle,
-      metrics,
-      feedback,
-      improvements,
-    );
+      // Generate retrospective document
+      const retroDoc = this.formatRetrospectiveDocument(
+        cycle,
+        metrics,
+        feedback,
+        improvements,
+      );
 
-    // Save meeting record
-    const meeting = await this.meetingRepo.save({
-      organizationId: cycle.project.organizationId,
-      teamId: null,
-      meetingType: MeetingType.RETROSPECTIVE,
-      title: `Retrospective - ${cycle.name || `Cycle ${cycle.number}`} - ${format(new Date(), 'yyyy-MM-dd')}`,
-      content: retroDoc,
-      metadata: { metrics, feedback, improvements },
-      completedAt: new Date(),
-    });
+      // Save meeting record
+      const meeting = await this.meetingRepo.save({
+        organizationId: cycle.project.organizationId,
+        teamId: null,
+        meetingType: MeetingType.RETROSPECTIVE,
+        title: `Retrospective - ${cycleName} - ${format(new Date(), 'yyyy-MM-dd')}`,
+        content: retroDoc,
+        metadata: { metrics, feedback, improvements },
+        completedAt: new Date(),
+      });
 
-    this.logger.log(
-      `Retrospective completed for cycle: ${cycle.name || `Cycle ${cycle.number}`}`,
-    );
-    return meeting;
+      this.logger.log(
+        `Retrospective completed for cycle: ${cycleName} (ID: ${meeting.id})`,
+      );
+      return meeting;
+    } catch (error) {
+      this.logger.error(
+        `Failed to run retrospective for cycle: ${cycleName}`,
+        error,
+      );
+      throw error;
+    }
   }
 
   /**
@@ -147,11 +160,11 @@ export class RetrospectiveService {
 
     // Calculate story points
     const totalStoryPoints = tasks.reduce(
-      (sum, t) => sum + ((t as any).storyPoints || 0),
+      (sum, t) => sum + (t.storyPoints || 0),
       0,
     );
     const completedStoryPoints = completedTasks.reduce(
-      (sum, t) => sum + ((t as any).storyPoints || 0),
+      (sum, t) => sum + (t.storyPoints || 0),
       0,
     );
 
@@ -228,7 +241,7 @@ export class RetrospectiveService {
       );
 
       const storyPointsCompleted = completedTasks.reduce(
-        (sum, t) => sum + ((t as any).storyPoints || 0),
+        (sum, t) => sum + (t.storyPoints || 0),
         0,
       );
 
@@ -238,7 +251,7 @@ export class RetrospectiveService {
         tasksCompleted: completedTasks.length,
         storyPointsCompleted,
         blockersFaced: blockedTasks.map(
-          (t) => (t as any).blockedReason || 'Unknown blocker',
+          (t) => t.blockedReason || 'Unknown blocker',
         ),
         suggestions: [], // Could be enhanced with actual hollon feedback
       });
