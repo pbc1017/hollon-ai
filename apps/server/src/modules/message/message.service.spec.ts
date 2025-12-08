@@ -52,6 +52,31 @@ describe('MessageService', () => {
     updatedAt: new Date(),
   };
 
+  const mockConversation = {
+    id: 'conv-123',
+    participant1Type: ParticipantType.HOLLON,
+    participant1Id: 'hollon-123',
+    participant2Type: ParticipantType.HOLLON,
+    participant2Id: 'hollon-456',
+    lastMessageId: 'message-123',
+    lastMessageAt: new Date(),
+  };
+
+  /**
+   * Helper function to create a mock query builder
+   */
+  const createMockQueryBuilder = (result: any = []) => ({
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    orWhere: jest.fn().mockReturnThis(),
+    leftJoinAndSelect: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    skip: jest.fn().mockReturnThis(),
+    take: jest.fn().mockReturnThis(),
+    getOne: jest.fn().mockResolvedValue(result),
+    getMany: jest.fn().mockResolvedValue(result),
+  });
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -81,7 +106,7 @@ describe('MessageService', () => {
   });
 
   describe('send', () => {
-    it('should create and save a message', async () => {
+    it('should create and save a message with all required fields', async () => {
       const sendDto = {
         fromType: ParticipantType.HOLLON,
         fromId: 'hollon-123',
@@ -94,20 +119,11 @@ describe('MessageService', () => {
       const createdMessage = { ...mockMessage, ...sendDto };
       mockMessageRepository.create.mockReturnValue(createdMessage);
       mockMessageRepository.save.mockResolvedValue(createdMessage);
-      mockConversationRepository.createQueryBuilder.mockReturnValue({
-        where: jest.fn().mockReturnThis(),
-        getOne: jest.fn().mockResolvedValue(null),
-      });
-      mockConversationRepository.create.mockReturnValue({
-        id: 'conv-123',
-        participant1Type: sendDto.fromType,
-        participant1Id: sendDto.fromId,
-        participant2Type: sendDto.toType,
-        participant2Id: sendDto.toId,
-      });
-      mockConversationRepository.save.mockResolvedValue({
-        id: 'conv-123',
-      });
+      mockConversationRepository.createQueryBuilder.mockReturnValue(
+        createMockQueryBuilder(null),
+      );
+      mockConversationRepository.create.mockReturnValue(mockConversation);
+      mockConversationRepository.save.mockResolvedValue(mockConversation);
       mockConversationHistoryRepository.create.mockReturnValue({
         conversationId: 'conv-123',
         messageId: createdMessage.id,
@@ -131,6 +147,46 @@ describe('MessageService', () => {
       expect(result).toEqual(createdMessage);
     });
 
+    it('should create message with optional metadata and requiresResponse', async () => {
+      const sendDto = {
+        fromType: ParticipantType.HOLLON,
+        fromId: 'hollon-123',
+        toType: ParticipantType.HOLLON,
+        toId: 'hollon-456',
+        messageType: MessageType.TASK_ASSIGNMENT,
+        content: 'Please review this',
+        metadata: { priority: 'high', category: 'review' },
+        requiresResponse: true,
+      };
+
+      const createdMessage = { ...mockMessage, ...sendDto };
+      mockMessageRepository.create.mockReturnValue(createdMessage);
+      mockMessageRepository.save.mockResolvedValue(createdMessage);
+      mockConversationRepository.createQueryBuilder.mockReturnValue(
+        createMockQueryBuilder(null),
+      );
+      mockConversationRepository.create.mockReturnValue(mockConversation);
+      mockConversationRepository.save.mockResolvedValue(mockConversation);
+      mockConversationHistoryRepository.create.mockReturnValue({});
+      mockConversationHistoryRepository.save.mockResolvedValue({});
+
+      const result = await service.send(sendDto);
+
+      expect(mockMessageRepository.create).toHaveBeenCalledWith({
+        fromType: sendDto.fromType,
+        fromId: sendDto.fromId,
+        toType: sendDto.toType,
+        toId: sendDto.toId,
+        messageType: sendDto.messageType,
+        content: sendDto.content,
+        metadata: sendDto.metadata,
+        requiresResponse: true,
+        repliedToId: null,
+      });
+      expect(result.requiresResponse).toBe(true);
+      expect(result.metadata).toEqual(sendDto.metadata);
+    });
+
     it('should handle system message without fromId', async () => {
       const sendDto = {
         fromType: ParticipantType.SYSTEM,
@@ -151,9 +207,110 @@ describe('MessageService', () => {
       const result = await service.send(sendDto);
 
       expect(result.fromId).toBeNull();
+      // Conversation should not be created/updated when fromId is null
       expect(
         mockConversationRepository.createQueryBuilder,
       ).not.toHaveBeenCalled();
+    });
+
+    it('should create a new conversation if none exists', async () => {
+      const sendDto = {
+        fromType: ParticipantType.HOLLON,
+        fromId: 'hollon-123',
+        toType: ParticipantType.HOLLON,
+        toId: 'hollon-456',
+        messageType: MessageType.GENERAL,
+        content: 'First message',
+      };
+
+      const createdMessage = { ...mockMessage, ...sendDto };
+      mockMessageRepository.create.mockReturnValue(createdMessage);
+      mockMessageRepository.save.mockResolvedValue(createdMessage);
+      mockConversationRepository.createQueryBuilder.mockReturnValue(
+        createMockQueryBuilder(null),
+      );
+      mockConversationRepository.create.mockReturnValue(mockConversation);
+      mockConversationRepository.save.mockResolvedValue(mockConversation);
+      mockConversationHistoryRepository.create.mockReturnValue({
+        conversationId: 'conv-123',
+        messageId: createdMessage.id,
+      });
+      mockConversationHistoryRepository.save.mockResolvedValue({});
+
+      await service.send(sendDto);
+
+      expect(mockConversationRepository.create).toHaveBeenCalledWith({
+        participant1Type: sendDto.fromType,
+        participant1Id: sendDto.fromId,
+        participant2Type: sendDto.toType,
+        participant2Id: sendDto.toId,
+        lastMessageId: createdMessage.id,
+        lastMessageAt: createdMessage.createdAt,
+      });
+      expect(mockConversationRepository.save).toHaveBeenCalled();
+      expect(mockConversationHistoryRepository.create).toHaveBeenCalled();
+      expect(mockConversationHistoryRepository.save).toHaveBeenCalled();
+    });
+
+    it('should update existing conversation with new message', async () => {
+      const sendDto = {
+        fromType: ParticipantType.HOLLON,
+        fromId: 'hollon-123',
+        toType: ParticipantType.HOLLON,
+        toId: 'hollon-456',
+        messageType: MessageType.GENERAL,
+        content: 'Follow-up message',
+      };
+
+      const existingConversation = { ...mockConversation };
+      const createdMessage = { ...mockMessage, ...sendDto };
+
+      mockMessageRepository.create.mockReturnValue(createdMessage);
+      mockMessageRepository.save.mockResolvedValue(createdMessage);
+      mockConversationRepository.createQueryBuilder.mockReturnValue(
+        createMockQueryBuilder(existingConversation),
+      );
+      mockConversationRepository.save.mockResolvedValue(existingConversation);
+      mockConversationHistoryRepository.create.mockReturnValue({
+        conversationId: 'conv-123',
+        messageId: createdMessage.id,
+      });
+      mockConversationHistoryRepository.save.mockResolvedValue({});
+
+      await service.send(sendDto);
+
+      // Should not create new conversation
+      expect(mockConversationRepository.create).not.toHaveBeenCalled();
+      // Should update existing conversation
+      expect(mockConversationRepository.save).toHaveBeenCalled();
+      expect(mockConversationHistoryRepository.create).toHaveBeenCalled();
+    });
+
+    it('should handle reply message with repliedToId', async () => {
+      const sendDto = {
+        fromType: ParticipantType.HOLLON,
+        fromId: 'hollon-123',
+        toType: ParticipantType.HOLLON,
+        toId: 'hollon-456',
+        messageType: MessageType.GENERAL,
+        content: 'This is a reply',
+        repliedToId: 'original-message-id',
+      };
+
+      const createdMessage = { ...mockMessage, ...sendDto };
+      mockMessageRepository.create.mockReturnValue(createdMessage);
+      mockMessageRepository.save.mockResolvedValue(createdMessage);
+      mockConversationRepository.createQueryBuilder.mockReturnValue(
+        createMockQueryBuilder(null),
+      );
+      mockConversationRepository.create.mockReturnValue(mockConversation);
+      mockConversationRepository.save.mockResolvedValue(mockConversation);
+      mockConversationHistoryRepository.create.mockReturnValue({});
+      mockConversationHistoryRepository.save.mockResolvedValue({});
+
+      const result = await service.send(sendDto);
+
+      expect(result.repliedToId).toBe('original-message-id');
     });
   });
 
@@ -185,13 +342,7 @@ describe('MessageService', () => {
   describe('findAll', () => {
     it('should return all messages with default pagination', async () => {
       const messages = [mockMessage, { ...mockMessage, id: 'message-456' }];
-      const mockQueryBuilder = {
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue(messages),
-      };
+      const mockQueryBuilder = createMockQueryBuilder(messages);
       mockMessageRepository.createQueryBuilder.mockReturnValue(
         mockQueryBuilder,
       );
@@ -207,14 +358,8 @@ describe('MessageService', () => {
       expect(result).toEqual(messages);
     });
 
-    it('should apply filters when provided', async () => {
-      const mockQueryBuilder = {
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([mockMessage]),
-      };
+    it('should apply all filters when provided', async () => {
+      const mockQueryBuilder = createMockQueryBuilder([mockMessage]);
       mockMessageRepository.createQueryBuilder.mockReturnValue(
         mockQueryBuilder,
       );
@@ -256,6 +401,52 @@ describe('MessageService', () => {
       );
       expect(mockQueryBuilder.skip).toHaveBeenCalledWith(5);
       expect(mockQueryBuilder.take).toHaveBeenCalledWith(10);
+    });
+
+    it('should handle isRead filter as false', async () => {
+      const mockQueryBuilder = createMockQueryBuilder([]);
+      mockMessageRepository.createQueryBuilder.mockReturnValue(
+        mockQueryBuilder,
+      );
+
+      await service.findAll({ isRead: false });
+
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'message.is_read = :isRead',
+        { isRead: false },
+      );
+    });
+
+    it('should handle isRead filter as true', async () => {
+      const mockQueryBuilder = createMockQueryBuilder([]);
+      mockMessageRepository.createQueryBuilder.mockReturnValue(
+        mockQueryBuilder,
+      );
+
+      await service.findAll({ isRead: true });
+
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'message.is_read = :isRead',
+        { isRead: true },
+      );
+    });
+
+    it('should not apply filter when value is undefined', async () => {
+      const mockQueryBuilder = createMockQueryBuilder([]);
+      mockMessageRepository.createQueryBuilder.mockReturnValue(
+        mockQueryBuilder,
+      );
+
+      await service.findAll({ fromType: ParticipantType.HOLLON });
+
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'message.from_type = :fromType',
+        { fromType: ParticipantType.HOLLON },
+      );
+      expect(mockQueryBuilder.andWhere).not.toHaveBeenCalledWith(
+        'message.from_id = :fromId',
+        expect.anything(),
+      );
     });
   });
 
@@ -310,12 +501,53 @@ describe('MessageService', () => {
       expect(result.requiresResponse).toBe(true);
     });
 
+    it('should update multiple fields at once', async () => {
+      const existingMessage = { ...mockMessage };
+      mockMessageRepository.findOne.mockResolvedValue(existingMessage);
+      mockMessageRepository.save.mockResolvedValue({
+        ...existingMessage,
+        content: 'New content',
+        metadata: { updated: true },
+        requiresResponse: true,
+      });
+
+      const result = await service.update('message-123', {
+        content: 'New content',
+        metadata: { updated: true },
+        requiresResponse: true,
+      });
+
+      expect(result.content).toBe('New content');
+      expect(result.metadata).toEqual({ updated: true });
+      expect(result.requiresResponse).toBe(true);
+    });
+
     it('should throw NotFoundException if message not found', async () => {
       mockMessageRepository.findOne.mockResolvedValue(null);
 
       await expect(
         service.update('non-existent', { content: 'New content' }),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should not modify fields that are not provided', async () => {
+      const existingMessage = {
+        ...mockMessage,
+        content: 'Original content',
+        metadata: { original: true },
+        requiresResponse: false,
+      };
+      mockMessageRepository.findOne.mockResolvedValue(existingMessage);
+      mockMessageRepository.save.mockImplementation((msg) => msg);
+
+      await service.update('message-123', {
+        content: 'Updated content',
+      });
+
+      const saveCall = mockMessageRepository.save.mock.calls[0][0];
+      expect(saveCall.content).toBe('Updated content');
+      expect(saveCall.metadata).toEqual({ original: true });
+      expect(saveCall.requiresResponse).toBe(false);
     });
   });
 
@@ -343,7 +575,7 @@ describe('MessageService', () => {
   });
 
   describe('markAsRead', () => {
-    it('should mark a message as read', async () => {
+    it('should mark an unread message as read', async () => {
       const unreadMessage = { ...mockMessage, isRead: false, readAt: null };
       mockMessageRepository.findOne.mockResolvedValue(unreadMessage);
       mockMessageRepository.save.mockResolvedValue({
@@ -357,6 +589,7 @@ describe('MessageService', () => {
       expect(mockMessageRepository.save).toHaveBeenCalled();
       expect(unreadMessage.isRead).toBe(true);
       expect(unreadMessage.readAt).toBeDefined();
+      expect(unreadMessage.readAt).toBeInstanceOf(Date);
     });
 
     it('should not update already read message', async () => {
@@ -378,20 +611,16 @@ describe('MessageService', () => {
       await expect(service.markAsRead('non-existent')).rejects.toThrow(
         NotFoundException,
       );
+      await expect(service.markAsRead('non-existent')).rejects.toThrow(
+        'Message with ID non-existent not found',
+      );
     });
   });
 
   describe('getInbox', () => {
     it('should return inbox messages with default options', async () => {
       const messages = [mockMessage];
-      const mockQueryBuilder = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue(messages),
-      };
+      const mockQueryBuilder = createMockQueryBuilder(messages);
       mockMessageRepository.createQueryBuilder.mockReturnValue(
         mockQueryBuilder,
       );
@@ -419,14 +648,7 @@ describe('MessageService', () => {
     });
 
     it('should apply unreadOnly filter', async () => {
-      const mockQueryBuilder = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([]),
-      };
+      const mockQueryBuilder = createMockQueryBuilder([]);
       mockMessageRepository.createQueryBuilder.mockReturnValue(
         mockQueryBuilder,
       );
@@ -441,14 +663,7 @@ describe('MessageService', () => {
     });
 
     it('should apply requiresResponse filter', async () => {
-      const mockQueryBuilder = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([]),
-      };
+      const mockQueryBuilder = createMockQueryBuilder([]);
       mockMessageRepository.createQueryBuilder.mockReturnValue(
         mockQueryBuilder,
       );
@@ -462,15 +677,27 @@ describe('MessageService', () => {
       );
     });
 
+    it('should apply both filters simultaneously', async () => {
+      const mockQueryBuilder = createMockQueryBuilder([]);
+      mockMessageRepository.createQueryBuilder.mockReturnValue(
+        mockQueryBuilder,
+      );
+
+      await service.getInbox(ParticipantType.HOLLON, 'hollon-456', {
+        unreadOnly: true,
+        requiresResponse: true,
+      });
+
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'message.is_read = false',
+      );
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'message.requires_response = true',
+      );
+    });
+
     it('should apply custom pagination', async () => {
-      const mockQueryBuilder = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([]),
-      };
+      const mockQueryBuilder = createMockQueryBuilder([]);
       mockMessageRepository.createQueryBuilder.mockReturnValue(
         mockQueryBuilder,
       );
@@ -483,14 +710,32 @@ describe('MessageService', () => {
       expect(mockQueryBuilder.skip).toHaveBeenCalledWith(10);
       expect(mockQueryBuilder.take).toHaveBeenCalledWith(20);
     });
+
+    it('should handle user participant type', async () => {
+      const mockQueryBuilder = createMockQueryBuilder([]);
+      mockMessageRepository.createQueryBuilder.mockReturnValue(
+        mockQueryBuilder,
+      );
+
+      await service.getInbox(ParticipantType.USER, 'user-123');
+
+      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
+        'message.to_type = :toType',
+        { toType: ParticipantType.USER },
+      );
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'message.to_id = :toId',
+        { toId: 'user-123' },
+      );
+    });
   });
 
   describe('getConversationHistory', () => {
     it('should return empty array if no conversation exists', async () => {
-      mockConversationRepository.createQueryBuilder.mockReturnValue({
-        where: jest.fn().mockReturnThis(),
-        getOne: jest.fn().mockResolvedValue(null),
-      });
+      const mockQueryBuilder = createMockQueryBuilder(null);
+      mockConversationRepository.createQueryBuilder.mockReturnValue(
+        mockQueryBuilder,
+      );
 
       const result = await service.getConversationHistory(
         { type: ParticipantType.HOLLON, id: 'hollon-123' },
@@ -501,34 +746,97 @@ describe('MessageService', () => {
     });
 
     it('should return conversation history if conversation exists', async () => {
-      const mockConversation = { id: 'conv-123' };
+      const conversation = { id: 'conv-123' };
+      const message1 = { ...mockMessage, id: 'msg-1', content: 'First' };
+      const message2 = { ...mockMessage, id: 'msg-2', content: 'Second' };
       const mockHistory = [
-        { message: { ...mockMessage, id: 'msg-2' } },
-        { message: { ...mockMessage, id: 'msg-1' } },
+        { message: message2, createdAt: new Date('2024-01-02') },
+        { message: message1, createdAt: new Date('2024-01-01') },
       ];
 
-      mockConversationRepository.createQueryBuilder.mockReturnValue({
-        where: jest.fn().mockReturnThis(),
-        getOne: jest.fn().mockResolvedValue(mockConversation),
-      });
+      const convQueryBuilder = createMockQueryBuilder(conversation);
+      mockConversationRepository.createQueryBuilder.mockReturnValue(
+        convQueryBuilder,
+      );
 
-      mockConversationHistoryRepository.createQueryBuilder.mockReturnValue({
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue(mockHistory),
-      });
+      const historyQueryBuilder = createMockQueryBuilder(mockHistory);
+      mockConversationHistoryRepository.createQueryBuilder.mockReturnValue(
+        historyQueryBuilder,
+      );
 
       const result = await service.getConversationHistory(
         { type: ParticipantType.HOLLON, id: 'hollon-123' },
         { type: ParticipantType.HOLLON, id: 'hollon-456' },
       );
 
-      // getConversationHistory reverses the order (DESC -> ASC for chronological display)
+      expect(historyQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith(
+        'history.message',
+        'message',
+      );
+      expect(historyQueryBuilder.where).toHaveBeenCalledWith(
+        'history.conversation_id = :conversationId',
+        { conversationId: 'conv-123' },
+      );
+      expect(historyQueryBuilder.orderBy).toHaveBeenCalledWith(
+        'history.created_at',
+        'DESC',
+      );
+      expect(historyQueryBuilder.take).toHaveBeenCalledWith(50);
+
+      // Messages should be reversed (chronological order)
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('msg-1');
       expect(result[1].id).toBe('msg-2');
+    });
+
+    it('should apply custom limit to conversation history', async () => {
+      const conversation = { id: 'conv-123' };
+      const convQueryBuilder = createMockQueryBuilder(conversation);
+      mockConversationRepository.createQueryBuilder.mockReturnValue(
+        convQueryBuilder,
+      );
+
+      const historyQueryBuilder = createMockQueryBuilder([]);
+      mockConversationHistoryRepository.createQueryBuilder.mockReturnValue(
+        historyQueryBuilder,
+      );
+
+      await service.getConversationHistory(
+        { type: ParticipantType.HOLLON, id: 'hollon-123' },
+        { type: ParticipantType.HOLLON, id: 'hollon-456' },
+        100,
+      );
+
+      expect(historyQueryBuilder.take).toHaveBeenCalledWith(100);
+    });
+
+    it('should find bidirectional conversations', async () => {
+      const conversation = { id: 'conv-123' };
+      const mockQueryBuilder = createMockQueryBuilder(conversation);
+      mockConversationRepository.createQueryBuilder.mockReturnValue(
+        mockQueryBuilder,
+      );
+
+      const historyQueryBuilder = createMockQueryBuilder([]);
+      mockConversationHistoryRepository.createQueryBuilder.mockReturnValue(
+        historyQueryBuilder,
+      );
+
+      await service.getConversationHistory(
+        { type: ParticipantType.HOLLON, id: 'hollon-123' },
+        { type: ParticipantType.USER, id: 'user-456' },
+      );
+
+      // Should search for conversation in both directions
+      expect(mockQueryBuilder.where).toHaveBeenCalledWith(
+        expect.stringContaining('participant1_type'),
+        {
+          p1Type: ParticipantType.HOLLON,
+          p1Id: 'hollon-123',
+          p2Type: ParticipantType.USER,
+          p2Id: 'user-456',
+        },
+      );
     });
   });
 });
