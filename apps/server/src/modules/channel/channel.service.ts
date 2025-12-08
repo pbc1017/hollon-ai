@@ -1,7 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Channel } from './entities/channel.entity';
+import { Channel, ChannelType } from './entities/channel.entity';
 import {
   ChannelMembership,
   ChannelRole,
@@ -26,6 +30,8 @@ export class ChannelService {
    * Create a new channel
    */
   async create(dto: CreateChannelDto): Promise<Channel> {
+    const isGroup = dto.channelType === ChannelType.GROUP;
+
     const channel = this.channelRepo.create({
       organizationId: dto.organizationId,
       teamId: dto.teamId ?? null,
@@ -34,6 +40,8 @@ export class ChannelService {
       channelType: dto.channelType,
       createdByType: dto.createdByType,
       createdById: dto.createdById ?? null,
+      isGroup,
+      maxMembers: dto.maxMembers ?? null,
     });
 
     const savedChannel = await this.channelRepo.save(channel);
@@ -209,5 +217,190 @@ export class ChannelService {
       senderType: ParticipantType.SYSTEM,
       content,
     });
+  }
+
+  /**
+   * Create a group channel with multiple members
+   */
+  async createGroupChannel(
+    organizationId: string,
+    creatorType: ParticipantType,
+    creatorId: string,
+    name: string,
+    memberIds: Array<{ type: ParticipantType; id: string }>,
+    description?: string,
+    maxMembers?: number,
+  ): Promise<Channel> {
+    // Validate member count
+    if (maxMembers && memberIds.length > maxMembers) {
+      throw new BadRequestException(
+        `Cannot add more than ${maxMembers} members`,
+      );
+    }
+
+    // Create group channel
+    const channel = await this.create({
+      organizationId,
+      name,
+      description,
+      channelType: ChannelType.GROUP,
+      createdByType: creatorType,
+      createdById: creatorId,
+      maxMembers,
+    });
+
+    // Add all members
+    for (const member of memberIds) {
+      await this.addMember(channel.id, member.type, member.id);
+    }
+
+    return channel;
+  }
+
+  /**
+   * Add multiple members to a channel
+   */
+  async addMembers(
+    channelId: string,
+    members: Array<{ type: ParticipantType; id: string; role?: ChannelRole }>,
+  ): Promise<ChannelMembership[]> {
+    const channel = await this.findOne(channelId);
+
+    // Check max members limit for group channels
+    if (channel.isGroup && channel.maxMembers) {
+      const currentMemberCount = await this.membershipRepo.count({
+        where: { channelId },
+      });
+
+      if (currentMemberCount + members.length > channel.maxMembers) {
+        throw new BadRequestException(
+          `Cannot exceed maximum member limit of ${channel.maxMembers}`,
+        );
+      }
+    }
+
+    const memberships: ChannelMembership[] = [];
+
+    for (const member of members) {
+      const membership = await this.addMember(
+        channelId,
+        member.type,
+        member.id,
+        member.role,
+      );
+      memberships.push(membership);
+    }
+
+    return memberships;
+  }
+
+  /**
+   * Check if user is a member of the channel
+   */
+  async isMember(
+    channelId: string,
+    memberType: ParticipantType,
+    memberId: string,
+  ): Promise<boolean> {
+    const membership = await this.membershipRepo.findOne({
+      where: { channelId, memberType, memberId },
+    });
+
+    return !!membership;
+  }
+
+  /**
+   * Get member role in channel
+   */
+  async getMemberRole(
+    channelId: string,
+    memberType: ParticipantType,
+    memberId: string,
+  ): Promise<ChannelRole | null> {
+    const membership = await this.membershipRepo.findOne({
+      where: { channelId, memberType, memberId },
+    });
+
+    return membership?.role ?? null;
+  }
+
+  /**
+   * Update member role
+   */
+  async updateMemberRole(
+    channelId: string,
+    memberType: ParticipantType,
+    memberId: string,
+    newRole: ChannelRole,
+  ): Promise<ChannelMembership> {
+    const membership = await this.membershipRepo.findOne({
+      where: { channelId, memberType, memberId },
+    });
+
+    if (!membership) {
+      throw new NotFoundException('Membership not found');
+    }
+
+    membership.role = newRole;
+    return this.membershipRepo.save(membership);
+  }
+
+  /**
+   * Get channels user is a member of
+   */
+  async findUserChannels(
+    memberType: ParticipantType,
+    memberId: string,
+  ): Promise<Channel[]> {
+    const memberships = await this.membershipRepo.find({
+      where: { memberType, memberId },
+      relations: ['channel'],
+    });
+
+    return memberships.map((m) => m.channel);
+  }
+
+  /**
+   * Find or create direct channel between two users
+   */
+  async findOrCreateDirectChannel(
+    organizationId: string,
+    user1Type: ParticipantType,
+    user1Id: string,
+    user2Type: ParticipantType,
+    user2Id: string,
+  ): Promise<Channel> {
+    // Find existing direct channel
+    const user1Channels = await this.findUserChannels(user1Type, user1Id);
+    const directChannels = user1Channels.filter(
+      (ch) => ch.channelType === ChannelType.DIRECT,
+    );
+
+    for (const channel of directChannels) {
+      const members = await this.getMembers(channel.id);
+      if (
+        members.length === 2 &&
+        members.some(
+          (m) => m.memberType === user2Type && m.memberId === user2Id,
+        )
+      ) {
+        return channel;
+      }
+    }
+
+    // Create new direct channel
+    const channelName = `DM-${user1Id.slice(0, 8)}-${user2Id.slice(0, 8)}`;
+    const channel = await this.create({
+      organizationId,
+      name: channelName,
+      channelType: ChannelType.DIRECT,
+      createdByType: user1Type,
+      createdById: user1Id,
+    });
+
+    // Add both users
+    await this.addMember(channel.id, user2Type, user2Id);
+
+    return channel;
   }
 }

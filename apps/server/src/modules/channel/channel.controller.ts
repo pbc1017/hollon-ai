@@ -2,6 +2,8 @@ import {
   Controller,
   Post,
   Get,
+  Put,
+  Delete,
   Body,
   Param,
   Query,
@@ -9,11 +11,17 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { ChannelService } from './channel.service';
-import { CreateChannelDto } from './dto/create-channel.dto';
+import {
+  CreateChannelDto,
+  CreateGroupChannelDto,
+  AddChannelMembersDto,
+  UpdateMemberRoleDto,
+} from './dto/create-channel.dto';
 import { SendChannelMessageDto } from './dto/channel-message.dto';
 import { Channel } from './entities/channel.entity';
 import { ChannelMembership } from './entities/channel-membership.entity';
 import { ChannelMessage } from './entities/channel-message.entity';
+import { ParticipantType } from '../message/entities/message.entity';
 
 @Controller('channels')
 export class ChannelController {
@@ -106,5 +114,102 @@ export class ChannelController {
     @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
   ): Promise<ChannelMessage[]> {
     return this.channelService.getThreadMessages(messageId, limit);
+  }
+
+  /**
+   * Create a group channel
+   * POST /channels/group
+   */
+  @Post('group')
+  async createGroupChannel(
+    @Body() dto: CreateGroupChannelDto,
+  ): Promise<Channel> {
+    return this.channelService.createGroupChannel(
+      dto.organizationId,
+      dto.createdByType,
+      dto.createdById,
+      dto.name,
+      dto.members,
+      dto.description,
+      dto.maxMembers,
+    );
+  }
+
+  /**
+   * Add members to channel
+   * POST /channels/:channelId/members
+   */
+  @Post(':channelId/members')
+  async addMembers(
+    @Param('channelId', ParseUUIDPipe) channelId: string,
+    @Body() dto: AddChannelMembersDto,
+  ): Promise<ChannelMembership[]> {
+    return this.channelService.addMembers(channelId, dto.members);
+  }
+
+  /**
+   * Remove member from channel
+   * DELETE /channels/:channelId/members/:memberType/:memberId
+   */
+  @Delete(':channelId/members/:memberType/:memberId')
+  async removeMember(
+    @Param('channelId', ParseUUIDPipe) channelId: string,
+    @Param('memberType') memberType: ParticipantType,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+  ): Promise<void> {
+    return this.channelService.removeMember(channelId, memberType, memberId);
+  }
+
+  /**
+   * Update member role
+   * PUT /channels/:channelId/members/role
+   */
+  @Put(':channelId/members/role')
+  async updateMemberRole(
+    @Param('channelId', ParseUUIDPipe) channelId: string,
+    @Body() dto: UpdateMemberRoleDto,
+  ): Promise<ChannelMembership> {
+    return this.channelService.updateMemberRole(
+      channelId,
+      dto.memberType,
+      dto.memberId,
+      dto.role,
+    );
+  }
+
+  /**
+   * Get user's channels
+   * GET /channels/user/:memberType/:memberId
+   */
+  @Get('user/:memberType/:memberId')
+  async getUserChannels(
+    @Param('memberType') memberType: ParticipantType,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+  ): Promise<Channel[]> {
+    return this.channelService.findUserChannels(memberType, memberId);
+  }
+
+  /**
+   * Find or create direct channel
+   * POST /channels/direct
+   */
+  @Post('direct')
+  async findOrCreateDirectChannel(
+    @Body()
+    body: {
+      organizationId: string;
+      user1Type: ParticipantType;
+      user1Id: string;
+      user2Type: ParticipantType;
+      user2Id: string;
+    },
+  ): Promise<Channel> {
+    return this.channelService.findOrCreateDirectChannel(
+      body.organizationId,
+      body.user1Type,
+      body.user1Id,
+      body.user2Type,
+      body.user2Id,
+    );
   }
 }

@@ -15,6 +15,7 @@ export enum ChannelType {
   PUBLIC = 'public',
   PRIVATE = 'private',
   DIRECT = 'direct',
+  GROUP = 'group',
 }
 
 @Entity('channels')
@@ -59,6 +60,12 @@ export class Channel {
 
   @Column({ name: 'created_by_id', type: 'uuid', nullable: true })
   createdById: string | null;
+
+  @Column({ name: 'is_group', type: 'boolean', default: false })
+  isGroup: boolean;
+
+  @Column({ name: 'max_members', type: 'integer', nullable: true })
+  maxMembers: number | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
