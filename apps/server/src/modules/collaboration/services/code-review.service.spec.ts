@@ -199,19 +199,28 @@ describe('CodeReviewService', () => {
 
   describe('requestReview', () => {
     it('should assign reviewer and update PR status', async () => {
+      // Use a general task (no security/auth/architecture/performance keywords)
+      const generalTask: Partial<Task> = {
+        id: 'task-123',
+        title: 'Add user profile page',
+        description: 'Create a new user profile component',
+        status: TaskStatus.IN_PROGRESS,
+        projectId: 'project-123',
+      };
       const prWithTask = {
         ...mockPullRequest,
+        task: generalTask as Task,
         status: PullRequestStatus.DRAFT,
       };
       mockPRRepository.findOne.mockResolvedValue(prWithTask);
+      // findAvailableTeammate calls findOne for author, then find for teammates
       mockHollonRepository.findOne.mockResolvedValue(mockAuthorHollon);
-      mockHollonRepository.find.mockResolvedValue([mockReviewerHollon]);
-      mockPRRepository.save.mockResolvedValue({
-        ...prWithTask,
-        status: PullRequestStatus.READY_FOR_REVIEW,
-        reviewerHollonId: mockReviewerHollon.id,
-        reviewerType: ReviewerType.TEAM_MEMBER,
-      });
+      // Return both author and reviewer, but author will be filtered out
+      mockHollonRepository.find.mockResolvedValue([
+        mockAuthorHollon,
+        mockReviewerHollon,
+      ]);
+      mockPRRepository.save.mockImplementation((pr) => Promise.resolve(pr));
       mockMessageService.send.mockResolvedValue({});
 
       const result = await service.requestReview('pr-123');
@@ -614,8 +623,17 @@ describe('CodeReviewService', () => {
 
   describe('reviewer selection logic', () => {
     it('should select teammate from same team', async () => {
+      // Use a general task (no security/auth/architecture/performance keywords)
+      const generalTask: Partial<Task> = {
+        id: 'task-123',
+        title: 'Add user profile page',
+        description: 'Create a new user profile component',
+        status: TaskStatus.IN_PROGRESS,
+        projectId: 'project-123',
+      };
       const prWithTask = {
         ...mockPullRequest,
+        task: generalTask as Task,
         status: PullRequestStatus.DRAFT,
       };
       const teammate = {
@@ -625,13 +643,9 @@ describe('CodeReviewService', () => {
 
       mockPRRepository.findOne.mockResolvedValue(prWithTask);
       mockHollonRepository.findOne.mockResolvedValue(mockAuthorHollon);
-      mockHollonRepository.find.mockResolvedValue([teammate]);
-      mockPRRepository.save.mockResolvedValue({
-        ...prWithTask,
-        status: PullRequestStatus.READY_FOR_REVIEW,
-        reviewerHollonId: teammate.id,
-        reviewerType: ReviewerType.TEAM_MEMBER,
-      });
+      // Return both author and teammate, author will be filtered out
+      mockHollonRepository.find.mockResolvedValue([mockAuthorHollon, teammate]);
+      mockPRRepository.save.mockImplementation((pr) => Promise.resolve(pr));
       mockMessageService.send.mockResolvedValue({});
 
       const result = await service.requestReview('pr-123');
@@ -641,8 +655,17 @@ describe('CodeReviewService', () => {
     });
 
     it('should fall back to organization hollons when no teammate available', async () => {
+      // Use a general task (no security/auth/architecture/performance keywords)
+      const generalTask: Partial<Task> = {
+        id: 'task-123',
+        title: 'Add user profile page',
+        description: 'Create a new user profile component',
+        status: TaskStatus.IN_PROGRESS,
+        projectId: 'project-123',
+      };
       const prWithTask = {
         ...mockPullRequest,
+        task: generalTask as Task,
         status: PullRequestStatus.DRAFT,
       };
       const orgHollon = {
@@ -653,16 +676,12 @@ describe('CodeReviewService', () => {
 
       mockPRRepository.findOne.mockResolvedValue(prWithTask);
       mockHollonRepository.findOne.mockResolvedValue(mockAuthorHollon);
-      // First call for teammates returns empty, second for org hollons
+      // First call for teammates returns only author (filtered out = empty)
+      // Second call for org hollons returns author + orgHollon
       mockHollonRepository.find
-        .mockResolvedValueOnce([]) // no teammates
-        .mockResolvedValueOnce([orgHollon]); // org fallback
-      mockPRRepository.save.mockResolvedValue({
-        ...prWithTask,
-        status: PullRequestStatus.READY_FOR_REVIEW,
-        reviewerHollonId: orgHollon.id,
-        reviewerType: ReviewerType.TEAM_MEMBER,
-      });
+        .mockResolvedValueOnce([mockAuthorHollon]) // teammates: only author, filtered to empty
+        .mockResolvedValueOnce([mockAuthorHollon, orgHollon]); // org fallback: author + orgHollon
+      mockPRRepository.save.mockImplementation((pr) => Promise.resolve(pr));
       mockMessageService.send.mockResolvedValue({});
 
       await service.requestReview('pr-123');
@@ -671,46 +690,56 @@ describe('CodeReviewService', () => {
     });
 
     it('should exclude author from reviewer candidates', async () => {
+      // Use a general task (no security/auth/architecture/performance keywords)
+      const generalTask: Partial<Task> = {
+        id: 'task-123',
+        title: 'Add user profile page',
+        description: 'Create a new user profile component',
+        status: TaskStatus.IN_PROGRESS,
+        projectId: 'project-123',
+      };
       const prWithTask = {
         ...mockPullRequest,
+        task: generalTask as Task,
         status: PullRequestStatus.DRAFT,
         authorHollonId: 'author-hollon-123',
       };
-      // Only the author is available
+      // Only the author is available in team
       const authorOnly = {
         ...mockAuthorHollon,
         status: HollonStatus.IDLE,
       };
 
-      mockPRRepository.findOne.mockResolvedValue(prWithTask);
-      mockHollonRepository.findOne.mockResolvedValue(mockAuthorHollon);
-      // Returns author in team list
-      mockHollonRepository.find
-        .mockResolvedValueOnce([authorOnly])
-        .mockResolvedValueOnce([authorOnly]); // org fallback also only has author
-
-      // Should fall back to specialized reviewer
+      // Should fall back to specialized reviewer when no teammates
       const codeReviewer = {
         id: 'code-reviewer',
         name: 'CodeReviewer',
         status: HollonStatus.IDLE,
       };
+
+      mockPRRepository.findOne.mockResolvedValue(prWithTask);
+      // findOne is called twice:
+      // 1. First for getting author hollon info (in findAvailableTeammate)
+      // 2. Then for finding specialized CodeReviewer (in findOrCreateSpecializedReviewer)
       mockHollonRepository.findOne
         .mockResolvedValueOnce(mockAuthorHollon) // for getting author team
-        .mockResolvedValueOnce(codeReviewer); // for specialized reviewer
+        .mockResolvedValueOnce(codeReviewer); // for specialized reviewer lookup
 
-      mockPRRepository.save.mockResolvedValue({
-        ...prWithTask,
-        status: PullRequestStatus.READY_FOR_REVIEW,
-        reviewerHollonId: codeReviewer.id,
-        reviewerType: ReviewerType.CODE_REVIEWER,
-      });
+      // find is called twice:
+      // 1. teammates (returns only author, filtered to empty)
+      // 2. org hollons (returns only author, filtered to empty)
+      mockHollonRepository.find
+        .mockResolvedValueOnce([authorOnly]) // teammates: only author
+        .mockResolvedValueOnce([authorOnly]); // org fallback: only author
+
+      mockPRRepository.save.mockImplementation((pr) => Promise.resolve(pr));
       mockMessageService.send.mockResolvedValue({});
 
       const result = await service.requestReview('pr-123');
 
       // Author should not be selected as reviewer
       expect(result.reviewerHollonId).not.toBe('author-hollon-123');
+      expect(result.reviewerHollonId).toBe('code-reviewer');
     });
   });
 

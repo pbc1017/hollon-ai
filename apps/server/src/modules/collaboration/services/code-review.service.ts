@@ -187,6 +187,147 @@ export class CodeReviewService {
   }
 
   /**
+   * PR 닫기 (머지 없이)
+   */
+  async closePullRequest(prId: string, reason?: string): Promise<void> {
+    const pr = await this.prRepo.findOne({
+      where: { id: prId },
+      relations: ['task'],
+    });
+
+    if (!pr) {
+      throw new NotFoundException(`PR ${prId} not found`);
+    }
+
+    if (pr.status === PullRequestStatus.MERGED) {
+      throw new Error(`PR ${prId} is already merged and cannot be closed`);
+    }
+
+    if (pr.status === PullRequestStatus.CLOSED) {
+      throw new Error(`PR ${prId} is already closed`);
+    }
+
+    this.logger.log(`Closing PR ${prId}`);
+
+    // PR 상태 업데이트
+    pr.status = PullRequestStatus.CLOSED;
+    if (reason) {
+      pr.reviewComments = pr.reviewComments
+        ? `${pr.reviewComments}\n\n[CLOSED] ${reason}`
+        : `[CLOSED] ${reason}`;
+    }
+    await this.prRepo.save(pr);
+
+    // Task 상태를 다시 IN_PROGRESS로 변경 (새 PR 생성 가능)
+    pr.task.status = TaskStatus.IN_PROGRESS;
+    await this.taskRepo.save(pr.task);
+
+    // 작성자에게 알림
+    if (pr.authorHollonId) {
+      await this.messageService.send({
+        fromId: pr.reviewerHollonId || undefined,
+        fromType: ParticipantType.HOLLON,
+        toId: pr.authorHollonId,
+        toType: ParticipantType.HOLLON,
+        messageType: MessageType.RESPONSE,
+        content: `PR #${pr.prNumber} has been closed.${reason ? ` Reason: ${reason}` : ''}`,
+        metadata: { prId: pr.id, taskId: pr.taskId },
+      });
+    }
+
+    this.logger.log(`PR closed: ${prId}`);
+  }
+
+  /**
+   * 수정 후 재리뷰 요청 (changes_requested → ready_for_review)
+   */
+  async reopenReview(
+    prId: string,
+    updateMessage?: string,
+  ): Promise<TaskPullRequest> {
+    const pr = await this.prRepo.findOne({
+      where: { id: prId },
+      relations: ['task'],
+    });
+
+    if (!pr) {
+      throw new NotFoundException(`PR ${prId} not found`);
+    }
+
+    if (pr.status !== PullRequestStatus.CHANGES_REQUESTED) {
+      throw new Error(
+        `PR ${prId} is not in 'changes_requested' status. Current status: ${pr.status}`,
+      );
+    }
+
+    this.logger.log(`Reopening review for PR ${prId}`);
+
+    // PR 상태 업데이트
+    pr.status = PullRequestStatus.READY_FOR_REVIEW;
+    await this.prRepo.save(pr);
+
+    // 리뷰어에게 재리뷰 요청
+    if (pr.reviewerHollonId) {
+      await this.messageService.send({
+        fromId: pr.authorHollonId || undefined,
+        fromType: ParticipantType.HOLLON,
+        toId: pr.reviewerHollonId,
+        toType: ParticipantType.HOLLON,
+        messageType: MessageType.REVIEW_REQUEST,
+        content: this.formatReopenReviewRequest(pr, updateMessage),
+        metadata: { prId: pr.id, taskId: pr.taskId },
+        requiresResponse: true,
+      });
+    }
+
+    this.logger.log(`Review reopened for PR ${prId}`);
+    return pr;
+  }
+
+  /**
+   * Draft PR을 Ready for Review로 변경
+   */
+  async markReadyForReview(prId: string): Promise<TaskPullRequest> {
+    const pr = await this.prRepo.findOne({
+      where: { id: prId },
+      relations: ['task'],
+    });
+
+    if (!pr) {
+      throw new NotFoundException(`PR ${prId} not found`);
+    }
+
+    if (pr.status !== PullRequestStatus.DRAFT) {
+      throw new Error(
+        `PR ${prId} is not in 'draft' status. Current status: ${pr.status}`,
+      );
+    }
+
+    // 리뷰 요청으로 전환 (리뷰어 자동 할당 포함)
+    return this.requestReview(prId);
+  }
+
+  /**
+   * 재리뷰 요청 메시지 포맷
+   */
+  private formatReopenReviewRequest(
+    pr: TaskPullRequest,
+    updateMessage?: string,
+  ): string {
+    return `
+Re-review Request
+
+PR: #${pr.prNumber}
+URL: ${pr.prUrl}
+
+The author has addressed your comments and is requesting a re-review.
+${updateMessage ? `\nAuthor's update:\n${updateMessage}` : ''}
+
+Please review the changes.
+    `.trim();
+  }
+
+  /**
    * 리뷰어 선택 로직
    */
   private async selectReviewer(
@@ -304,16 +445,67 @@ export class CodeReviewService {
    * 팀 동료 찾기
    */
   private async findAvailableTeammate(
-    _pr: TaskPullRequest,
+    pr: TaskPullRequest,
   ): Promise<Hollon | null> {
-    // 같은 팀의 가용한 홀론 찾기
-    // TODO: Task에서 teamId를 가져와서 같은 팀의 홀론 조회
-    const availableHollons = await this.hollonRepo.find({
-      where: { status: HollonStatus.IDLE },
-      take: 1,
+    // 1. PR 작성자 홀론의 팀 정보 가져오기
+    if (!pr.authorHollonId) {
+      return null;
+    }
+
+    const authorHollon = await this.hollonRepo.findOne({
+      where: { id: pr.authorHollonId },
     });
 
-    return availableHollons[0] || null;
+    if (!authorHollon?.teamId) {
+      // 팀이 없으면 같은 조직의 가용한 홀론 중에서 선택
+      const availableHollons = await this.hollonRepo.find({
+        where: {
+          organizationId: authorHollon?.organizationId,
+          status: HollonStatus.IDLE,
+        },
+      });
+
+      // 작성자 본인 제외
+      const filtered = availableHollons.filter(
+        (h) => h.id !== pr.authorHollonId,
+      );
+      return filtered[0] || null;
+    }
+
+    // 2. 같은 팀의 가용한 홀론 찾기 (작성자 제외)
+    const teammates = await this.hollonRepo.find({
+      where: {
+        teamId: authorHollon.teamId,
+        status: HollonStatus.IDLE,
+      },
+    });
+
+    // 작성자 본인 제외
+    const availableTeammates = teammates.filter(
+      (h) => h.id !== pr.authorHollonId,
+    );
+
+    if (availableTeammates.length === 0) {
+      this.logger.log(
+        `No available teammates found for team ${authorHollon.teamId}, falling back to organization`,
+      );
+
+      // 팀 내 가용 홀론이 없으면 같은 조직의 다른 홀론 선택
+      const orgHollons = await this.hollonRepo.find({
+        where: {
+          organizationId: authorHollon.organizationId,
+          status: HollonStatus.IDLE,
+        },
+      });
+
+      const orgFiltered = orgHollons.filter((h) => h.id !== pr.authorHollonId);
+      return orgFiltered[0] || null;
+    }
+
+    // 3. 가장 적은 활성 리뷰를 가진 팀원 선택 (부하 분산)
+    // 현재는 간단히 첫 번째 가용 팀원 반환
+    // TODO: 향후 활성 리뷰 수 기반 부하 분산 로직 추가
+    return availableTeammates[0];
   }
 
   /**
