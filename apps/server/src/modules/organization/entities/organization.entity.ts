@@ -12,6 +12,9 @@ export class Organization extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   description: string;
 
+  @Column({ type: 'text', nullable: true })
+  contextPrompt: string;
+
   @Column({ type: 'jsonb', nullable: true, default: {} })
   settings: Record<string, unknown>;
 
