@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -11,6 +12,8 @@ import {
 import { MessageService } from './message.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { MessageQueryDto } from './dto/message-query.dto';
+import { UpdateMessageDto } from './dto/update-message.dto';
+import { FindMessagesQueryDto } from './dto/find-messages-query.dto';
 import { Message } from './entities/message.entity';
 import { ParticipantType } from './entities/message.entity';
 
@@ -25,6 +28,24 @@ export class MessageController {
   @Post()
   async sendMessage(@Body() dto: SendMessageDto): Promise<Message> {
     return this.messageService.send(dto);
+  }
+
+  /**
+   * Get all messages with optional filters
+   * GET /messages
+   */
+  @Get()
+  async findAll(@Query() query: FindMessagesQueryDto): Promise<Message[]> {
+    return this.messageService.findAll({
+      fromType: query.fromType,
+      fromId: query.fromId,
+      toType: query.toType,
+      toId: query.toId,
+      messageType: query.messageType,
+      isRead: query.isRead,
+      limit: query.limit,
+      offset: query.offset,
+    });
   }
 
   /**
@@ -56,18 +77,6 @@ export class MessageController {
   }
 
   /**
-   * Mark message as read
-   * PATCH /messages/:messageId/read
-   */
-  @Patch(':messageId/read')
-  async markAsRead(
-    @Param('messageId', ParseUUIDPipe) messageId: string,
-  ): Promise<{ success: boolean }> {
-    await this.messageService.markAsRead(messageId);
-    return { success: true };
-  }
-
-  /**
    * Get conversation history between two hollons
    * GET /messages/conversation/hollon/:hollon1Id/hollon/:hollon2Id
    */
@@ -82,5 +91,52 @@ export class MessageController {
       { type: ParticipantType.HOLLON, id: hollon2Id },
       limit,
     );
+  }
+
+  /**
+   * Get a single message by ID
+   * GET /messages/:id
+   * Note: This route is placed after specific routes to avoid matching 'inbox', 'conversation' as :id
+   */
+  @Get(':id')
+  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<Message> {
+    return this.messageService.findOne(id);
+  }
+
+  /**
+   * Mark message as read
+   * PATCH /messages/:messageId/read
+   * Note: This route must be before PATCH /:id to avoid route conflict
+   */
+  @Patch(':messageId/read')
+  async markAsRead(
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+  ): Promise<{ success: boolean }> {
+    await this.messageService.markAsRead(messageId);
+    return { success: true };
+  }
+
+  /**
+   * Update a message
+   * PATCH /messages/:id
+   */
+  @Patch(':id')
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateMessageDto,
+  ): Promise<Message> {
+    return this.messageService.update(id, dto);
+  }
+
+  /**
+   * Delete a message
+   * DELETE /messages/:id
+   */
+  @Delete(':id')
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ success: boolean }> {
+    await this.messageService.remove(id);
+    return { success: true };
   }
 }
