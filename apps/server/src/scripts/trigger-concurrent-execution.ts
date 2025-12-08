@@ -16,12 +16,53 @@ interface ExecutionResult {
   noTaskAvailable?: boolean;
 }
 
+// Concurrency limit for Claude Code instances
+const MAX_CONCURRENT_HOLLONS = 3;
+
+/**
+ * Execute promises with concurrency limit
+ */
+async function executeWithConcurrencyLimit<T>(
+  tasks: (() => Promise<T>)[],
+  limit: number,
+): Promise<T[]> {
+  const results: T[] = [];
+  const executing: Promise<void>[] = [];
+
+  for (const task of tasks) {
+    const p = task().then((result) => {
+      results.push(result);
+    });
+
+    executing.push(p as unknown as Promise<void>);
+
+    if (executing.length >= limit) {
+      await Promise.race(executing);
+      // Remove completed promises
+      for (let i = executing.length - 1; i >= 0; i--) {
+        const status = await Promise.race([
+          executing[i].then(() => 'fulfilled'),
+          Promise.resolve('pending'),
+        ]);
+        if (status === 'fulfilled') {
+          executing.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  await Promise.all(executing);
+  return results;
+}
+
 /**
  * Trigger concurrent execution for multiple Dogfooding Hollons
  * This script tests Phase 2 concurrency: multiple hollons working in parallel
+ * Limited to MAX_CONCURRENT_HOLLONS to avoid Claude Code spawn issues
  */
 async function triggerConcurrentExecution() {
   console.log('🚀 Starting Phase 2 Concurrency Test...\n');
+  console.log(`   Max concurrent hollons: ${MAX_CONCURRENT_HOLLONS}`);
   console.log('='.repeat(60));
 
   // Create NestJS application context
@@ -59,12 +100,14 @@ async function triggerConcurrentExecution() {
     }
 
     console.log('='.repeat(60));
-    console.log('\n⏱️  Starting concurrent execution cycles...\n');
+    console.log(
+      `\n⏱️  Starting concurrent execution cycles (max ${MAX_CONCURRENT_HOLLONS} at a time)...\n`,
+    );
 
     const startTime = Date.now();
 
-    // Execute all hollons concurrently using Promise.all
-    const executionPromises = dogfoodingHollons.map(async (hollon) => {
+    // Create task functions for each hollon
+    const executionTasks = dogfoodingHollons.map((hollon) => async () => {
       const hollonStartTime = Date.now();
       console.log(`🔄 [${hollon.name}] Starting execution cycle...`);
 
@@ -94,8 +137,11 @@ async function triggerConcurrentExecution() {
       }
     });
 
-    // Wait for all executions to complete
-    const results = await Promise.all(executionPromises);
+    // Execute with concurrency limit
+    const results = await executeWithConcurrencyLimit(
+      executionTasks,
+      MAX_CONCURRENT_HOLLONS,
+    );
 
     const totalDuration = Date.now() - startTime;
 
