@@ -5,7 +5,11 @@ import { Repository, MoreThanOrEqual, In } from 'typeorm';
 import { MeetingRecord, MeetingType } from '../entities/meeting-record.entity';
 import { Team } from '../../team/entities/team.entity';
 import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
-import { Task } from '../../task/entities/task.entity';
+import { Task, TaskStatus } from '../../task/entities/task.entity';
+import {
+  Document,
+  DocumentType,
+} from '../../document/entities/document.entity';
 import { StandupResponse } from '../dto/standup-response.dto';
 import { ChannelService } from '../../channel/channel.service';
 import { subDays, format } from 'date-fns';
@@ -23,6 +27,8 @@ export class StandupService {
     private readonly hollonRepo: Repository<Hollon>,
     @InjectRepository(Task)
     private readonly taskRepo: Repository<Task>,
+    @InjectRepository(Document)
+    private readonly documentRepo: Repository<Document>,
     private readonly channelService: ChannelService,
   ) {}
 
@@ -81,6 +87,17 @@ export class StandupService {
       completedAt: new Date(),
     });
 
+    // Create summary document for knowledge base
+    const document = await this.createStandupDocument(team, summary, responses);
+    if (document) {
+      // Link document to meeting record
+      meeting.metadata = {
+        ...meeting.metadata,
+        documentId: document.id,
+      };
+      await this.meetingRepo.save(meeting);
+    }
+
     // Send to team channel
     await this.channelService.sendToTeamChannel(team.id, summary);
 
@@ -104,36 +121,40 @@ export class StandupService {
   }
 
   /**
-   * Collect standup status from a hollon
+   * 홀론의 스탠드업 상태 수집
+   * 어제 완료한 태스크, 오늘 계획, 블로커를 조회
+   * @param hollon 대상 홀론
+   * @returns 스탠드업 응답 데이터
    */
   private async collectStandupStatus(hollon: Hollon): Promise<StandupResponse> {
     const yesterday = subDays(new Date(), 1);
     const startOfYesterday = new Date(yesterday.setHours(0, 0, 0, 0));
 
-    // Tasks completed yesterday
+    // 어제 완료된 태스크
     const completedYesterday = await this.taskRepo.find({
       where: {
         assignedHollonId: hollon.id,
-        status: 'done' as any,
-        completedAt: MoreThanOrEqual(startOfYesterday) as any,
+        status: TaskStatus.COMPLETED,
+        completedAt: MoreThanOrEqual(startOfYesterday),
       },
       take: 10,
     });
 
-    // Today's planned tasks
+    // 오늘 계획된 태스크 (대기 중 또는 진행 중)
     const todayTasks = await this.taskRepo.find({
       where: [
-        { assignedHollonId: hollon.id, status: 'todo' as any },
-        { assignedHollonId: hollon.id, status: 'in_progress' as any },
+        { assignedHollonId: hollon.id, status: TaskStatus.READY },
+        { assignedHollonId: hollon.id, status: TaskStatus.IN_PROGRESS },
+        { assignedHollonId: hollon.id, status: TaskStatus.PENDING },
       ],
       take: 10,
     });
 
-    // Blocked tasks
+    // 블로커가 있는 태스크
     const blockedTasks = await this.taskRepo.find({
       where: {
         assignedHollonId: hollon.id,
-        status: 'blocked' as any,
+        status: TaskStatus.BLOCKED,
       },
       take: 5,
     });
@@ -145,7 +166,7 @@ export class StandupService {
       todayPlan: todayTasks,
       blockers: blockedTasks.map((t) => ({
         taskId: t.id,
-        reason: (t as any).blockedReason || 'Unknown',
+        reason: t.errorMessage || 'Unknown blocker',
       })),
     };
   }
@@ -197,5 +218,68 @@ export class StandupService {
     }
 
     return lines.join('\n');
+  }
+
+  /**
+   * 스탠드업 요약 Document 생성
+   * 팀의 스탠드업 결과를 프로젝트 문서로 저장
+   * @param team 팀 정보
+   * @param summary 스탠드업 요약 내용
+   * @param responses 각 홀론의 스탠드업 응답
+   * @returns 생성된 Document (프로젝트가 없으면 null)
+   */
+  private async createStandupDocument(
+    team: Team,
+    summary: string,
+    responses: StandupResponse[],
+  ): Promise<Document | null> {
+    // 팀에 연결된 프로젝트 ID가 필요
+    // Team 엔티티에 projectId가 없으면 첫 번째 활성 홀론의 프로젝트 사용
+    const firstHollonWithProject = responses.find((r) => r.hollonId);
+    if (!firstHollonWithProject) {
+      this.logger.warn(`No project found for team: ${team.name}`);
+      return null;
+    }
+
+    // 프로젝트 ID 조회 (홀론을 통해)
+    const hollon = await this.hollonRepo.findOne({
+      where: { id: firstHollonWithProject.hollonId },
+      relations: ['team', 'team.projects'],
+    });
+
+    const projectId = (hollon?.team as any)?.projects?.[0]?.id;
+    if (!projectId) {
+      this.logger.warn(`No project associated with team: ${team.name}`);
+      return null;
+    }
+
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const document = this.documentRepo.create({
+      title: `Daily Standup - ${team.name} - ${today}`,
+      content: summary,
+      type: DocumentType.KNOWLEDGE,
+      projectId,
+      tags: ['standup', 'daily', team.name.toLowerCase()],
+      metadata: {
+        meetingType: 'standup',
+        teamId: team.id,
+        teamName: team.name,
+        date: today,
+        participantCount: responses.length,
+        totalCompletedTasks: responses.reduce(
+          (sum, r) => sum + r.completedYesterday.length,
+          0,
+        ),
+        totalPlannedTasks: responses.reduce(
+          (sum, r) => sum + r.todayPlan.length,
+          0,
+        ),
+        totalBlockers: responses.reduce((sum, r) => sum + r.blockers.length, 0),
+      },
+    });
+
+    const savedDocument = await this.documentRepo.save(document);
+    this.logger.log(`Created standup document: ${savedDocument.id}`);
+    return savedDocument;
   }
 }

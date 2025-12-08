@@ -56,8 +56,10 @@ export class CrossTeamCollaborationService {
     const contract = await this.contractRepo.save({
       requesterTeamId,
       targetTeamId,
+      title: request.title,
       description: request.description,
       deliverables: request.deliverables,
+      priority: request.priority,
       requestedDeadline: request.deadline ? new Date(request.deadline) : null,
       status: ContractStatus.PENDING,
     });
@@ -95,8 +97,9 @@ export class CrossTeamCollaborationService {
         ContractStatus.REJECTED,
       ],
       [ContractStatus.ACCEPTED]: [],
-      [ContractStatus.IN_PROGRESS]: [],
-      [ContractStatus.DELIVERED]: [],
+      [ContractStatus.IN_PROGRESS]: [ContractStatus.DELIVERED],
+      [ContractStatus.DELIVERED]: [ContractStatus.COMPLETED],
+      [ContractStatus.COMPLETED]: [],
       [ContractStatus.REJECTED]: [],
       [ContractStatus.CANCELLED]: [],
     };
@@ -116,10 +119,7 @@ export class CrossTeamCollaborationService {
     // ACCEPTED 상태일 경우 바로 IN_PROGRESS로 전환
     if (response.status === ContractStatus.ACCEPTED) {
       contract.status = ContractStatus.IN_PROGRESS;
-      contract.metadata = {
-        ...contract.metadata,
-        acceptedAt: new Date().toISOString(),
-      };
+      contract.acceptedAt = new Date();
     } else {
       contract.status = response.status;
     }
@@ -134,6 +134,7 @@ export class CrossTeamCollaborationService {
       [ContractStatus.PENDING]: '',
       [ContractStatus.ACCEPTED]: '',
       [ContractStatus.DELIVERED]: '',
+      [ContractStatus.COMPLETED]: '',
       [ContractStatus.CANCELLED]: '',
     };
 
@@ -163,10 +164,7 @@ export class CrossTeamCollaborationService {
 
     contract.status = ContractStatus.DELIVERED;
     contract.deliveredAt = new Date();
-    contract.metadata = {
-      ...contract.metadata,
-      deliveredItems: deliverables,
-    };
+    contract.deliveredItems = deliverables;
 
     await this.contractRepo.save(contract);
 
@@ -193,10 +191,8 @@ export class CrossTeamCollaborationService {
     }
 
     contract.status = ContractStatus.CANCELLED;
-    contract.metadata = {
-      ...contract.metadata,
-      cancellationReason: reason || 'No reason provided',
-    };
+    contract.cancelledAt = new Date();
+    contract.cancellationReason = reason || null;
 
     await this.contractRepo.save(contract);
 
@@ -307,11 +303,8 @@ export class CrossTeamCollaborationService {
     }
 
     contract.status = ContractStatus.REJECTED;
-    contract.metadata = {
-      ...contract.metadata,
-      rejectionReason: reason || 'No reason provided',
-      rejectedAt: new Date().toISOString(),
-    };
+    contract.rejectedAt = new Date();
+    contract.rejectionReason = reason || null;
 
     await this.contractRepo.save(contract);
 
@@ -340,12 +333,9 @@ export class CrossTeamCollaborationService {
       );
     }
 
-    contract.status = ContractStatus.ACCEPTED;
-    contract.metadata = {
-      ...contract.metadata,
-      completedAt: new Date().toISOString(),
-      feedback: feedback || null,
-    };
+    contract.status = ContractStatus.COMPLETED;
+    contract.completedAt = new Date();
+    contract.feedback = feedback || null;
 
     await this.contractRepo.save(contract);
 
@@ -389,11 +379,13 @@ export class CrossTeamCollaborationService {
           toType: ParticipantType.HOLLON,
           toId: hollon.id,
           messageType: MessageType.DELEGATION_REQUEST,
-          content: `팀 간 의존성 요청이 도착했습니다.\n\n요청 팀: ${requesterTeamId}\n설명: ${request.description}\n산출물: ${request.deliverables.join(', ')}${request.deadline ? `\n요청 마감일: ${request.deadline}` : ''}`,
+          content: `팀 간 의존성 요청이 도착했습니다.\n\n제목: ${request.title}\n요청 팀: ${requesterTeamId}\n설명: ${request.description}\n산출물: ${request.deliverables.join(', ')}${request.priority ? `\n우선순위: ${request.priority}` : ''}${request.deadline ? `\n요청 마감일: ${request.deadline}` : ''}`,
           metadata: {
             contractId: contract.id,
             requesterTeamId,
             targetTeamId,
+            title: request.title,
+            priority: request.priority,
             deliverables: request.deliverables,
             requestedDeadline: request.deadline,
           },
