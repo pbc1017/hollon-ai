@@ -127,6 +127,13 @@ export class Task extends BaseEntity {
   @Column({ name: 'error_message', type: 'text', nullable: true })
   errorMessage?: string | null;
 
+  // 애자일 메트릭스
+  @Column({ name: 'story_points', type: 'integer', nullable: true, default: 0 })
+  storyPoints?: number;
+
+  @Column({ name: 'blocked_reason', type: 'text', nullable: true })
+  blockedReason?: string | null;
+
   // 타임스탬프
   @Column({ name: 'started_at', type: 'timestamp', nullable: true })
   startedAt?: Date | null;
