@@ -105,11 +105,19 @@ export class PostgresListenerService implements OnModuleInit, OnModuleDestroy {
       // Re-subscribe to all channels
       if (this.isConnected) {
         for (const channel of this.subscriptions.keys()) {
-          await this.executeQuery(`LISTEN ${channel}`);
+          await this.executeQuery(`LISTEN "${channel}"`);
           this.logger.log(`Re-subscribed to channel: ${channel}`);
         }
       }
     }, this.reconnectDelay);
+  }
+
+  /**
+   * Sanitize channel name for PostgreSQL LISTEN/NOTIFY
+   * PostgreSQL channel names cannot contain hyphens or special characters
+   */
+  private sanitizeChannelName(channel: string): string {
+    return channel.replace(/-/g, '_');
   }
 
   /**
@@ -123,13 +131,15 @@ export class PostgresListenerService implements OnModuleInit, OnModuleDestroy {
       throw new Error('PostgreSQL LISTEN client is not connected');
     }
 
-    if (!this.subscriptions.has(channel)) {
-      await this.executeQuery(`LISTEN ${channel}`);
-      this.subscriptions.set(channel, new Set());
-      this.logger.log(`Subscribed to channel: ${channel}`);
+    const sanitizedChannel = this.sanitizeChannelName(channel);
+
+    if (!this.subscriptions.has(sanitizedChannel)) {
+      await this.executeQuery(`LISTEN "${sanitizedChannel}"`);
+      this.subscriptions.set(sanitizedChannel, new Set());
+      this.logger.log(`Subscribed to channel: ${sanitizedChannel}`);
     }
 
-    this.subscriptions.get(channel)!.add(handler);
+    this.subscriptions.get(sanitizedChannel)!.add(handler);
   }
 
   /**
@@ -139,7 +149,8 @@ export class PostgresListenerService implements OnModuleInit, OnModuleDestroy {
     channel: string,
     handler: NotificationHandler,
   ): Promise<void> {
-    const handlers = this.subscriptions.get(channel);
+    const sanitizedChannel = this.sanitizeChannelName(channel);
+    const handlers = this.subscriptions.get(sanitizedChannel);
     if (!handlers) {
       return;
     }
@@ -147,9 +158,9 @@ export class PostgresListenerService implements OnModuleInit, OnModuleDestroy {
     handlers.delete(handler);
 
     if (handlers.size === 0) {
-      await this.executeQuery(`UNLISTEN ${channel}`);
-      this.subscriptions.delete(channel);
-      this.logger.log(`Unsubscribed from channel: ${channel}`);
+      await this.executeQuery(`UNLISTEN "${sanitizedChannel}"`);
+      this.subscriptions.delete(sanitizedChannel);
+      this.logger.log(`Unsubscribed from channel: ${sanitizedChannel}`);
     }
   }
 
@@ -211,5 +222,24 @@ export class PostgresListenerService implements OnModuleInit, OnModuleDestroy {
    */
   isClientConnected(): boolean {
     return this.isConnected;
+  }
+
+  /**
+   * Notify - Send a NOTIFY command (for testing purposes)
+   * This method sanitizes channel names and sends notifications via PostgreSQL NOTIFY
+   */
+  async notify(channel: string, payload: any): Promise<void> {
+    if (!this.isConnected) {
+      throw new Error('PostgreSQL LISTEN client is not connected');
+    }
+
+    const sanitizedChannel = this.sanitizeChannelName(channel);
+    const payloadStr = JSON.stringify(payload);
+
+    await this.executeQuery(
+      `NOTIFY "${sanitizedChannel}", '${payloadStr.replace(/'/g, "''")}'`,
+    );
+
+    this.logger.debug(`Sent NOTIFY to channel ${sanitizedChannel}`, payload);
   }
 }
