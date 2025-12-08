@@ -42,7 +42,9 @@ import { ConflictResolutionModule } from './modules/conflict-resolution/conflict
     }),
 
     // Infrastructure modules (Global)
-    ScheduleModule.forRoot(),
+    ...(process.env.DISABLE_SCHEDULER !== 'true'
+      ? [ScheduleModule.forRoot()]
+      : []),
     PostgresListenerModule,
 
     // Feature modules
