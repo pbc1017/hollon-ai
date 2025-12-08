@@ -20,6 +20,9 @@ import {
   ApprovalRequest,
   ApprovalRequestType,
 } from '../approval/entities/approval-request.entity';
+import { RoleService } from '../role/role.service';
+import { TeamService } from '../team/team.service';
+import { OrganizationService } from '../organization/organization.service';
 
 @Injectable()
 export class HollonService {
@@ -27,6 +30,9 @@ export class HollonService {
     @InjectRepository(Hollon)
     private readonly hollonRepo: Repository<Hollon>,
     private readonly approvalService: ApprovalService,
+    private readonly roleService: RoleService,
+    private readonly teamService: TeamService,
+    private readonly organizationService: OrganizationService,
   ) {}
 
   async create(dto: CreateHollonDto): Promise<Hollon> {
@@ -109,27 +115,61 @@ export class HollonService {
 
     let depth = 0;
 
+    // 권한 검증 1: Role 존재 확인
+    await this.roleService.findOne(config.roleId);
+
+    // 권한 검증 2: Organization 존재 및 설정 확인
+    const organization = await this.organizationService.findOne(
+      config.organizationId,
+    );
+
+    // 권한 검증 3: Team 존재 및 조직 일치 확인 (teamId가 있을 경우)
+    if (config.teamId) {
+      const team = await this.teamService.findOne(config.teamId);
+
+      if (team.organizationId !== config.organizationId) {
+        throw new ForbiddenException(
+          'Team does not belong to the specified organization',
+        );
+      }
+
+      // 권한 검증 4: 팀당 최대 홀론 수 검증
+      const maxHollonsPerTeam =
+        (organization.settings as { maxHollonsPerTeam?: number })
+          ?.maxHollonsPerTeam || 10;
+
+      const currentTeamHollonCount = await this.hollonRepo.count({
+        where: { teamId: config.teamId },
+      });
+
+      if (currentTeamHollonCount >= maxHollonsPerTeam) {
+        throw new BadRequestException(
+          `Team has reached maximum hollon limit (${maxHollonsPerTeam}). Cannot create more hollons.`,
+        );
+      }
+    }
+
     // 부모 홀론이 있으면 권한 검증 및 깊이 계산
     if (config.createdBy) {
       const parentHollon = await this.hollonRepo.findOne({
         where: { id: config.createdBy },
       });
 
-      // 권한 검증 1: 생성자 홀론 존재 확인
+      // 권한 검증 5: 생성자 홀론 존재 확인
       if (!parentHollon) {
         throw new NotFoundException(
           `Creator hollon #${config.createdBy} not found`,
         );
       }
 
-      // 권한 검증 2: 조직 일치 확인
+      // 권한 검증 6: 생성자 홀론의 조직 일치 확인
       if (parentHollon.organizationId !== config.organizationId) {
         throw new ForbiddenException(
           'Cannot create hollon in a different organization',
         );
       }
 
-      // 권한 검증 3: 생성자 홀론 상태 확인 (활성 상태만 생성 가능)
+      // 권한 검증 7: 생성자 홀론 상태 확인 (활성 상태만 생성 가능)
       if (
         parentHollon.status !== HollonStatus.IDLE &&
         parentHollon.status !== HollonStatus.WORKING

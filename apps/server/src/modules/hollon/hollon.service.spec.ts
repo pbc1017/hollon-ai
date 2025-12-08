@@ -12,7 +12,14 @@ import {
   ApprovalRequestType,
   ApprovalStatus,
 } from '../approval/entities/approval-request.entity';
-import { NotFoundException } from '@nestjs/common';
+import { RoleService } from '../role/role.service';
+import { TeamService } from '../team/team.service';
+import { OrganizationService } from '../organization/organization.service';
+import {
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 
 describe('HollonService', () => {
   let service: HollonService;
@@ -23,11 +30,24 @@ describe('HollonService', () => {
     findOne: jest.fn(),
     find: jest.fn(),
     remove: jest.fn(),
+    count: jest.fn(),
     createQueryBuilder: jest.fn(),
   };
 
   const mockApprovalService = {
     create: jest.fn(),
+  };
+
+  const mockRoleService = {
+    findOne: jest.fn(),
+  };
+
+  const mockTeamService = {
+    findOne: jest.fn(),
+  };
+
+  const mockOrganizationService = {
+    findOne: jest.fn(),
   };
 
   const mockHollon: Partial<Hollon> = {
@@ -42,6 +62,23 @@ describe('HollonService', () => {
     maxConcurrentTasks: 1,
   };
 
+  const mockRole = {
+    id: 'role-123',
+    name: 'Test Role',
+  };
+
+  const mockTeam = {
+    id: 'team-123',
+    name: 'Test Team',
+    organizationId: 'org-123',
+  };
+
+  const mockOrganization = {
+    id: 'org-123',
+    name: 'Test Organization',
+    settings: { maxHollonsPerTeam: 10 },
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -53,6 +90,18 @@ describe('HollonService', () => {
         {
           provide: ApprovalService,
           useValue: mockApprovalService,
+        },
+        {
+          provide: RoleService,
+          useValue: mockRoleService,
+        },
+        {
+          provide: TeamService,
+          useValue: mockTeamService,
+        },
+        {
+          provide: OrganizationService,
+          useValue: mockOrganizationService,
         },
       ],
     }).compile();
@@ -197,9 +246,15 @@ describe('HollonService', () => {
         status: HollonStatus.IDLE,
       };
 
+      mockRoleService.findOne.mockResolvedValue(mockRole);
+      mockOrganizationService.findOne.mockResolvedValue(mockOrganization);
+      mockTeamService.findOne.mockResolvedValue(mockTeam);
+      mockHollonRepository.count.mockResolvedValue(5);
       mockHollonRepository.findOne.mockResolvedValue({
         id: 'hollon-parent',
+        organizationId: 'org-123',
         lifecycle: HollonLifecycle.TEMPORARY,
+        status: HollonStatus.WORKING,
         depth: 0,
       });
       mockHollonRepository.create.mockReturnValue(tempHollon);
@@ -210,10 +265,73 @@ describe('HollonService', () => {
 
       const result = await service.createTemporary(config);
 
+      expect(mockRoleService.findOne).toHaveBeenCalledWith('role-123');
+      expect(mockOrganizationService.findOne).toHaveBeenCalledWith('org-123');
+      expect(mockTeamService.findOne).toHaveBeenCalledWith('team-123');
       expect(result.lifecycle).toBe(HollonLifecycle.TEMPORARY);
       expect(result.createdByHollonId).toBe('hollon-parent');
       expect(result.depth).toBe(1);
       expect(mockApprovalService.create).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException if role does not exist', async () => {
+      const config = {
+        name: 'Temp Hollon',
+        organizationId: 'org-123',
+        roleId: 'non-existent-role',
+      };
+
+      mockRoleService.findOne.mockRejectedValue(
+        new NotFoundException('Role #non-existent-role not found'),
+      );
+
+      await expect(service.createTemporary(config)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw ForbiddenException if team belongs to different organization', async () => {
+      const config = {
+        name: 'Temp Hollon',
+        organizationId: 'org-123',
+        teamId: 'team-456',
+        roleId: 'role-123',
+      };
+
+      mockRoleService.findOne.mockResolvedValue(mockRole);
+      mockOrganizationService.findOne.mockResolvedValue(mockOrganization);
+      mockTeamService.findOne.mockResolvedValue({
+        id: 'team-456',
+        organizationId: 'org-different', // 다른 조직
+      });
+
+      await expect(service.createTemporary(config)).rejects.toThrow(
+        ForbiddenException,
+      );
+      await expect(service.createTemporary(config)).rejects.toThrow(
+        'Team does not belong to the specified organization',
+      );
+    });
+
+    it('should throw BadRequestException if team has reached maximum hollon limit', async () => {
+      const config = {
+        name: 'Temp Hollon',
+        organizationId: 'org-123',
+        teamId: 'team-123',
+        roleId: 'role-123',
+      };
+
+      mockRoleService.findOne.mockResolvedValue(mockRole);
+      mockOrganizationService.findOne.mockResolvedValue(mockOrganization);
+      mockTeamService.findOne.mockResolvedValue(mockTeam);
+      mockHollonRepository.count.mockResolvedValue(10); // 이미 10개 (최대치 도달)
+
+      await expect(service.createTemporary(config)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.createTemporary(config)).rejects.toThrow(
+        'Team has reached maximum hollon limit (10). Cannot create more hollons.',
+      );
     });
 
     it('should throw error if max temporary hollon depth exceeded', async () => {
@@ -226,9 +344,15 @@ describe('HollonService', () => {
         createdBy: 'hollon-parent',
       };
 
+      mockRoleService.findOne.mockResolvedValue(mockRole);
+      mockOrganizationService.findOne.mockResolvedValue(mockOrganization);
+      mockTeamService.findOne.mockResolvedValue(mockTeam);
+      mockHollonRepository.count.mockResolvedValue(5);
       mockHollonRepository.findOne.mockResolvedValue({
         id: 'hollon-parent',
+        organizationId: 'org-123',
         lifecycle: HollonLifecycle.TEMPORARY,
+        status: HollonStatus.WORKING,
         depth: 3,
       });
 
@@ -255,9 +379,15 @@ describe('HollonService', () => {
         status: HollonStatus.IDLE,
       };
 
+      mockRoleService.findOne.mockResolvedValue(mockRole);
+      mockOrganizationService.findOne.mockResolvedValue(mockOrganization);
+      mockTeamService.findOne.mockResolvedValue(mockTeam);
+      mockHollonRepository.count.mockResolvedValue(5);
       mockHollonRepository.findOne.mockResolvedValue({
         id: 'permanent-hollon',
+        organizationId: 'org-123',
         lifecycle: HollonLifecycle.PERMANENT,
+        status: HollonStatus.IDLE,
         depth: 5, // 영구 홀론의 depth는 제한 없음
       });
       mockHollonRepository.create.mockReturnValue(tempHollon);
@@ -270,6 +400,54 @@ describe('HollonService', () => {
 
       expect(result.depth).toBe(0); // 영구 홀론이 만든 임시 홀론은 depth 0
       expect(result.lifecycle).toBe(HollonLifecycle.TEMPORARY);
+    });
+
+    it('should throw ForbiddenException if creator hollon is from different organization', async () => {
+      const config = {
+        name: 'Temp Hollon',
+        organizationId: 'org-123',
+        roleId: 'role-123',
+        createdBy: 'hollon-from-other-org',
+      };
+
+      mockRoleService.findOne.mockResolvedValue(mockRole);
+      mockOrganizationService.findOne.mockResolvedValue(mockOrganization);
+      mockHollonRepository.findOne.mockResolvedValue({
+        id: 'hollon-from-other-org',
+        organizationId: 'org-different', // 다른 조직
+        status: HollonStatus.IDLE,
+      });
+
+      await expect(service.createTemporary(config)).rejects.toThrow(
+        ForbiddenException,
+      );
+      await expect(service.createTemporary(config)).rejects.toThrow(
+        'Cannot create hollon in a different organization',
+      );
+    });
+
+    it('should throw BadRequestException if creator hollon is not in active status', async () => {
+      const config = {
+        name: 'Temp Hollon',
+        organizationId: 'org-123',
+        roleId: 'role-123',
+        createdBy: 'paused-hollon',
+      };
+
+      mockRoleService.findOne.mockResolvedValue(mockRole);
+      mockOrganizationService.findOne.mockResolvedValue(mockOrganization);
+      mockHollonRepository.findOne.mockResolvedValue({
+        id: 'paused-hollon',
+        organizationId: 'org-123',
+        status: HollonStatus.PAUSED, // 비활성 상태
+      });
+
+      await expect(service.createTemporary(config)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.createTemporary(config)).rejects.toThrow(
+        'Creator hollon must be in IDLE or WORKING status, current: paused',
+      );
     });
   });
 
