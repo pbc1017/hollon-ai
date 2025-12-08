@@ -61,6 +61,16 @@ export class ClaudeCodeProvider implements IBrainProvider {
         `estimated_cost=$${estimatedCost.totalCostCents.toFixed(4)}`,
     );
 
+    // Enhanced debug logging for ENOENT diagnosis
+    this.logger.debug(`[CLAUDE DEBUG] claudePath: "${claudePath}"`);
+    this.logger.debug(
+      `[CLAUDE DEBUG] workingDirectory: "${request.context?.workingDirectory || 'not set'}"`,
+    );
+    this.logger.debug(`[CLAUDE DEBUG] args: ${JSON.stringify(args)}`);
+    this.logger.debug(
+      `[CLAUDE DEBUG] request.context: ${JSON.stringify(request.context)}`,
+    );
+
     try {
       // Execute process
       const processResult = await this.processManager.spawn({
