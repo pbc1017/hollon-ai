@@ -9,6 +9,7 @@ import { HollonOrchestratorService } from '../../../src/modules/orchestration/se
 import { TaskPoolService } from '../../../src/modules/orchestration/services/task-pool.service';
 import { PromptComposerService } from '../../../src/modules/orchestration/services/prompt-composer.service';
 import { QualityGateService } from '../../../src/modules/orchestration/services/quality-gate.service';
+import { EscalationService } from '../../../src/modules/orchestration/services/escalation.service';
 import { BrainProviderService } from '../../../src/modules/brain-provider/brain-provider.service';
 import {
   Hollon,
@@ -96,6 +97,15 @@ describe('Orchestration E2E', () => {
           provide: BrainProviderService,
           useValue: mockBrainProvider,
         },
+        {
+          provide: EscalationService,
+          useValue: {
+            escalate: jest.fn(),
+            determineEscalationLevel: jest.fn(),
+            getEscalationHistory: jest.fn(),
+            clearHistory: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -121,14 +131,21 @@ describe('Orchestration E2E', () => {
 
   afterAll(async () => {
     // Cleanup test data (order matters for foreign key constraints)
-    if (testTask) await taskRepo.delete(testTask.id);
-    if (testHollon) await hollonRepo.delete(testHollon.id);
-    if (testProject) await projectRepo.delete(testProject.id);
-    if (testRole) await roleRepo.delete(testRole.id);
-    if (testTeam) await teamRepo.delete(testTeam.id);
-    if (testOrg) await organizationRepo.delete(testOrg.id);
+    try {
+      if (testTask) await taskRepo.delete(testTask.id);
+      if (testHollon) await hollonRepo.delete(testHollon.id);
+      if (testProject) await projectRepo.delete(testProject.id);
+      if (testRole) await roleRepo.delete(testRole.id);
+      if (testTeam) await teamRepo.delete(testTeam.id);
+      if (testOrg) await organizationRepo.delete(testOrg.id);
+    } catch (error) {
+      // Ignore cleanup errors during test teardown
+      console.log('Cleanup error (ignored):', error.message);
+    }
 
-    await module.close();
+    if (module) {
+      await module.close();
+    }
   });
 
   beforeEach(() => {
@@ -362,11 +379,12 @@ describe('add', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('Brain execution failed');
 
-      // Verify hollon status
+      // Verify hollon status - should be IDLE after error to allow picking up new tasks
+      // ERROR state is reserved for unrecoverable situations
       const hollon = await hollonRepo.findOne({
         where: { id: testHollon.id },
       });
-      expect(hollon?.status).toBe(HollonStatus.ERROR);
+      expect(hollon?.status).toBe(HollonStatus.IDLE);
 
       // Cleanup
       await taskRepo.delete(errorTask.id);

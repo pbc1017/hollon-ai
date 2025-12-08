@@ -24,6 +24,9 @@ import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ApprovalService } from '../../../src/modules/approval/approval.service';
 import { ApprovalRequest } from '../../../src/modules/approval/entities/approval-request.entity';
+import { RoleService } from '../../../src/modules/role/role.service';
+import { TeamService } from '../../../src/modules/team/team.service';
+import { OrganizationService } from '../../../src/modules/organization/organization.service';
 
 describe('Task Assignment Integration Tests', () => {
   let module: TestingModule;
@@ -79,6 +82,27 @@ describe('Task Assignment Integration Tests', () => {
         {
           provide: ApprovalService,
           useValue: {
+            create: jest.fn(),
+          },
+        },
+        {
+          provide: RoleService,
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+          },
+        },
+        {
+          provide: TeamService,
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+          },
+        },
+        {
+          provide: OrganizationService,
+          useValue: {
+            findOne: jest.fn(),
             create: jest.fn(),
           },
         },
