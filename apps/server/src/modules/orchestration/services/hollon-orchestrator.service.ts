@@ -12,6 +12,7 @@ import { TaskPoolService } from './task-pool.service';
 import { Task } from '../../task/entities/task.entity';
 import { QualityGateService } from './quality-gate.service';
 import { Organization } from '../../organization/entities/organization.entity';
+import { EscalationService, EscalationLevel } from './escalation.service';
 
 export interface ExecutionCycleResult {
   success: boolean;
@@ -49,6 +50,7 @@ export class HollonOrchestratorService {
     private readonly promptComposer: PromptComposerService,
     private readonly taskPool: TaskPoolService,
     private readonly qualityGate: QualityGateService,
+    private readonly escalationService: EscalationService,
   ) {}
 
   /**
@@ -61,6 +63,7 @@ export class HollonOrchestratorService {
    */
   async runCycle(hollonId: string): Promise<ExecutionCycleResult> {
     const startTime = Date.now();
+    let currentTask: Task | null = null; // Track current task for error handling
 
     this.logger.log(`Starting execution cycle for hollon: ${hollonId}`);
 
@@ -102,6 +105,7 @@ export class HollonOrchestratorService {
       }
 
       const task = pullResult.task;
+      currentTask = task; // Store for error handling
       this.logger.log(
         `Hollon ${hollonId} pulled task ${task.id}: ${task.title} (${pullResult.reason})`,
       );
@@ -219,11 +223,37 @@ export class HollonOrchestratorService {
         `Execution cycle failed for ${hollonId}: ${errorMessage}`,
       );
 
-      // Update hollon status to ERROR
-      await this.updateHollonStatus(hollonId, HollonStatus.ERROR);
+      // If we have a current task, handle the failure with escalation
+      if (currentTask) {
+        // Mark task as failed
+        await this.taskPool.failTask(currentTask.id, errorMessage);
+
+        // Trigger escalation for automatic retry
+        try {
+          await this.escalationService.escalate({
+            taskId: currentTask.id,
+            hollonId: hollonId,
+            reason: errorMessage,
+            level: EscalationLevel.SELF_RESOLVE,
+          });
+          this.logger.log(
+            `Escalation triggered for task ${currentTask.id} at SELF_RESOLVE level`,
+          );
+        } catch (escalationError) {
+          this.logger.error(
+            `Escalation failed for task ${currentTask.id}: ${escalationError}`,
+          );
+        }
+      }
+
+      // Set hollon to IDLE (not ERROR) to allow it to pick up new tasks
+      // ERROR state is reserved for unrecoverable situations
+      await this.updateHollonStatus(hollonId, HollonStatus.IDLE);
 
       return {
         success: false,
+        taskId: currentTask?.id,
+        taskTitle: currentTask?.title,
         duration,
         error: errorMessage,
       };

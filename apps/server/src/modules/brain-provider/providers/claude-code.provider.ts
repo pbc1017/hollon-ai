@@ -36,8 +36,9 @@ export class ClaudeCodeProvider implements IBrainProvider {
       request.options?.timeoutMs || config.timeoutSeconds * 1000;
 
     // Build command arguments
+    // Note: --print 옵션 제거 - 실제 파일 수정이 가능하도록
     const args = [
-      '--print',
+      '-p', // prompt를 stdin으로 받음
       '--output-format',
       'text',
       '--dangerously-skip-permissions',
