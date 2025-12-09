@@ -303,6 +303,7 @@ ${composedPrompt.systemPrompt.substring(0, 500)}...
 ${composedPrompt.userPrompt.substring(0, 500)}...
 `,
       type: DocumentType.TASK_CONTEXT,
+      organizationId: hollon.organizationId,
       projectId: task.projectId,
       hollonId: hollon.id,
       taskId: task.id,

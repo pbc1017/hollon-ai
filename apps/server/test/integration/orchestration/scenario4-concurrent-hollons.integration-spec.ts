@@ -9,6 +9,7 @@ import { Hollon, HollonStatus } from '@/modules/hollon/entities/hollon.entity';
 import { Project } from '@/modules/project/entities/project.entity';
 import { Task, TaskStatus } from '@/modules/task/entities/task.entity';
 import { TaskPoolService } from '@/modules/orchestration/services/task-pool.service';
+import { cleanupTestData } from '../../utils/test-database.utils';
 
 /**
  * Scenario 4: Multiple Hollons Concurrent Execution
@@ -47,7 +48,7 @@ describe('Integration: Scenario 4 - Concurrent Hollons', () => {
   });
 
   afterAll(async () => {
-    await dataSource.dropDatabase();
+    await cleanupTestData(dataSource);
     await app.close();
   });
 

@@ -4,9 +4,10 @@ import { DataSource } from 'typeorm';
 import * as dotenv from 'dotenv';
 import { join, resolve } from 'path';
 
-// Load test environment variables
+// Load environment variables and set test mode
 const projectRoot = resolve(__dirname, '../../../..');
-dotenv.config({ path: join(projectRoot, '.env.test') });
+process.env.NODE_ENV = 'test';
+dotenv.config({ path: join(projectRoot, '.env') });
 
 const dataSource = new DataSource({
   type: 'postgres',

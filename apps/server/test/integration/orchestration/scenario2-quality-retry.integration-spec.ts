@@ -10,6 +10,7 @@ import { Project } from '@/modules/project/entities/project.entity';
 import { Task, TaskStatus } from '@/modules/task/entities/task.entity';
 import { QualityGateService } from '@/modules/orchestration/services/quality-gate.service';
 import { EscalationService } from '@/modules/orchestration/services/escalation.service';
+import { cleanupTestData } from '../../utils/test-database.utils';
 
 /**
  * Scenario 2: Quality Failure → Retry → Escalation
@@ -49,7 +50,7 @@ describe('Integration: Scenario 2 - Quality Failure and Retry', () => {
   });
 
   afterAll(async () => {
-    await dataSource.dropDatabase();
+    await cleanupTestData(dataSource);
     await app.close();
   });
 

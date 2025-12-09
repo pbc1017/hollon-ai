@@ -6,6 +6,7 @@ export const databaseConfig = (
 ): TypeOrmModuleOptions => {
   const isProduction = configService.get('nodeEnv') === 'production';
   const isTest = configService.get('nodeEnv') === 'test';
+  const schema = configService.get<string>('database.schema', 'hollon');
 
   return {
     type: 'postgres',
@@ -14,13 +15,22 @@ export const databaseConfig = (
     username: configService.get<string>('database.user'),
     password: configService.get<string>('database.password'),
     database: configService.get<string>('database.name'),
-    schema: configService.get<string>('database.schema', 'hollon'),
+    schema: schema,
     entities: [__dirname + '/../**/*.entity.{ts,js}'],
     migrations: [__dirname + '/../database/migrations/*.{ts,js}'],
+
+    // All environments use migration-based schema
+    // Migrations should be run manually before tests via: pnpm db:migrate:test
+    synchronize: false,
+    migrationsRun: false,
+
     dropSchema: false, // Keep data between restarts
-    synchronize: isTest, // Use synchronize in test for isolated worker schemas
-    migrationsRun: false, // Don't auto-run migrations in test (synchronize handles schema)
     logging: !isProduction && !isTest,
     ssl: isProduction ? { rejectUnauthorized: false } : false,
+
+    // Set search_path to ensure unqualified table names use the correct schema
+    extra: {
+      options: `-c search_path=${schema},public`,
+    },
   };
 };

@@ -11,6 +11,7 @@ import { Task, TaskStatus } from '@/modules/task/entities/task.entity';
 import { Document } from '@/modules/document/entities/document.entity';
 import { HollonOrchestratorService } from '@/modules/orchestration/services/hollon-orchestrator.service';
 import { TaskPoolService } from '@/modules/orchestration/services/task-pool.service';
+import { cleanupTestData } from '../../utils/test-database.utils';
 
 /**
  * Scenario 1: Happy Path
@@ -49,7 +50,7 @@ describe('Integration: Scenario 1 - Happy Path', () => {
   });
 
   afterAll(async () => {
-    await dataSource.dropDatabase();
+    await cleanupTestData(dataSource);
     await app.close();
   });
 

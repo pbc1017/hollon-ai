@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import configuration from '../../../src/config/configuration';
+import { databaseConfig } from '../../../src/config/database.config';
 import { TaskService } from '../../../src/modules/task/task.service';
 import { HollonService } from '../../../src/modules/hollon/hollon.service';
 import {
@@ -51,36 +53,14 @@ describe('Task Assignment Integration Tests', () => {
       imports: [
         ConfigModule.forRoot({
           isGlobal: true,
-          envFilePath: [
-            '../../../../.env.test',
-            '../../../../.env.local',
-            '../../../../.env',
-          ],
+          load: [configuration],
+          envFilePath: ['../../../../.env'],
         }),
         TypeOrmModule.forRootAsync({
+          imports: [ConfigModule],
+          useFactory: (configService: ConfigService) =>
+            databaseConfig(configService),
           inject: [ConfigService],
-          useFactory: (configService: ConfigService) => {
-            // Generate schema name with worker ID for test isolation
-            let schema =
-              configService.get<string>('DB_SCHEMA') || 'hollon_test';
-            const workerId = process.env.JEST_WORKER_ID;
-            if (workerId && !schema.match(/_worker_\d+$/)) {
-              const normalizedWorkerId = workerId.replace(/\D/g, '') || '1';
-              schema = `${schema}_worker_${normalizedWorkerId}`;
-            }
-
-            return {
-              type: 'postgres',
-              host: configService.get<string>('DB_HOST'),
-              port: configService.get<number>('DB_PORT'),
-              username: configService.get<string>('DB_USER'),
-              password: configService.get<string>('DB_PASSWORD'),
-              database: configService.get<string>('DB_NAME'),
-              schema,
-              entities: [__dirname + '/../../../src/**/*.entity{.ts,.js}'],
-              synchronize: false,
-            };
-          },
         }),
         TypeOrmModule.forFeature([
           Task,
