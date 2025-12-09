@@ -231,11 +231,13 @@ export class TaskService {
     // 지식 문서 내용 생성
     const content = this.generateKnowledgeContent(task, result);
 
-    // 문서 태그: requiredSkills + task.tags + task.type
+    // 문서 태그: requiredSkills + task.tags + task.type + 자동 추출 태그
+    const smartTags = this.extractSmartTags(task);
     const tags = [
       ...(task.requiredSkills || []),
       ...(task.tags || []),
       task.type,
+      ...smartTags,
     ].filter((tag, index, self) => self.indexOf(tag) === index); // 중복 제거
 
     try {
@@ -268,6 +270,88 @@ export class TaskService {
         error instanceof Error ? error.stack : undefined,
       );
     }
+  }
+
+  /**
+   * Phase 3.5: 자동 태그 추출 개선
+   *
+   * Task 제목/설명에서 기술 키워드를 자동으로 추출하여 태그 생성
+   */
+  private extractSmartTags(task: Task): string[] {
+    const text = `${task.title} ${task.description || ''}`.toLowerCase();
+
+    // 기술 스택 키워드
+    const techKeywords = [
+      'react',
+      'vue',
+      'angular',
+      'typescript',
+      'javascript',
+      'nodejs',
+      'nestjs',
+      'postgresql',
+      'mongodb',
+      'redis',
+      'docker',
+      'kubernetes',
+      'aws',
+      'gcp',
+      'azure',
+      'api',
+      'rest',
+      'graphql',
+      'grpc',
+      'auth',
+      'security',
+      'performance',
+      'optimization',
+      'refactoring',
+      'testing',
+      'e2e',
+      'unit',
+      'integration',
+      'ci/cd',
+      'git',
+      'frontend',
+      'backend',
+      'fullstack',
+      'database',
+      'migration',
+    ];
+
+    // 작업 유형 키워드
+    const actionKeywords = [
+      'bug',
+      'fix',
+      'feature',
+      'enhancement',
+      'refactor',
+      'docs',
+      'test',
+      'deploy',
+      'config',
+      'setup',
+      'upgrade',
+      'migration',
+    ];
+
+    const foundTags: string[] = [];
+
+    // 기술 키워드 추출
+    for (const keyword of techKeywords) {
+      if (text.includes(keyword)) {
+        foundTags.push(keyword);
+      }
+    }
+
+    // 작업 유형 추출
+    for (const keyword of actionKeywords) {
+      if (text.includes(keyword)) {
+        foundTags.push(keyword);
+      }
+    }
+
+    return foundTags;
   }
 
   /**

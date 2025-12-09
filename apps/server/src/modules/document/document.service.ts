@@ -8,6 +8,7 @@ export interface CreateDocumentDto {
   content: string;
   type: DocumentType;
   organizationId: string;
+  teamId?: string | null; // Phase 3.5: 팀별 지식 분리
   projectId?: string | null;
   hollonId?: string | null;
   taskId?: string;
@@ -31,6 +32,7 @@ export class DocumentService {
       content: dto.content,
       type: dto.type,
       organizationId: dto.organizationId,
+      teamId: dto.teamId ?? null, // Phase 3.5: 팀별 지식 분리
       projectId: dto.projectId ?? null,
       hollonId: dto.hollonId ?? null,
       taskId: dto.taskId ?? null,

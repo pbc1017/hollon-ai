@@ -11,4 +11,8 @@ export class CreateTeamDto {
 
   @IsUUID()
   organizationId: string;
+
+  @IsOptional()
+  @IsUUID()
+  leaderHollonId?: string; // Phase 3.5: 팀 리더
 }
