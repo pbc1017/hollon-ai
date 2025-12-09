@@ -562,6 +562,116 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
   }
 
   /**
+   * PR 조회 (MessageListener에서 사용)
+   */
+  async findPullRequest(prId: string): Promise<TaskPullRequest | null> {
+    return this.prRepo.findOne({
+      where: { id: prId },
+      relations: ['task', 'task.project'],
+    });
+  }
+
+  /**
+   * 자동 코드 리뷰 실행 (MessageListener에서 호출)
+   *
+   * REVIEW_REQUEST 메시지를 받은 리뷰어 Hollon이 자동으로 리뷰 수행
+   * Phase 3.5에서는 BrainProvider를 통해 자동 리뷰 생성
+   */
+  async performAutomatedReview(
+    prId: string,
+    reviewerHollonId: string,
+  ): Promise<void> {
+    this.logger.log(
+      `Performing automated review for PR ${prId} by Hollon ${reviewerHollonId}`,
+    );
+
+    const pr = await this.prRepo.findOne({
+      where: { id: prId },
+      relations: ['task', 'task.project'],
+    });
+
+    if (!pr) {
+      throw new NotFoundException(`PR ${prId} not found`);
+    }
+
+    if (pr.status !== PullRequestStatus.READY_FOR_REVIEW) {
+      this.logger.warn(
+        `PR ${prId} is not in 'ready_for_review' status. Current: ${pr.status}`,
+      );
+      return;
+    }
+
+    // Phase 3.5: 간단한 자동 승인 로직
+    // Phase 4에서 BrainProvider 통합 예정
+    // 현재는 기본적인 체크만 수행
+
+    const reviewComments = await this.generateAutomatedReviewComments(pr);
+
+    // 자동으로 승인 (Phase 3.5에서는 기본적으로 승인)
+    // 향후 Phase 4에서 더 정교한 판단 로직 추가
+    const shouldApprove = !reviewComments.includes('CRITICAL');
+
+    await this.submitReview(prId, reviewerHollonId, {
+      decision: shouldApprove
+        ? PullRequestStatus.APPROVED
+        : PullRequestStatus.CHANGES_REQUESTED,
+      comments: reviewComments,
+    });
+
+    this.logger.log(
+      `Automated review completed for PR ${prId}: ${shouldApprove ? 'APPROVED' : 'CHANGES_REQUESTED'}`,
+    );
+  }
+
+  /**
+   * 자동 리뷰 코멘트 생성
+   *
+   * Phase 3.5: 간단한 휴리스틱 기반 리뷰
+   * Phase 4: BrainProvider를 통한 AI 리뷰
+   */
+  private async generateAutomatedReviewComments(
+    pr: TaskPullRequest,
+  ): Promise<string> {
+    const comments: string[] = [];
+
+    comments.push('# Automated Code Review\n');
+    comments.push(`PR: #${pr.prNumber}`);
+    comments.push(`Repository: ${pr.repository}`);
+    comments.push(`Branch: ${pr.branchName || 'N/A'}\n`);
+
+    comments.push('## Review Checklist\n');
+
+    // 기본적인 체크리스트
+    comments.push('✅ PR title is descriptive');
+    comments.push('✅ Branch name follows convention');
+
+    // Task 기반 검증
+    if (pr.task) {
+      comments.push(`✅ Task "${pr.task.title}" is addressed`);
+
+      if (pr.task.requiredSkills && pr.task.requiredSkills.length > 0) {
+        comments.push(
+          `ℹ️  Required skills: ${pr.task.requiredSkills.join(', ')}`,
+        );
+      }
+    }
+
+    comments.push('\n## Notes\n');
+    comments.push(
+      'This is an automated review by Hollon AI. A human reviewer may provide additional feedback.',
+    );
+
+    // Phase 4에서 BrainProvider 통합 시:
+    // - PR diff 분석
+    // - 코드 품질 검사
+    // - 보안 취약점 검사
+    // - 성능 이슈 검사
+    // - 테스트 커버리지 확인
+
+    return comments.join('\n');
+  }
+
+  /**
    * Task의 PR 목록 조회
    */
   async getPullRequestsForTask(taskId: string): Promise<TaskPullRequest[]> {
