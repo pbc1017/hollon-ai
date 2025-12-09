@@ -161,7 +161,7 @@ describe('Integration: Scenario 3 - Budget Exceeded', () => {
       // Add cost records that reach 80% of daily budget
       const costAt80Percent = Math.floor(LOW_DAILY_BUDGET * 0.81);
 
-      await costRepo.save({
+      const savedRecord = await costRepo.save({
         organizationId: organization.id,
         hollonId: hollon.id,
         taskId: task.id,
@@ -172,7 +172,18 @@ describe('Integration: Scenario 3 - Budget Exceeded', () => {
         outputTokens: 500,
         costCents: costAt80Percent,
         executionTimeMs: 2000,
+        createdAt: new Date(), // Explicitly set createdAt to now
       });
+
+      // Verify record was saved
+      expect(savedRecord.id).toBeDefined();
+      expect(savedRecord.costCents).toBe(costAt80Percent);
+
+      // Verify we can retrieve it
+      const savedCosts = await costRepo.find({
+        where: { organizationId: organization.id },
+      });
+      expect(savedCosts.length).toBeGreaterThan(0);
 
       const budgetCheck = await costTracking.checkBudget(organization.id);
 
@@ -197,6 +208,7 @@ describe('Integration: Scenario 3 - Budget Exceeded', () => {
         outputTokens: 250,
         costCents: 50, // Push over the limit
         executionTimeMs: 1000,
+        createdAt: new Date(), // Explicitly set createdAt to now
       });
 
       const budgetCheck = await costTracking.checkBudget(organization.id);
