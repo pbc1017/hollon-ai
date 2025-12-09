@@ -159,9 +159,9 @@ export class DependencyAnalyzerService {
       const dependencies = this.extractDependencies(task);
       const node = nodes.get(task.id)!;
 
-      for (const depTitle of dependencies) {
-        // Task title로 ID 찾기
-        const depTask = tasks.find((t) => t.title === depTitle);
+      for (const depIdentifier of dependencies) {
+        // Task title 또는 ID로 찾기
+        const depTask = this.findTaskByIdentifier(tasks, depIdentifier);
         if (depTask) {
           node.dependencies.push(depTask.id);
           edges.push({ from: depTask.id, to: task.id });
@@ -171,6 +171,10 @@ export class DependencyAnalyzerService {
           if (depNode) {
             depNode.dependents.push(task.id);
           }
+        } else {
+          this.logger.warn(
+            `Task ${task.id} references unknown dependency: "${depIdentifier}"`,
+          );
         }
       }
     }
@@ -187,22 +191,102 @@ export class DependencyAnalyzerService {
   }
 
   /**
-   * Task description에서 의존성 추출
+   * Phase 3.5: Task title 또는 ID로 Task 찾기
+   */
+  private findTaskByIdentifier(tasks: Task[], identifier: string): Task | null {
+    // 1. ID로 직접 찾기
+    let task = tasks.find((t) => t.id === identifier);
+    if (task) return task;
+
+    // 2. Title로 정확히 일치하는 것 찾기 (대소문자 무시)
+    task = tasks.find(
+      (t) => t.title.toLowerCase() === identifier.toLowerCase(),
+    );
+    if (task) return task;
+
+    // 3. Title 부분 일치 찾기 (마지막 수단)
+    task = tasks.find((t) =>
+      t.title.toLowerCase().includes(identifier.toLowerCase()),
+    );
+    if (task) return task;
+
+    return null;
+  }
+
+  /**
+   * Phase 3.5: Task description에서 의존성 추출 (다양한 형식 지원)
+   *
+   * 지원 형식:
+   * 1. **Dependencies:** 섹션 (마크다운)
+   * 2. "depends on [Task Title]" (자연어)
+   * 3. "blocked by [Task Title]" (자연어)
+   * 4. "requires [Task Title]" (자연어)
+   * 5. 태그 기반: #depends:task-id
    */
   private extractDependencies(task: Task): string[] {
     if (!task.description) return [];
 
-    // "**Dependencies:**" 섹션 찾기
-    const depMatch = task.description.match(
-      /\*\*Dependencies:\*\*\n((?:- .+\n?)+)/,
-    );
-    if (!depMatch) return [];
+    const dependencies = new Set<string>();
+    const description = task.description;
 
-    // 각 라인에서 Task title 추출
-    const lines = depMatch[1].split('\n');
-    return lines
-      .map((line) => line.replace(/^- /, '').trim())
-      .filter((line) => line.length > 0);
+    // 1. **Dependencies:** 섹션 파싱 (마크다운)
+    const depSectionMatch = description.match(
+      /\*\*Dependencies:\*\*\s*\n((?:[-*]\s*.+\n?)+)/i,
+    );
+    if (depSectionMatch) {
+      const lines = depSectionMatch[1].split('\n');
+      for (const line of lines) {
+        const cleanLine = line.replace(/^[-*]\s*/, '').trim();
+        if (cleanLine.length > 0) {
+          dependencies.add(cleanLine);
+        }
+      }
+    }
+
+    // 2. 자연어 패턴: "depends on [Task Title]"
+    const dependsOnPattern = /depends\s+on\s+["`']?([^"`'\n.]+)["`']?/gi;
+    let match;
+    while ((match = dependsOnPattern.exec(description)) !== null) {
+      const taskTitle = match[1].trim();
+      if (taskTitle) {
+        dependencies.add(taskTitle);
+      }
+    }
+
+    // 3. 자연어 패턴: "blocked by [Task Title]"
+    const blockedByPattern = /blocked\s+by\s+["`']?([^"`'\n.]+)["`']?/gi;
+    while ((match = blockedByPattern.exec(description)) !== null) {
+      const taskTitle = match[1].trim();
+      if (taskTitle) {
+        dependencies.add(taskTitle);
+      }
+    }
+
+    // 4. 자연어 패턴: "requires [Task Title]"
+    const requiresPattern = /requires\s+["`']?([^"`'\n.]+)["`']?/gi;
+    while ((match = requiresPattern.exec(description)) !== null) {
+      const taskTitle = match[1].trim();
+      // "requires" 다음에 스킬이 아닌 Task title인지 확인
+      // (스킬은 보통 소문자이고 짧음)
+      if (taskTitle.length > 5 && /[A-Z]/.test(taskTitle[0])) {
+        dependencies.add(taskTitle);
+      }
+    }
+
+    // 5. Task ID 패턴: #task-xxx, task:xxx
+    const taskIdPattern = /#?task[-:]([a-f0-9-]+)/gi;
+    while ((match = taskIdPattern.exec(description)) !== null) {
+      const taskId = match[1];
+      if (taskId) {
+        dependencies.add(taskId);
+      }
+    }
+
+    this.logger.debug(
+      `Extracted ${dependencies.size} dependencies from task ${task.id}: ${Array.from(dependencies).join(', ')}`,
+    );
+
+    return Array.from(dependencies);
   }
 
   /**
