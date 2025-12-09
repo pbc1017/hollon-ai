@@ -6,7 +6,10 @@ import { ConfigService } from '@nestjs/config';
  * Supports Jest worker parallelization with schema isolation
  */
 export function getTestDatabaseConfig(configService: ConfigService) {
-  const workerId = process.env.JEST_WORKER_ID || '1';
+  // Normalize JEST_WORKER_ID to extract numeric part only
+  // Handles both "1" (local) and "worker_1" (CI) formats
+  const rawWorkerId = process.env.JEST_WORKER_ID || '1';
+  const workerId = rawWorkerId.replace(/\D/g, '') || '1';
   const schemaName = `hollon_test_worker_${workerId}`;
 
   return {
@@ -28,7 +31,7 @@ export function getTestDatabaseConfig(configService: ConfigService) {
  * Runs migrations to set up database structure
  */
 export async function setupTestSchema(dataSource: DataSource): Promise<void> {
-  const schema = dataSource.options.schema as string;
+  const schema = (dataSource.options as { schema?: string }).schema || 'public';
 
   try {
     // Create schema if it doesn't exist
@@ -49,7 +52,7 @@ export async function setupTestSchema(dataSource: DataSource): Promise<void> {
  * Uses TRUNCATE with FK constraint bypass for speed
  */
 export async function cleanDatabase(dataSource: DataSource): Promise<void> {
-  const schema = dataSource.options.schema as string;
+  const schema = (dataSource.options as { schema?: string }).schema || 'public';
 
   try {
     // Temporarily disable FK constraints
@@ -82,7 +85,7 @@ export async function cleanDatabase(dataSource: DataSource): Promise<void> {
 export async function teardownTestSchema(
   dataSource: DataSource,
 ): Promise<void> {
-  const schema = dataSource.options.schema as string;
+  const schema = (dataSource.options as { schema?: string }).schema || 'public';
 
   try {
     await dataSource.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
