@@ -27,6 +27,14 @@ export enum HollonLifecycle {
   TEMPORARY = 'temporary',
 }
 
+export enum ExperienceLevel {
+  JUNIOR = 'junior',
+  MID = 'mid',
+  SENIOR = 'senior',
+  LEAD = 'lead',
+  PRINCIPAL = 'principal',
+}
+
 @Entity('hollons')
 @Index(['organizationId', 'status'])
 export class Hollon extends BaseEntity {
@@ -96,6 +104,19 @@ export class Hollon extends BaseEntity {
   @Column({ name: 'current_task_id', type: 'uuid', nullable: true })
   currentTaskId: string;
 
+  // ✅ Phase 3.5: 직속 상사 (stored - 성능 우선)
+  @Column({ name: 'manager_id', type: 'uuid', nullable: true })
+  managerId: string | null;
+
+  // ✅ Phase 3.5: 경험 레벨 (통계적 성과 지표 - 개별 성장 아님!)
+  @Column({
+    name: 'experience_level',
+    type: 'enum',
+    enum: ExperienceLevel,
+    default: ExperienceLevel.MID,
+  })
+  experienceLevel: ExperienceLevel;
+
   // Relations
   @ManyToOne(() => Organization, (org) => org.hollons, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organization_id' })
@@ -117,4 +138,12 @@ export class Hollon extends BaseEntity {
 
   @OneToMany(() => Task, (task) => task.creatorHollon)
   createdTasks: Task[];
+
+  // ✅ Phase 3.5: Self-referencing (manager)
+  @ManyToOne(() => Hollon, (hollon) => hollon.subordinates, { nullable: true })
+  @JoinColumn({ name: 'manager_id' })
+  manager: Hollon | null;
+
+  @OneToMany(() => Hollon, (hollon) => hollon.manager)
+  subordinates: Hollon[];
 }

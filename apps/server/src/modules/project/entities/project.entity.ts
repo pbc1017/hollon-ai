@@ -11,6 +11,7 @@ import { Organization } from '../../organization/entities/organization.entity';
 import { Task } from '../../task/entities/task.entity';
 import { Document } from '../../document/entities/document.entity';
 import { Goal } from '../../goal/entities/goal.entity';
+import { Team } from '../../team/entities/team.entity';
 
 export enum ProjectStatus {
   ACTIVE = 'active',
@@ -50,6 +51,10 @@ export class Project extends BaseEntity {
   @Column({ name: 'goal_id', nullable: true })
   goalId: string;
 
+  // ✅ Phase 3.5: 팀 할당
+  @Column({ name: 'assigned_team_id', type: 'uuid', nullable: true })
+  assignedTeamId: string | null;
+
   // Relations
   @ManyToOne(() => Organization, (org) => org.projects, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organization_id' })
@@ -67,4 +72,9 @@ export class Project extends BaseEntity {
   })
   @JoinColumn({ name: 'goal_id' })
   goal: Goal;
+
+  // ✅ Phase 3.5: 할당된 팀
+  @ManyToOne(() => Team, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'assigned_team_id' })
+  assignedTeam: Team | null;
 }

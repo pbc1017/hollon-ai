@@ -147,6 +147,14 @@ export class Task extends BaseEntity {
   @Column({ name: 'due_date', type: 'timestamp', nullable: true })
   dueDate?: Date | null;
 
+  // ✅ Phase 3.5: 필요 스킬 (Role.capabilities와 매칭)
+  @Column({ name: 'required_skills', type: 'text', array: true, default: '{}' })
+  requiredSkills: string[];
+
+  // ✅ Phase 3.5: 인간 승인 플래그 (Level 5 에스컬레이션)
+  @Column({ name: 'needs_human_approval', default: false })
+  needsHumanApproval: boolean;
+
   // Relations
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organization_id' })
