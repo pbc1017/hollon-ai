@@ -209,6 +209,7 @@ describe('Orchestration E2E', () => {
         status: TaskStatus.READY,
         assignedHollonId: testHollon.id,
         projectId: testProject.id,
+        organizationId: testOrg.id,
       });
 
       // Mock brain provider response
@@ -321,6 +322,7 @@ describe('add', () => {
         status: TaskStatus.IN_PROGRESS,
         assignedHollonId: testHollon.id,
         projectId: testProject.id,
+        organizationId: testOrg.id,
       });
 
       // Create conflicting task
@@ -332,6 +334,7 @@ describe('add', () => {
         priority: TaskPriority.P1_CRITICAL,
         status: TaskStatus.READY,
         projectId: testProject.id,
+        organizationId: testOrg.id,
       });
 
       // Create another hollon
@@ -367,6 +370,7 @@ describe('add', () => {
         status: TaskStatus.READY,
         assignedHollonId: testHollon.id,
         projectId: testProject.id,
+        organizationId: testOrg.id,
       });
 
       // Mock brain failure
@@ -405,6 +409,7 @@ describe('add', () => {
         status: TaskStatus.READY,
         assignedHollonId: testHollon.id,
         projectId: testProject.id,
+        organizationId: testOrg.id,
       });
 
       const unassignedTask = await taskRepo.save({
@@ -412,6 +417,7 @@ describe('add', () => {
         description: 'Higher priority but unassigned',
         type: TaskType.IMPLEMENTATION,
         priority: TaskPriority.P1_CRITICAL,
+        organizationId: testOrg.id,
         status: TaskStatus.READY,
         projectId: testProject.id,
       });
@@ -441,6 +447,7 @@ describe('add', () => {
         status: TaskStatus.READY,
         assignedHollonId: testHollon.id,
         projectId: testProject.id,
+        organizationId: testOrg.id,
       });
 
       const prompt = await promptComposer.composePrompt(

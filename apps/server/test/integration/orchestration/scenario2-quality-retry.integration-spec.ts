@@ -118,6 +118,7 @@ describe('Integration: Scenario 2 - Quality Failure and Retry', () => {
       const taskRepo = dataSource.getRepository(Task);
       task = await taskRepo.save({
         projectId: project.id,
+        organizationId: organization.id,
         title: 'Implement complex feature with bugs',
         description: 'Create a feature that intentionally has quality issues',
         type: 'implementation',
