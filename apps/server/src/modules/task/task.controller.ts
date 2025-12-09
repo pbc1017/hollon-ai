@@ -14,11 +14,16 @@ import { DependencyAnalyzerService } from './services/dependency-analyzer.servic
 import { ResourcePlannerService } from './services/resource-planner.service';
 import { PriorityRebalancerService } from './services/priority-rebalancer.service';
 import { UncertaintyDecisionService } from './services/uncertainty-decision.service';
+import { PivotResponseService } from './services/pivot-response.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { TaskStatus, TaskPriority } from './entities/task.entity';
 import { RebalancingOptions } from './interfaces/priority-rebalancing.interface';
 import { DecisionOptions } from './interfaces/uncertainty-decision.interface';
+import {
+  PivotContext,
+  PivotOptions,
+} from './interfaces/pivot-response.interface';
 
 @Controller('tasks')
 export class TaskController {
@@ -28,6 +33,7 @@ export class TaskController {
     private readonly resourcePlanner: ResourcePlannerService,
     private readonly priorityRebalancer: PriorityRebalancerService,
     private readonly uncertaintyDecision: UncertaintyDecisionService,
+    private readonly pivotResponse: PivotResponseService,
   ) {}
 
   @Post()
@@ -143,5 +149,15 @@ export class TaskController {
   analyzeTaskUncertainty(@Param('id', ParseUUIDPipe) id: string) {
     const task = this.taskService.findOne(id);
     return this.uncertaintyDecision.analyzeTaskUncertainty(task as any);
+  }
+
+  // Pivot Response endpoints
+  @Post('projects/:projectId/analyze-pivot')
+  analyzePivot(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body('pivotContext') pivotContext: PivotContext,
+    @Body('options') options?: PivotOptions,
+  ) {
+    return this.pivotResponse.analyzePivot(projectId, pivotContext, options);
   }
 }
