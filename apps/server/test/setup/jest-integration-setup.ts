@@ -13,8 +13,9 @@ process.env.DISABLE_SCHEDULER = 'true'; // Disable ScheduleModule in tests to av
 // Extend Jest timeout for E2E tests
 jest.setTimeout(30000);
 
+const rawWorkerId = process.env.JEST_WORKER_ID || '1';
+const normalizedWorkerId = rawWorkerId.replace(/\D/g, '') || '1';
+
 console.log('🧪 E2E Test Environment Initialized');
-console.log(`   Worker ID: ${process.env.JEST_WORKER_ID || '1'}`);
-console.log(
-  `   Test Schema: hollon_test_worker_${process.env.JEST_WORKER_ID || '1'}`,
-);
+console.log(`   Worker ID: ${rawWorkerId} → ${normalizedWorkerId}`);
+console.log(`   Test Schema: hollon_test_worker_${normalizedWorkerId}`);

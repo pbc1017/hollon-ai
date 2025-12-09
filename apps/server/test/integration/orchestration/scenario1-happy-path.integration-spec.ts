@@ -125,6 +125,7 @@ describe('Integration: Scenario 1 - Happy Path', () => {
       const taskRepo = dataSource.getRepository(Task);
       task = await taskRepo.save({
         projectId: project.id,
+        organizationId: organization.id,
         title: 'Implement simple utility function',
         description:
           'Create a function that adds two numbers and returns the result',

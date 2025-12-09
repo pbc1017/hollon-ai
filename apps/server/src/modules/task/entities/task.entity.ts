@@ -10,6 +10,7 @@ import {
   Check,
 } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
+import { Organization } from '../../organization/entities/organization.entity';
 import { Project } from '../../project/entities/project.entity';
 import { Cycle } from '../../project/entities/cycle.entity';
 import { Hollon } from '../../hollon/entities/hollon.entity';
@@ -74,7 +75,10 @@ export class Task extends BaseEntity {
   })
   priority: TaskPriority;
 
-  @Column({ name: 'project_id' })
+  @Column({ name: 'organization_id' })
+  organizationId: string;
+
+  @Column({ name: 'project_id', nullable: true })
   projectId: string;
 
   @Column({ name: 'cycle_id', type: 'uuid', nullable: true })
@@ -145,7 +149,14 @@ export class Task extends BaseEntity {
   dueDate?: Date | null;
 
   // Relations
-  @ManyToOne(() => Project, (project) => project.tasks, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'organization_id' })
+  organization: Organization;
+
+  @ManyToOne(() => Project, (project) => project.tasks, {
+    onDelete: 'CASCADE',
+    nullable: true,
+  })
   @JoinColumn({ name: 'project_id' })
   project: Project;
 

@@ -17,9 +17,9 @@ export const databaseConfig = (
     schema: configService.get<string>('database.schema', 'hollon'),
     entities: [__dirname + '/../**/*.entity.{ts,js}'],
     migrations: [__dirname + '/../database/migrations/*.{ts,js}'],
-    dropSchema: false, // Keep data between restarts - schema already synced
-    synchronize: isTest, // Enable synchronize for E2E tests to auto-create schema
-    migrationsRun: false, // 서버 시작 시 자동 마이그레이션 실행 안 함
+    dropSchema: false, // Keep data between restarts
+    synchronize: isTest, // Use synchronize in test for isolated worker schemas
+    migrationsRun: false, // Don't auto-run migrations in test (synchronize handles schema)
     logging: !isProduction && !isTest,
     ssl: isProduction ? { rejectUnauthorized: false } : false,
   };

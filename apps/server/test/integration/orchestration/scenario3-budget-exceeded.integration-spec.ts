@@ -124,6 +124,7 @@ describe('Integration: Scenario 3 - Budget Exceeded', () => {
       const taskRepo = dataSource.getRepository(Task);
       task = await taskRepo.save({
         projectId: project.id,
+        organizationId: organization.id,
         title: 'Simple task',
         description: 'This should not execute due to budget',
         type: 'implementation',

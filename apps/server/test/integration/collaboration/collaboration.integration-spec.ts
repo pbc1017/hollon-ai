@@ -214,6 +214,7 @@ describe('Collaboration Service Integration', () => {
       priority: TaskPriority.P2_HIGH,
       status: TaskStatus.READY,
       projectId: testProject.id,
+      organizationId: testOrg.id,
     });
   });
 

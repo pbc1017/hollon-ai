@@ -127,6 +127,7 @@ describe('Integration: Scenario 4 - Concurrent Hollons', () => {
       for (let i = 1; i <= TASK_COUNT; i++) {
         const task = await taskRepo.save({
           projectId: project.id,
+          organizationId: organization.id,
           title: `Task ${i}: Implement feature ${i}`,
           description: `Feature ${i} implementation`,
           type: 'implementation',
@@ -210,6 +211,7 @@ describe('Integration: Scenario 4 - Concurrent Hollons', () => {
       const taskRepo = dataSource.getRepository(Task);
       const raceTask = await taskRepo.save({
         projectId: project.id,
+        organizationId: organization.id,
         title: 'Race condition test task',
         description: 'Both hollons try to pull this',
         type: 'implementation',
