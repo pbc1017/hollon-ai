@@ -25,7 +25,7 @@ import { HollonOrchestratorService } from '@/modules/orchestration/services/holl
  * Run separately with:
  * pnpm --filter=@hollon-ai/server test:e2e -- real-brain-execution
  */
-describe('E2E: Real Brain Execution (⚠️ Uses Real API)', () => {
+describe.skip('E2E: Real Brain Execution (⚠️ Uses Real API)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
   let orchestrator: HollonOrchestratorService;

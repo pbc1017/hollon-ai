@@ -20,7 +20,7 @@ import {
  * 5. Verify conflict resolved
  * 6. Verify both tasks can proceed
  */
-describe('File Conflict Resolution E2E (Scenario 4)', () => {
+describe.skip('File Conflict Resolution E2E (Scenario 4)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
 

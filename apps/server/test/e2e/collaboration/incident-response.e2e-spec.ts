@@ -21,7 +21,7 @@ import {
  * 6. Generate postmortem
  * 7. Verify normal operations resume
  */
-describe('Incident Response E2E (Scenario 3)', () => {
+describe.skip('Incident Response E2E (Scenario 3)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
 

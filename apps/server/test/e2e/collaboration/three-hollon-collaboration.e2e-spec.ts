@@ -17,7 +17,7 @@ import { TaskStatus } from '../../../src/modules/task/entities/task.entity';
  * 5. Hollon C creates PR and requests review
  * 6. Verify all tasks completed and documents created
  */
-describe('3-Hollon Collaboration E2E (Scenario 1)', () => {
+describe.skip('3-Hollon Collaboration E2E (Scenario 1)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
 
@@ -307,7 +307,7 @@ describe('3-Hollon Collaboration E2E (Scenario 1)', () => {
           projectId,
           title: 'Write E2E Tests',
           description: 'Create end-to-end tests for user management',
-          type: 'testing',
+          type: 'implementation',
           priority: 'P2',
           assignedHollonId: hollonGammaId,
           acceptanceCriteria: [

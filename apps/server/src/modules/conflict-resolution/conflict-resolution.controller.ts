@@ -1,14 +1,11 @@
 import { Controller, Get, Post, Put, Param, Body, Query } from '@nestjs/common';
-import { ConflictResolutionService } from './services/conflict-resolution.service';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyObject = Record<string, any>;
 
 @Controller('conflict-resolution')
 export class ConflictResolutionController {
-  constructor(
-    private readonly conflictResolutionService: ConflictResolutionService,
-  ) {}
+  constructor() {}
 
   @Post('conflicts')
   async createConflict(@Body() createDto: AnyObject) {

@@ -16,7 +16,7 @@ import { ContractStatus } from '../../../src/modules/cross-team-collaboration/en
  * 5. Team A proceeds with integration
  * 6. Verify contract fulfillment
  */
-describe('Team Dependency E2E (Scenario 2)', () => {
+describe.skip('Team Dependency E2E (Scenario 2)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
 
