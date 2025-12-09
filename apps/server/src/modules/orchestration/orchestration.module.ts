@@ -7,6 +7,7 @@ import { Organization } from '../organization/entities/organization.entity';
 import { Project } from '../project/entities/project.entity';
 import { BrainProviderModule } from '../brain-provider/brain-provider.module';
 import { CollaborationModule } from '../collaboration/collaboration.module';
+import { GoalModule } from '../goal/goal.module';
 import { PromptComposerService } from './services/prompt-composer.service';
 import { TaskPoolService } from './services/task-pool.service';
 import { HollonOrchestratorService } from './services/hollon-orchestrator.service';
@@ -18,6 +19,7 @@ import { DecisionLogService } from './services/decision-log.service';
 import { CostTrackingService } from './services/cost-tracking.service';
 import { TaskExecutionService } from './services/task-execution.service';
 import { CostRecord } from '../cost-tracking/entities/cost-record.entity';
+import { GoalDecompositionService } from '../goal/services/goal-decomposition.service';
 
 @Module({
   imports: [
@@ -31,6 +33,7 @@ import { CostRecord } from '../cost-tracking/entities/cost-record.entity';
     ]),
     BrainProviderModule,
     CollaborationModule,
+    GoalModule,
   ],
   providers: [
     PromptComposerService,
@@ -43,6 +46,10 @@ import { CostRecord } from '../cost-tracking/entities/cost-record.entity';
     CostTrackingService,
     TaskExecutionService,
     HollonOrchestratorService,
+    {
+      provide: 'GoalDecompositionService',
+      useExisting: GoalDecompositionService,
+    },
   ],
   exports: [
     PromptComposerService,
