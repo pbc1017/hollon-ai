@@ -151,6 +151,20 @@ export class CodeReviewService {
       });
     }
 
+    // Phase 3.5: APPROVED 시 자동 Merge
+    if (review.decision === PullRequestStatus.APPROVED) {
+      try {
+        await this.autoMergePullRequest(pr);
+      } catch (error) {
+        const err = error as Error;
+        this.logger.error(
+          `Auto-merge failed for PR ${prId}: ${err.message}`,
+          err.stack,
+        );
+        // Auto-merge 실패해도 리뷰는 완료로 간주
+      }
+    }
+
     return pr;
   }
 
@@ -669,6 +683,100 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
     // - 테스트 커버리지 확인
 
     return comments.join('\n');
+  }
+
+  /**
+   * Phase 3.5: APPROVED PR 자동 Merge
+   *
+   * Git 작업:
+   * 1. PR이 이미 merge되었는지 확인
+   * 2. gh pr merge 명령 실행
+   * 3. PR 상태를 MERGED로 업데이트
+   * 4. Task 상태를 DONE으로 업데이트
+   */
+  private async autoMergePullRequest(pr: TaskPullRequest): Promise<void> {
+    this.logger.log(`Auto-merging approved PR #${pr.prNumber}`);
+
+    // 이미 merge된 경우 스킵
+    if (pr.status === PullRequestStatus.MERGED) {
+      this.logger.log(`PR #${pr.prNumber} is already merged`);
+      return;
+    }
+
+    try {
+      // gh CLI를 사용하여 PR merge
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+
+      // PR URL에서 owner/repo 추출
+      const match = pr.prUrl.match(
+        /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/,
+      );
+      if (!match) {
+        throw new Error(`Invalid PR URL format: ${pr.prUrl}`);
+      }
+
+      const [, owner, repo, prNumber] = match;
+
+      // gh pr merge 실행
+      this.logger.log(
+        `Executing: gh pr merge ${prNumber} --repo ${owner}/${repo} --squash --auto`,
+      );
+
+      const { stdout, stderr } = await execAsync(
+        `gh pr merge ${prNumber} --repo ${owner}/${repo} --squash --auto`,
+        {
+          timeout: 30000, // 30초 타임아웃
+        },
+      );
+
+      this.logger.log(`Merge output: ${stdout}`);
+      if (stderr) {
+        this.logger.warn(`Merge stderr: ${stderr}`);
+      }
+
+      // PR 상태를 MERGED로 업데이트
+      await this.prRepo.update(pr.id, {
+        status: PullRequestStatus.MERGED,
+      });
+
+      // Task 상태를 COMPLETED로 업데이트
+      await this.taskRepo.update(pr.taskId, {
+        status: TaskStatus.COMPLETED,
+        completedAt: new Date(),
+      });
+
+      this.logger.log(
+        `PR #${prNumber} successfully merged and task ${pr.taskId} marked as DONE`,
+      );
+
+      // 작성자에게 알림
+      if (pr.authorHollonId) {
+        await this.messageService.send({
+          fromType: ParticipantType.HOLLON,
+          fromId: pr.reviewerHollonId || undefined,
+          toId: pr.authorHollonId,
+          toType: ParticipantType.HOLLON,
+          messageType: MessageType.RESPONSE,
+          content: `PR #${pr.prNumber} has been automatically merged! Task is now complete.`,
+          metadata: { prId: pr.id, taskId: pr.taskId },
+        });
+      }
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Failed to auto-merge PR #${pr.prNumber}: ${err.message}`,
+        err.stack,
+      );
+
+      // Merge 실패 시 PR에 코멘트 추가
+      await this.prRepo.update(pr.id, {
+        reviewComments: `${pr.reviewComments || ''}\n\n[Auto-merge failed: ${err.message}]\nPlease merge manually.`,
+      });
+
+      throw error;
+    }
   }
 
   /**
