@@ -8,9 +8,11 @@ import { DependencyAnalyzerService } from './services/dependency-analyzer.servic
 import { ResourcePlannerService } from './services/resource-planner.service';
 import { PriorityRebalancerService } from './services/priority-rebalancer.service';
 import { UncertaintyDecisionService } from './services/uncertainty-decision.service';
+import { PivotResponseService } from './services/pivot-response.service';
+import { Project } from '../project/entities/project.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Task, Hollon])],
+  imports: [TypeOrmModule.forFeature([Task, Hollon, Project])],
   controllers: [TaskController],
   providers: [
     TaskService,
@@ -18,6 +20,7 @@ import { UncertaintyDecisionService } from './services/uncertainty-decision.serv
     ResourcePlannerService,
     PriorityRebalancerService,
     UncertaintyDecisionService,
+    PivotResponseService,
   ],
   exports: [
     TaskService,
@@ -25,6 +28,7 @@ import { UncertaintyDecisionService } from './services/uncertainty-decision.serv
     ResourcePlannerService,
     PriorityRebalancerService,
     UncertaintyDecisionService,
+    PivotResponseService,
   ],
 })
 export class TaskModule {}
