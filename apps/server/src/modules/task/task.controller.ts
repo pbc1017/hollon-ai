@@ -10,13 +10,17 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { TaskService } from './task.service';
+import { DependencyAnalyzerService } from './services/dependency-analyzer.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { TaskStatus, TaskPriority } from './entities/task.entity';
 
 @Controller('tasks')
 export class TaskController {
-  constructor(private readonly taskService: TaskService) {}
+  constructor(
+    private readonly taskService: TaskService,
+    private readonly dependencyAnalyzer: DependencyAnalyzerService,
+  ) {}
 
   @Post()
   create(@Body() dto: CreateTaskDto) {
@@ -72,5 +76,18 @@ export class TaskController {
   @Delete(':id')
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.taskService.remove(id);
+  }
+
+  // Dependency Analysis endpoints
+  @Get('projects/:projectId/dependency-analysis')
+  analyzeProjectDependencies(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+  ) {
+    return this.dependencyAnalyzer.analyzeProject(projectId);
+  }
+
+  @Get(':id/dependencies')
+  analyzeTaskDependencies(@Param('id', ParseUUIDPipe) id: string) {
+    return this.dependencyAnalyzer.analyzeTask(id);
   }
 }
