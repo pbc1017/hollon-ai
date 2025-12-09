@@ -65,7 +65,7 @@ export class GoalDecompositionService {
         systemPrompt:
           'You are an expert project manager and software architect. Provide structured JSON output only.',
         context: {
-          workingDirectory: '/app',
+          workingDirectory: process.cwd(),
         },
       },
       {

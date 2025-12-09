@@ -1,8 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { AppModule } from '../../src/app.module';
-import { DataSource } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
+import { BrainProviderConfig } from '../../src/modules/brain-provider/entities/brain-provider-config.entity';
 
 /**
  * Goal Decomposition LLM Manual Test
@@ -21,6 +23,7 @@ import request from 'supertest';
 describe('GoalDecomposition LLM Test (Manual)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
+  let brainConfigRepo: Repository<BrainProviderConfig>;
 
   // Entity IDs
   let organizationId: string;
@@ -39,46 +42,12 @@ describe('GoalDecomposition LLM Test (Manual)', () => {
     await app.init();
 
     dataSource = moduleFixture.get<DataSource>(DataSource);
-
-    // Create brain_provider_configs table if not exists
-    await dataSource.query(`
-      CREATE TABLE IF NOT EXISTS brain_provider_configs (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        organization_id UUID NOT NULL,
-        provider_id VARCHAR(50) NOT NULL,
-        display_name VARCHAR(255) NOT NULL,
-        config JSONB NOT NULL DEFAULT '{}',
-        cost_per_input_token_cents DECIMAL(10,6) NOT NULL,
-        cost_per_output_token_cents DECIMAL(10,6) NOT NULL,
-        enabled BOOLEAN DEFAULT true,
-        timeout_seconds INTEGER DEFAULT 300,
-        max_retries INTEGER DEFAULT 3,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Create cost_records table if not exists
-    await dataSource.query(`
-      CREATE TABLE IF NOT EXISTS cost_records (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        organization_id UUID NOT NULL,
-        hollon_id UUID,
-        task_id UUID,
-        type VARCHAR(50) NOT NULL,
-        provider_id VARCHAR(50) NOT NULL,
-        model_used VARCHAR(100),
-        input_tokens INTEGER DEFAULT 0,
-        output_tokens INTEGER DEFAULT 0,
-        cost_cents DECIMAL(10,4) DEFAULT 0,
-        execution_time_ms INTEGER DEFAULT 0,
-        metadata JSONB,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
+    brainConfigRepo = moduleFixture.get(
+      getRepositoryToken(BrainProviderConfig),
+    );
 
     // Clean up test data
+    // Note: Migrations are auto-run in test environment (migrationsRun: true)
     await dataSource.query(
       'TRUNCATE goals, goal_progress_records, tasks, projects, teams, organizations, brain_provider_configs, cost_records RESTART IDENTITY CASCADE',
     );
@@ -116,28 +85,26 @@ describe('GoalDecomposition LLM Test (Manual)', () => {
     });
 
     it('Step 2: Create Brain Provider Config', async () => {
-      // Create BrainProviderConfig for Claude Code (without schema prefix - let TypeORM handle it)
-      await dataSource.query(
-        `INSERT INTO brain_provider_configs
-         (organization_id, provider_id, display_name, config, cost_per_input_token_cents, cost_per_output_token_cents, enabled, timeout_seconds, max_retries, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())`,
-        [
-          organizationId,
-          'claude_code',
-          'Claude Code (Sonnet 4.5)',
-          JSON.stringify({
-            model: 'claude-sonnet-4-5',
-            maxTokens: 8000,
-            temperature: 0.7,
-          }),
-          0.003, // $3 per million input tokens = $0.000003 per token = 0.003 cents
-          0.015, // $15 per million output tokens = $0.000015 per token = 0.015 cents
-          true,
-          300,
-          3,
-        ],
-      );
-      console.log(`✅ Brain Provider Config created for organization`);
+      // Use Repository to create BrainProviderConfig
+      const config = brainConfigRepo.create({
+        organizationId,
+        providerId: 'claude_code',
+        displayName: 'Claude Code (Sonnet 4.5)',
+        config: {
+          model: 'claude-sonnet-4-5',
+          maxTokens: 8000,
+          temperature: 0.7,
+        },
+        costPerInputTokenCents: 0.003, // $3 per million input tokens
+        costPerOutputTokenCents: 0.015, // $15 per million output tokens
+        enabled: true,
+        timeoutSeconds: 300,
+        maxRetries: 3,
+      });
+
+      const saved = await brainConfigRepo.save(config);
+      expect(saved.id).toBeDefined();
+      console.log(`✅ Brain Provider Config created: ${saved.id}`);
     });
 
     it('Step 3: Create Team', async () => {

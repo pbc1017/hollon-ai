@@ -12,7 +12,15 @@ export default () => ({
     name: process.env.DB_NAME || 'hollon',
     user: process.env.DB_USER || 'hollon',
     password: process.env.DB_PASSWORD || '',
-    schema: process.env.DB_SCHEMA || 'hollon',
+    schema: (() => {
+      const baseSchema = process.env.DB_SCHEMA || 'hollon';
+      const workerId = process.env.JEST_WORKER_ID;
+      // In test environment with Jest parallel workers, append worker ID to schema
+      if (process.env.NODE_ENV === 'test' && workerId) {
+        return `${baseSchema}_worker_${workerId}`;
+      }
+      return baseSchema;
+    })(),
     url: process.env.DATABASE_URL,
   },
 
