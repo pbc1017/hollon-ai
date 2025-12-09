@@ -20,6 +20,7 @@ import {
   DecompositionOptionsDto,
   DecompositionStrategy,
 } from '../dto/decomposition-options.dto';
+import { ResourcePlannerService } from '../../task/services/resource-planner.service';
 
 @Injectable()
 export class GoalDecompositionService {
@@ -28,6 +29,7 @@ export class GoalDecompositionService {
   constructor(
     private readonly goalService: GoalService,
     private readonly brainProviderService: BrainProviderService,
+    private readonly resourcePlanner: ResourcePlannerService,
     @InjectRepository(Goal)
     private readonly goalRepo: Repository<Goal>,
     @InjectRepository(Project)
@@ -290,6 +292,32 @@ Please provide the decomposition in JSON format only, no additional text.`;
 
     // TODO: Task 의존성 설정 (DependencyAnalyzer 구현 후)
     // 현재는 의존성 정보를 task description에 포함
+
+    // ✅ Phase 3 Week 15-16: autoAssign 통합
+    // Goal 분해 직후 ResourcePlannerService로 자동 할당
+    if (options?.autoAssign && createdProjects.length > 0) {
+      this.logger.log(
+        `Auto-assigning tasks for ${createdProjects.length} projects`,
+      );
+
+      for (const project of createdProjects) {
+        try {
+          const assignResult = await this.resourcePlanner.assignProject(
+            project.id,
+          );
+          this.logger.log(
+            `Project ${project.id}: ${assignResult.assignedCount}/${assignResult.totalTasks} tasks assigned`,
+          );
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          this.logger.warn(
+            `Failed to auto-assign project ${project.id}: ${errorMessage}`,
+          );
+          // 에러가 발생해도 다른 프로젝트는 계속 처리
+        }
+      }
+    }
 
     return {
       projects: createdProjects,

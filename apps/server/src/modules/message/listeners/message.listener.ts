@@ -1,8 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { MessageService } from '../message.service';
 import { MessageType, ParticipantType } from '../entities/message.entity';
 import { CodeReviewService } from '../../collaboration/services/code-review.service';
+import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
+import { ResourcePlannerService } from '../../task/services/resource-planner.service';
+import { TaskService } from '../../task/task.service';
 
 /**
  * MessageListener: 메시지 이벤트를 자동으로 처리
@@ -11,6 +16,10 @@ import { CodeReviewService } from '../../collaboration/services/code-review.serv
  * - REVIEW_REQUEST 메시지 수신 시 자동으로 코드 리뷰 실행
  * - 리뷰어 Hollon의 inbox를 주기적으로 확인
  * - 메시지를 읽고 적절한 액션 실행
+ *
+ * Phase 3 Week 15-16 추가:
+ * - IDLE 상태 Hollon에게 자동으로 Task 할당
+ * - ResourcePlannerService 활용하여 최적 Task 매칭
  */
 @Injectable()
 export class MessageListener {
@@ -19,6 +28,10 @@ export class MessageListener {
   constructor(
     private readonly messageService: MessageService,
     private readonly codeReviewService: CodeReviewService,
+    private readonly resourcePlanner: ResourcePlannerService,
+    private readonly taskService: TaskService,
+    @InjectRepository(Hollon)
+    private readonly hollonRepo: Repository<Hollon>,
   ) {}
 
   /**
@@ -64,6 +77,77 @@ export class MessageListener {
       const err = error as Error;
       this.logger.error(
         `Error in processUnreadMessages: ${err.message}`,
+        err.stack,
+      );
+    }
+  }
+
+  /**
+   * Phase 3 Week 15-16: IDLE Hollon 자동 Task 할당
+   *
+   * 매 30초마다 IDLE 상태의 Hollon을 확인하고,
+   * ResourcePlannerService를 통해 최적의 Task를 자동으로 할당합니다.
+   *
+   * 이는 TaskPoolService의 Pull 방식을 보완하는 Push 방식 할당입니다:
+   * - TaskPoolService: Hollon이 능동적으로 Task를 요청 (Pull)
+   * - 이 메서드: 시스템이 IDLE Hollon에게 Task를 능동적으로 할당 (Push)
+   */
+  @Cron(CronExpression.EVERY_30_SECONDS)
+  async autoAssignIdleHollons(): Promise<void> {
+    try {
+      this.logger.debug('Checking for IDLE hollons to auto-assign tasks...');
+
+      // 1. IDLE 상태의 Hollon 조회
+      const idleHollons = await this.hollonRepo.find({
+        where: { status: HollonStatus.IDLE },
+        relations: ['role', 'team', 'organization'],
+      });
+
+      if (idleHollons.length === 0) {
+        return;
+      }
+
+      this.logger.log(
+        `Found ${idleHollons.length} IDLE hollons for auto-assignment`,
+      );
+
+      // 2. 각 Hollon에게 최적의 Task 찾아서 할당
+      for (const hollon of idleHollons) {
+        try {
+          // 조직의 unassigned Task 중 최적 Task 추천
+          const recommendation =
+            await this.resourcePlanner.recommendTaskForHollon(hollon.id);
+
+          if (!recommendation.recommendedTask) {
+            this.logger.debug(
+              `No suitable task found for hollon ${hollon.name} (${hollon.id})`,
+            );
+            continue;
+          }
+
+          // Task 할당
+          await this.taskService.assignToHollon(
+            recommendation.recommendedTask.id,
+            hollon.id,
+          );
+
+          this.logger.log(
+            `Auto-assigned task "${recommendation.recommendedTask.title}" to hollon ${hollon.name} ` +
+              `(match score: ${recommendation.matchScore})`,
+          );
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          this.logger.warn(
+            `Failed to auto-assign task to hollon ${hollon.name}: ${errorMessage}`,
+          );
+          // 에러가 발생해도 다른 Hollon은 계속 처리
+        }
+      }
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Error in autoAssignIdleHollons: ${err.message}`,
         err.stack,
       );
     }

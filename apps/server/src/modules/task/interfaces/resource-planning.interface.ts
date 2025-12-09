@@ -13,6 +13,7 @@ export interface HollonWorkload {
 export interface TaskAssignmentRecommendation {
   task: Task;
   recommendedHollon: Hollon | null;
+  recommendedTask?: Task; // Phase 3 Week 15-16: IDLE Hollon 자동 할당용
   matchScore: number; // 0-100
   reasoning: string;
   alternatives: Array<{
@@ -30,6 +31,8 @@ export interface ResourcePlanningResult {
   }>;
   workloads: HollonWorkload[];
   assignedTasks: number;
+  assignedCount?: number; // Phase 3 Week 15-16: autoAssign에서 사용
+  totalTasks?: number; // Phase 3 Week 15-16: autoAssign에서 사용
   unassignedTasks: number;
   averageMatchScore: number;
   warnings: string[];

@@ -11,6 +11,7 @@ import { GoalTrackingService } from './services/goal-tracking.service';
 import { GoalReviewService } from './services/goal-review.service';
 import { GoalDecompositionService } from './services/goal-decomposition.service';
 import { BrainProviderModule } from '../brain-provider/brain-provider.module';
+import { TaskModule } from '../task/task.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { BrainProviderModule } from '../brain-provider/brain-provider.module';
       Organization,
     ]),
     BrainProviderModule,
+    TaskModule,
   ],
   controllers: [GoalController],
   providers: [

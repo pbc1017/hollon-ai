@@ -125,6 +125,8 @@ export class ResourcePlannerService {
       assignments,
       workloads,
       assignedTasks: assignments.length,
+      assignedCount: assignments.length, // Phase 3 Week 15-16
+      totalTasks: tasks.length, // Phase 3 Week 15-16
       unassignedTasks: tasks.length - assignments.length,
       averageMatchScore,
       warnings,
@@ -184,6 +186,95 @@ export class ResourcePlannerService {
       matchScore: best.score,
       reasoning: this.getMatchReason(best.score),
       alternatives,
+    };
+  }
+
+  /**
+   * Phase 3 Week 15-16: 특정 Hollon에게 최적의 Task 추천 (IDLE 자동 할당용)
+   *
+   * MessageListener.autoAssignIdleHollons()에서 사용
+   * Hollon을 기준으로 가장 적합한 unassigned Task를 찾습니다.
+   */
+  async recommendTaskForHollon(
+    hollonId: string,
+  ): Promise<TaskAssignmentRecommendation> {
+    this.logger.log(`Finding best task for hollon: ${hollonId}`);
+
+    // 1. Hollon 조회
+    const hollon = await this.hollonRepo.findOne({
+      where: { id: hollonId },
+      relations: ['role', 'team', 'organization'],
+    });
+
+    if (!hollon) {
+      return {
+        task: null as any,
+        recommendedHollon: null,
+        matchScore: 0,
+        reasoning: `Hollon not found: ${hollonId}`,
+        alternatives: [],
+      };
+    }
+
+    // 2. 조직의 unassigned & ready tasks 조회
+    const unassignedTasks = await this.taskRepo.find({
+      where: {
+        organizationId: hollon.organizationId,
+        assignedHollonId: In([null]) as any,
+        status: In([TaskStatus.PENDING, TaskStatus.READY]),
+      },
+      relations: ['project'],
+      take: 50, // 최대 50개까지만 검색
+      order: {
+        priority: 'ASC',
+        createdAt: 'ASC',
+      },
+    });
+
+    if (unassignedTasks.length === 0) {
+      return {
+        task: null as any,
+        recommendedHollon: null,
+        matchScore: 0,
+        reasoning: 'No unassigned tasks available',
+        alternatives: [],
+      };
+    }
+
+    // 3. 각 Task에 대한 매칭 점수 계산
+    const scores = await Promise.all(
+      unassignedTasks.map(async (task) => ({
+        task,
+        score: await this.calculateMatchScore(task, hollon),
+      })),
+    );
+
+    // 4. 점수 순 정렬
+    scores.sort((a, b) => b.score - a.score);
+
+    const best = scores[0];
+
+    // 최소 매칭 점수 체크 (40점 미만이면 할당하지 않음)
+    if (best.score < 40) {
+      this.logger.debug(
+        `Best task score (${best.score}) below threshold for hollon ${hollonId}`,
+      );
+      return {
+        task: null as any,
+        recommendedHollon: null,
+        matchScore: best.score,
+        reasoning: `No suitable task (best match score: ${best.score})`,
+        alternatives: [],
+      };
+    }
+
+    return {
+      task: best.task,
+      recommendedTask: best.task,
+      recommendedHollon: hollon,
+      matchScore: best.score,
+      reasoning: this.getMatchReason(best.score),
+      alternatives: [],
     };
   }
 
