@@ -7,6 +7,8 @@ const projectRoot = resolve(__dirname, '../../../..');
 dotenv.config({ path: join(projectRoot, '.env.local') });
 dotenv.config({ path: join(projectRoot, '.env') });
 
+const schema = process.env.DB_SCHEMA || 'hollon';
+
 export default new DataSource({
   type: 'postgres',
   host: process.env.DB_HOST || 'localhost',
@@ -14,8 +16,12 @@ export default new DataSource({
   username: process.env.DB_USER || 'hollon',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'hollon',
-  schema: process.env.DB_SCHEMA || 'hollon',
+  schema: schema,
   entities: [join(__dirname, '../**/*.entity{.ts,.js}')],
   migrations: [join(__dirname, '../database/migrations/*{.ts,.js}')],
   synchronize: false,
+  // Set search_path to ensure unqualified table names use the correct schema
+  extra: {
+    options: `-c search_path=${schema},public`,
+  },
 });

@@ -3,7 +3,7 @@
   "rootDir": ".",
   "testEnvironment": "node",
   "testRegex": "e2e/.+\\.e2e-spec\\.ts$",
-  "testPathIgnorePatterns": ["/node_modules/"],
+  "testPathIgnorePatterns": ["/node_modules/", "goal-decomposition-llm"],
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   },

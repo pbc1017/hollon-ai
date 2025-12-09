@@ -5,10 +5,12 @@
  * It configures environment variables and global test settings
  */
 
-// Load test environment variables
+// Set test environment
 process.env.NODE_ENV = 'test';
-process.env.LOG_LEVEL = 'error';
-process.env.DISABLE_SCHEDULER = 'true'; // Disable ScheduleModule in tests to avoid Reflector dependency issues
+process.env.DISABLE_SCHEDULER = 'true'; // Disable ScheduleModule in tests
+
+// Note: LOG_LEVEL, API keys, and schema are automatically set by configuration.ts
+// based on NODE_ENV=test
 
 // Extend Jest timeout for E2E tests
 jest.setTimeout(30000);
@@ -18,4 +20,5 @@ const normalizedWorkerId = rawWorkerId.replace(/\D/g, '') || '1';
 
 console.log('🧪 E2E Test Environment Initialized');
 console.log(`   Worker ID: ${rawWorkerId} → ${normalizedWorkerId}`);
-console.log(`   Test Schema: hollon_test_worker_${normalizedWorkerId}`);
+console.log(`   Schema: hollon_test_worker_${normalizedWorkerId}`);
+console.log('   Migration: Auto-run enabled (migrationsRun: true)');

@@ -13,6 +13,7 @@ import {
   CostRecordType,
 } from '@/modules/cost-tracking/entities/cost-record.entity';
 import { CostTrackingService } from '@/modules/orchestration/services/cost-tracking.service';
+import { cleanupTestData } from '../../utils/test-database.utils';
 
 /**
  * Scenario 3: Budget Exceeded
@@ -50,7 +51,7 @@ describe('Integration: Scenario 3 - Budget Exceeded', () => {
 
   afterAll(async () => {
     costTracking.clearBudgetLimits();
-    await dataSource.dropDatabase();
+    await cleanupTestData(dataSource);
     await app.close();
   });
 

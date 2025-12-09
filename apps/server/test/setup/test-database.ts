@@ -21,8 +21,12 @@ export function getTestDatabaseConfig(configService: ConfigService) {
     database: configService.get('DB_NAME', 'hollon'),
     schema: schemaName,
     entities: [__dirname + '/../../src/**/*.entity{.ts,.js}'],
-    synchronize: true, // Auto-create schema from entities in test mode
+    synchronize: false, // Use migrations for schema management
     logging: false,
+    // Set search_path to ensure unqualified table names use the correct schema
+    extra: {
+      options: `-c search_path=${schemaName},public`,
+    },
   };
 }
 
