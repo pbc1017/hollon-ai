@@ -7,6 +7,7 @@ import {
   TaskPriority,
   TaskType,
 } from './entities/task.entity';
+import { Project } from '../project/entities/project.entity';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 
 describe('TaskService', () => {
@@ -20,6 +21,10 @@ describe('TaskService', () => {
     count: jest.fn(),
     remove: jest.fn(),
     createQueryBuilder: jest.fn(),
+  };
+
+  const mockProjectRepository = {
+    findOne: jest.fn(),
   };
 
   const mockTask: Partial<Task> = {
@@ -43,6 +48,10 @@ describe('TaskService', () => {
           provide: getRepositoryToken(Task),
           useValue: mockTaskRepository,
         },
+        {
+          provide: getRepositoryToken(Project),
+          useValue: mockProjectRepository,
+        },
       ],
     }).compile();
 
@@ -65,6 +74,10 @@ describe('TaskService', () => {
         priority: TaskPriority.P3_MEDIUM,
       };
 
+      mockProjectRepository.findOne.mockResolvedValue({
+        id: 'project-123',
+        organizationId: 'org-123',
+      });
       mockTaskRepository.create.mockReturnValue({
         ...createDto,
         depth: 0,
@@ -82,6 +95,7 @@ describe('TaskService', () => {
         depth: 0,
         creatorHollonId: undefined,
         dueDate: undefined,
+        organizationId: 'org-123',
       });
       expect(result).toHaveProperty('id', 'new-task-id');
       expect(result.depth).toBe(0);
@@ -97,6 +111,10 @@ describe('TaskService', () => {
         priority: TaskPriority.P3_MEDIUM,
       };
 
+      mockProjectRepository.findOne.mockResolvedValue({
+        id: 'project-123',
+        organizationId: 'org-123',
+      });
       mockTaskRepository.findOne.mockResolvedValue(parentTask);
       mockTaskRepository.count.mockResolvedValue(0);
       mockTaskRepository.create.mockReturnValue({
@@ -126,6 +144,10 @@ describe('TaskService', () => {
         priority: TaskPriority.P3_MEDIUM,
       };
 
+      mockProjectRepository.findOne.mockResolvedValue({
+        id: 'project-123',
+        organizationId: 'org-123',
+      });
       mockTaskRepository.findOne.mockResolvedValue(null);
 
       await expect(service.create(createDto)).rejects.toThrow(
@@ -143,6 +165,10 @@ describe('TaskService', () => {
         priority: TaskPriority.P3_MEDIUM,
       };
 
+      mockProjectRepository.findOne.mockResolvedValue({
+        id: 'project-123',
+        organizationId: 'org-123',
+      });
       mockTaskRepository.findOne.mockResolvedValue(parentTask);
 
       await expect(service.create(createDto)).rejects.toThrow(
@@ -163,6 +189,10 @@ describe('TaskService', () => {
         priority: TaskPriority.P3_MEDIUM,
       };
 
+      mockProjectRepository.findOne.mockResolvedValue({
+        id: 'project-123',
+        organizationId: 'org-123',
+      });
       mockTaskRepository.findOne.mockResolvedValue(parentTask);
       mockTaskRepository.count.mockResolvedValue(10);
 
