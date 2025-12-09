@@ -4,7 +4,9 @@ import { Hollon } from '../hollon/entities/hollon.entity';
 import { Task } from '../task/entities/task.entity';
 import { Document } from '../document/entities/document.entity';
 import { Organization } from '../organization/entities/organization.entity';
+import { Project } from '../project/entities/project.entity';
 import { BrainProviderModule } from '../brain-provider/brain-provider.module';
+import { CollaborationModule } from '../collaboration/collaboration.module';
 import { PromptComposerService } from './services/prompt-composer.service';
 import { TaskPoolService } from './services/task-pool.service';
 import { HollonOrchestratorService } from './services/hollon-orchestrator.service';
@@ -14,6 +16,7 @@ import { SubtaskCreationService } from './services/subtask-creation.service';
 import { TaskAnalyzerService } from './services/task-analyzer.service';
 import { DecisionLogService } from './services/decision-log.service';
 import { CostTrackingService } from './services/cost-tracking.service';
+import { TaskExecutionService } from './services/task-execution.service';
 import { CostRecord } from '../cost-tracking/entities/cost-record.entity';
 
 @Module({
@@ -23,9 +26,11 @@ import { CostRecord } from '../cost-tracking/entities/cost-record.entity';
       Task,
       Document,
       Organization,
+      Project,
       CostRecord,
     ]),
     BrainProviderModule,
+    CollaborationModule,
   ],
   providers: [
     PromptComposerService,
@@ -36,8 +41,14 @@ import { CostRecord } from '../cost-tracking/entities/cost-record.entity';
     TaskAnalyzerService,
     DecisionLogService,
     CostTrackingService,
+    TaskExecutionService,
     HollonOrchestratorService,
   ],
-  exports: [PromptComposerService, TaskPoolService, HollonOrchestratorService],
+  exports: [
+    PromptComposerService,
+    TaskPoolService,
+    TaskExecutionService,
+    HollonOrchestratorService,
+  ],
 })
 export class OrchestrationModule {}
