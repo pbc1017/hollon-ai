@@ -34,13 +34,13 @@ export class Document extends BaseEntity {
   organizationId: string;
 
   @Column({ name: 'project_id', nullable: true })
-  projectId: string;
+  projectId: string | null;
 
   @Column({ name: 'hollon_id', type: 'uuid', nullable: true })
-  hollonId: string;
+  hollonId: string | null;
 
   @Column({ name: 'task_id', type: 'uuid', nullable: true })
-  taskId: string;
+  taskId: string | null;
 
   @Column({ type: 'text', array: true, nullable: true })
   tags: string[];
