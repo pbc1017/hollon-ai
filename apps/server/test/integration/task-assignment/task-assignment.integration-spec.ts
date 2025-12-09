@@ -29,6 +29,8 @@ import { ApprovalRequest } from '../../../src/modules/approval/entities/approval
 import { RoleService } from '../../../src/modules/role/role.service';
 import { TeamService } from '../../../src/modules/team/team.service';
 import { OrganizationService } from '../../../src/modules/organization/organization.service';
+import { DocumentService } from '../../../src/modules/document/document.service';
+import { Document } from '../../../src/modules/document/entities/document.entity';
 
 describe('Task Assignment Integration Tests', () => {
   let module: TestingModule;
@@ -70,6 +72,7 @@ describe('Task Assignment Integration Tests', () => {
           Role,
           Team,
           ApprovalRequest,
+          Document,
         ]),
       ],
       providers: [
@@ -93,6 +96,13 @@ describe('Task Assignment Integration Tests', () => {
           useValue: {
             findOne: jest.fn(),
             create: jest.fn(),
+          },
+        },
+        {
+          provide: DocumentService,
+          useValue: {
+            create: jest.fn(),
+            findByOrganization: jest.fn().mockResolvedValue([]),
           },
         },
         {
