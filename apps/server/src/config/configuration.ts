@@ -14,9 +14,12 @@ export default () => ({
     password: process.env.DB_PASSWORD || '',
     schema: (() => {
       const baseSchema = process.env.DB_SCHEMA || 'hollon';
-      const workerId = process.env.JEST_WORKER_ID;
+      // Normalize JEST_WORKER_ID to extract numeric part only
+      // Handles both "1" (local) and "worker_1" (CI) formats
+      const rawWorkerId = process.env.JEST_WORKER_ID;
       // In test environment with Jest parallel workers, append worker ID to schema
-      if (process.env.NODE_ENV === 'test' && workerId) {
+      if (process.env.NODE_ENV === 'test' && rawWorkerId) {
+        const workerId = rawWorkerId.replace(/\D/g, '') || '1';
         return `${baseSchema}_worker_${workerId}`;
       }
       return baseSchema;
