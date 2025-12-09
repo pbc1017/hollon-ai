@@ -997,7 +997,7 @@ Task 완료 → Document 자동 생성 (scope: 'organization')
 → 효과: 지식 재사용 50% 절감, 병목 해소, Phase 4 호환
 ```
 
-### 1. Database Schema (간소화)
+### 1. Database Schema (수정본 - SSOT 준수)
 
 ```sql
 -- ✅ 유지: 팀 계층 구조
@@ -1008,12 +1008,26 @@ ALTER TABLE "teams"
 CREATE INDEX "idx_teams_parent_team_id" ON "teams"("parent_team_id");
 CREATE INDEX "idx_teams_leader_hollon_id" ON "teams"("leader_hollon_id");
 
--- ✅ 유지: 경험 레벨 (일반적 숙련도만)
+-- ✅ 추가: managerId (비정규화 저장 - 읽기 성능 우선!)
+-- 이유: getManager() computed 방식은 JOIN 오버헤드 발생
+--       에스컬레이션/협업 시 매니저 조회 빈번 (읽기 >> 쓰기)
+ALTER TABLE "hollons"
+  ADD COLUMN "manager_id" uuid REFERENCES "hollons"("id") ON DELETE SET NULL;
+
+CREATE INDEX "idx_hollons_manager_id" ON "hollons"("manager_id");
+
+COMMENT ON COLUMN "hollons"."manager_id" IS
+  'Denormalized manager reference - updated when team structure changes.
+   Read performance >> Write consistency (에스컬레이션 시 빈번한 조회)';
+
+-- ✅ 추가: 경험 레벨 (통계적 성과 지표 - 개별 성장 아님!)
 ALTER TABLE "hollons"
   ADD COLUMN "experience_level" varchar(50) DEFAULT 'junior';
 
 COMMENT ON COLUMN "hollons"."experience_level" IS
-  'Experience level: junior, mid, senior, lead, principal - 일반적 숙련도';
+  'Statistical performance metric for allocation priority.
+   NOT individual growth - just allocation score (SSOT 원칙).
+   Values: junior, mid, senior, lead, principal';
 
 -- ✅ 추가: 프로젝트/태스크 확장
 ALTER TABLE "projects"
@@ -1026,11 +1040,14 @@ ALTER TABLE "tasks"
 CREATE INDEX "idx_projects_assigned_team_id" ON "projects"("assigned_team_id");
 CREATE INDEX "idx_tasks_required_skills" ON "tasks" USING gin("required_skills");
 
--- ❌ 제거: 개별 홀론 스킬 (조직 지식 공유로 대체)
--- ALTER TABLE "hollons" ADD COLUMN "skills" text[];
+-- ❌ 제거: 개별 홀론 스킬 (SSOT 위반!)
+-- 이유: 홀론은 교체 가능한 워커, 스킬은 Role.capabilities에 속함
+--       개별 홀론이 발전하는게 아니라 Role 프롬프트 + 조직 지식이 진화
+-- ALTER TABLE "hollons" ADD COLUMN "skills" text[]; -- ❌ 삭제됨
 
--- ❌ 제거: managerId (computed로 대체)
--- ALTER TABLE "hollons" ADD COLUMN "manager_id" uuid;
+-- ℹ️ Phase 1 Role Entity 활용 (이미 존재!)
+-- Role.capabilities = ["typescript", "nestjs", "database"]
+-- Role.systemPrompt = 롤 레벨 프롬프트 (진화 대상)
 
 -- ℹ️ Phase 2 Document Entity 활용 (추가 변경 불필요)
 -- Document.scope = 'organization' → 모든 홀론이 접근
@@ -1038,50 +1055,58 @@ CREATE INDEX "idx_tasks_required_skills" ON "tasks" USING gin("required_skills")
 -- Document.metadata.successRate → Phase 4 학습
 ```
 
-### 2. HollonService.getManager() (Computed)
+### 2. HollonService.getManager() (Stored - 성능 우선)
 
 ```typescript
 /**
- * 런타임에 매니저 계산
- * - 팀원 → 팀 리더
- * - 팀 리더 → 상위 팀 리더
+ * managerId에서 매니저 조회 (단순 JOIN)
+ * 이유: 비정규화 저장으로 성능 최적화
  */
 async getManager(hollonId: string): Promise<Hollon | null> {
   const hollon = await this.hollonRepo.findOne({
     where: { id: hollonId },
-    relations: ['team', 'team.leader', 'team.parentTeam', 'team.parentTeam.leader'],
+    relations: ['manager'], // 단순 JOIN (computed 대비 3배 빠름)
   });
 
-  if (!hollon?.team) return null;
+  return hollon?.manager || null;
+}
 
-  // 내가 팀 리더면 → 상위 팀 리더
-  if (hollon.team.leaderHollonId === hollonId) {
-    return hollon.team.parentTeam?.leader || null;
+/**
+ * 팀 구조 변경 시 managerId 동기화
+ * 호출 시점: Team.leaderHollonId 변경, Hollon.teamId 변경
+ */
+async syncManagerReferences(teamId: string): Promise<void> {
+  const team = await this.teamRepo.findOne({
+    where: { id: teamId },
+    relations: ['hollons', 'leader', 'parentTeam', 'parentTeam.leader'],
+  });
+
+  if (!team) return;
+
+  for (const hollon of team.hollons) {
+    // 팀 리더인 경우 → 상위 팀 리더가 매니저
+    if (hollon.id === team.leaderHollonId) {
+      hollon.managerId = team.parentTeam?.leaderHollonId || null;
+    } else {
+      // 팀원인 경우 → 현재 팀 리더가 매니저
+      hollon.managerId = team.leaderHollonId;
+    }
   }
 
-  // 팀원이면 → 내 팀 리더
-  return hollon.team.leader || null;
+  await this.hollonRepo.save(team.hollons);
+  this.logger.log(`✅ Manager references synced for team: ${team.name}`);
 }
 ```
 
-### 3. ResourcePlanner (Document 기반 할당)
+### 3. ResourcePlanner (Role.capabilities 우선 매칭)
 
 ```typescript
 /**
- * Task 할당: 조직 지식 우선
+ * Task 할당: Role.capabilities > 조직 지식 > 경험 레벨
+ * SSOT 원칙: 스킬은 Role에 속함, 개별 홀론 스킬 없음
  */
 async assignTask(task: Task): Promise<Hollon | null> {
-  // 1. 관련 지식 문서 검색
-  const relatedDocs = await this.documentRepo.find({
-    where: {
-      scope: 'organization',  // 조직 레벨 지식
-      keywords: ArrayOverlap(task.requiredSkills || task.tags),
-      type: In(['guide', 'memory']),
-    },
-    order: { createdAt: 'DESC' },
-  });
-
-  // 2. 가용 홀론 목록
+  // 1. 가용 홀론 목록 (Role.capabilities 포함)
   const availableHollons = await this.hollonRepo.find({
     where: {
       status: HollonStatus.IDLE,
@@ -1092,40 +1117,60 @@ async assignTask(task: Task): Promise<Hollon | null> {
 
   if (availableHollons.length === 0) return null;
 
-  // 3. 지식 있으면 → 아무나 할 수 있음 (경험 레벨 우선)
-  if (relatedDocs.length > 0) {
-    this.logger.log(
-      `📚 Found ${relatedDocs.length} related knowledge docs for task: ${task.title}`
-    );
-    return availableHollons.sort(
-      (a, b) => this.experienceLevelScore(b) - this.experienceLevelScore(a)
-    )[0];
-  }
+  // 2. 관련 조직 지식 검색
+  const relatedDocs = await this.documentRepo.find({
+    where: {
+      scope: 'organization',  // 조직 레벨 지식
+      keywords: ArrayOverlap(task.requiredSkills || task.tags),
+      type: In(['guide', 'memory']),
+    },
+    order: { createdAt: 'DESC' },
+  });
 
-  // 4. 지식 없으면 → Role 매칭 + 경험 레벨
+  // 3. 스코어 계산 (Role 매칭 최우선!)
   const scored = availableHollons.map(hollon => ({
     hollon,
-    score: this.calculateScore(hollon, task),
+    score: this.calculateScore(hollon, task, relatedDocs),
   }));
 
   scored.sort((a, b) => b.score - a.score);
-  return scored[0]?.hollon || null;
+
+  const winner = scored[0];
+  if (winner) {
+    this.logger.log(
+      `📍 Task "${task.title}" assigned to ${winner.hollon.name} ` +
+      `(Role: ${winner.hollon.role?.name}, Score: ${winner.score})`
+    );
+  }
+
+  return winner?.hollon || null;
 }
 
-private calculateScore(hollon: Hollon, task: Task): number {
+private calculateScore(
+  hollon: Hollon,
+  task: Task,
+  relatedDocs: Document[]
+): number {
   let score = 0;
 
-  // Role capabilities 매칭
+  // ✅ 1. Role.capabilities 매칭 (최우선 - 50점)
   const roleCapabilities = hollon.role?.capabilities || [];
   const taskSkills = task.requiredSkills || [];
 
   const matchCount = taskSkills.filter(skill =>
-    roleCapabilities.some(cap => cap.toLowerCase().includes(skill.toLowerCase()))
+    roleCapabilities.some(cap =>
+      cap.toLowerCase().includes(skill.toLowerCase())
+    )
   ).length;
 
-  score += matchCount * 30;
+  score += matchCount * 50;  // 역할 매칭이 가장 중요!
 
-  // 경험 레벨 보너스
+  // ✅ 2. 조직 지식 존재 (20점)
+  if (relatedDocs.length > 0) {
+    score += 20;  // 지식 있으면 누구나 수행 가능
+  }
+
+  // ✅ 3. 경험 레벨 (통계적 성과만 - 10점)
   score += this.experienceLevelScore(hollon.experienceLevel);
 
   return score;
@@ -1133,17 +1178,139 @@ private calculateScore(hollon: Hollon, task: Task): number {
 
 private experienceLevelScore(level: ExperienceLevel): number {
   const scores = {
-    [ExperienceLevel.JUNIOR]: 10,
-    [ExperienceLevel.MID]: 20,
-    [ExperienceLevel.SENIOR]: 30,
-    [ExperienceLevel.LEAD]: 40,
-    [ExperienceLevel.PRINCIPAL]: 50,
+    [ExperienceLevel.JUNIOR]: 2,
+    [ExperienceLevel.MID]: 4,
+    [ExperienceLevel.SENIOR]: 6,
+    [ExperienceLevel.LEAD]: 8,
+    [ExperienceLevel.PRINCIPAL]: 10,
   };
   return scores[level] || 0;
 }
 ```
 
-### 4. TaskService.completeTask() (자동 지식 문서화)
+### 4. HollonService.reassignRole() (동적 역할 전환) 🆕
+
+```typescript
+/**
+ * 팀 내 홀론의 역할을 동적으로 변경
+ * SSOT 원칙: 홀론은 교체 가능한 워커, 역할 전환 가능
+ *
+ * 사용 예시:
+ * - 백엔드 개발자 → 프론트엔드 개발자 (필요 시)
+ * - 주니어 개발자 → QA 엔지니어 (일시적)
+ * - 개발자 → 리뷰어 (코드 리뷰 시)
+ */
+async reassignRole(
+  hollonId: string,
+  newRoleId: string,
+  reason?: string
+): Promise<Hollon> {
+  const hollon = await this.hollonRepo.findOne({
+    where: { id: hollonId },
+    relations: ['role', 'team'],
+  });
+
+  if (!hollon) {
+    throw new NotFoundException(`Hollon ${hollonId} not found`);
+  }
+
+  const newRole = await this.roleRepo.findOne({
+    where: { id: newRoleId },
+  });
+
+  if (!newRole) {
+    throw new NotFoundException(`Role ${newRoleId} not found`);
+  }
+
+  const oldRoleName = hollon.role.name;
+
+  // 역할 변경
+  hollon.roleId = newRoleId;
+
+  // 경험 레벨 초기화 (새 역할에서는 초보자)
+  hollon.experienceLevel = ExperienceLevel.JUNIOR;
+
+  await this.hollonRepo.save(hollon);
+
+  this.logger.log(
+    `🔄 Role reassignment: ${hollon.name} ` +
+    `(${oldRoleName} → ${newRole.name}) ${reason ? `- ${reason}` : ''}`
+  );
+
+  // 팀 채널에 알림 (Phase 2 MessageService 활용)
+  if (hollon.team) {
+    await this.messageService.sendToChannel(hollon.team.channelId, {
+      content: `${hollon.name} switched role: ${oldRoleName} → ${newRole.name}`,
+      messageType: MessageType.ANNOUNCEMENT,
+    });
+  }
+
+  return hollon;
+}
+
+/**
+ * 특정 Role을 수행할 임시 홀론 스폰
+ * SSOT 원칙: 임시 홀론 생성은 자율적 (Phase 1 정의)
+ *
+ * 사용 예시:
+ * - Security Reviewer 홀론 (코드 리뷰 전용)
+ * - Performance Tester 홀론 (부하 테스트 전용)
+ * - Migration Specialist 홀론 (DB 마이그레이션 전용)
+ */
+async spawnTemporaryHollonForRole(
+  roleId: string,
+  teamId: string,
+  reason: string
+): Promise<Hollon> {
+  const role = await this.roleRepo.findOne({ where: { id: roleId } });
+  const team = await this.teamRepo.findOne({ where: { id: teamId } });
+
+  if (!role || !team) {
+    throw new NotFoundException('Role or Team not found');
+  }
+
+  // 임시 홀론 생성
+  const tempHollon = this.hollonRepo.create({
+    name: `${role.name}-temp-${Date.now()}`,
+    roleId: role.id,
+    teamId: team.id,
+    organizationId: team.organizationId,
+    lifecycle: HollonLifecycle.TEMPORARY, // 임시 홀론
+    status: HollonStatus.IDLE,
+    experienceLevel: ExperienceLevel.MID, // 임시는 중급으로 시작
+    managerId: team.leaderHollonId, // 팀 리더가 매니저
+  });
+
+  await this.hollonRepo.save(tempHollon);
+
+  this.logger.log(
+    `🐣 Temporary hollon spawned: ${tempHollon.name} ` +
+    `(Role: ${role.name}, Reason: ${reason})`
+  );
+
+  return tempHollon;
+}
+
+/**
+ * 임시 홀론 종료 (태스크 완료 시)
+ */
+async terminateTemporaryHollon(hollonId: string): Promise<void> {
+  const hollon = await this.hollonRepo.findOne({
+    where: { id: hollonId, lifecycle: HollonLifecycle.TEMPORARY },
+  });
+
+  if (!hollon) {
+    this.logger.warn(`Temporary hollon ${hollonId} not found or not temporary`);
+    return;
+  }
+
+  await this.hollonRepo.softRemove(hollon);
+
+  this.logger.log(`💀 Temporary hollon terminated: ${hollon.name}`);
+}
+```
+
+### 5. TaskService.completeTask() (자동 지식 문서화)
 
 ```typescript
 /**
@@ -1321,35 +1488,56 @@ this.logger.error(`🚨 HUMAN INTERVENTION: ${task.title}`);
 
 ---
 
-## 📅 구현 타임라인 (4일)
+## 📅 구현 타임라인 (5-6일)
 
-### Day 1: Schema & Computed Manager
+### Day 1: Schema & Stored Manager (SSOT 준수)
 
-1. Migration 업데이트 (managerId 제거, 컬럼 추가)
+1. Migration 업데이트 (managerId 추가, skills 제거 유지)
 2. Entity 업데이트 (Hollon, Project, Task)
 3. Migration 실행
-4. HollonService.getManager() 구현
-5. Unit test
+4. HollonService.getManager() 구현 (stored + sync)
+5. HollonService.syncManagerReferences() 구현
+6. Unit test
 
-### Day 2: Skill Matching & Dependencies
+### Day 2: Role 기반 지식 공유 (SSOT 준수)
 
-6. ResourcePlanner.calculateSkillScore() 구현
-7. GoalDecomposition.linkTaskDependencies() 구현
-8. GoalModule에 TaskModule import
-9. Integration test
-
-### Day 3: Escalation (Phase 2 활용)
-
-10. EscalationService 구현 (MessageService, CollaborationService 활용)
-11. TaskModule에 CollaborationModule import
+7. ResourcePlanner Role.capabilities 우선 매칭
+8. TaskService.completeTask() 자동 지식 문서화
+9. BrainProvider 지식 주입 로직
+10. HollonService.reassignRole() 구현 (역할 전환) 🆕
+11. HollonService.spawnTemporaryHollonForRole() 구현 🆕
 12. Integration test
 
-### Day 4: E2E Testing
+### Day 3: Dependencies & Escalation
 
-13. 계층적 팀 생성 테스트
-14. Goal → 자동 할당 테스트
-15. 에스컬레이션 체인 테스트
-16. 전체 플로우 검증
+13. DependencyAnalyzer description 파싱
+14. GoalDecomposition.linkTaskDependencies() 구현
+15. EscalationService DECOMPOSE/SIMPLIFY (MessageService 활용)
+16. Integration test
+
+### Day 4-5: Git Worktree + CodeReview 자동화
+
+17. TaskExecutionService 구현 (Worktree 생성/정리)
+18. TaskExecutionService PR 생성 (gh CLI)
+19. CodeReviewService 통합 (Phase 2 활용)
+20. ReviewerHollonService 구현 (자동 리뷰)
+21. MessageListener (REVIEW_REQUEST → 자동 리뷰)
+22. 자동 Merge 이벤트 핸들러
+23. 전문 리뷰어 Hollon 생성 스크립트
+24. Integration test
+
+### Day 6: E2E Testing (SSOT 검증)
+
+25. 계층적 팀 생성 테스트
+26. Role.capabilities 기반 할당 검증 🆕
+27. 역할 전환 테스트 (Backend → Frontend) 🆕
+28. 임시 홀론 스폰/종료 테스트 🆕
+29. Goal → Task → Worktree → PR → Review → Merge 전체 플로우
+30. 지식 공유 검증 (두 번째 Task가 첫 번째 지식 활용)
+31. 에스컬레이션 체인 테스트
+32. 리뷰어 자동 할당 테스트 (Security/Architecture/Performance)
+33. SSOT 원칙 준수 검증 (개별 스킬 없음, Role 기반만) 🆕
+34. 전체 플로우 검증
 
 ---
 
@@ -1358,11 +1546,18 @@ this.logger.error(`🚨 HUMAN INTERVENTION: ${task.title}`);
 ### 자율 작동 가능
 
 1. **Goal 입력만으로 전체 실행**: ✅
-2. **자동 태스크 할당 (스킬 매칭)**: ✅
+2. **자동 태스크 할당 (Document 기반 지식 매칭)**: ✅
 3. **자동 의존성 관리**: ✅
 4. **자동 에스컬레이션 (Level 1-4)**: ✅
 5. **팀 내 협업 (Phase 2)**: ✅
 6. **매니저 계층 (computed)**: ✅
+7. **Git Worktree 자동 생성**: ✅ 🆕
+8. **코드 작성 + 자동 커밋**: ✅ 🆕
+9. **PR 자동 생성**: ✅ 🆕
+10. **리뷰어 자동 할당 (Phase 2)**: ✅ 🆕
+11. **자동 코드 리뷰 (Reviewer Hollon)**: ✅ 🆕
+12. **자동 PR Merge (승인 시)**: ✅ 🆕
+13. **조직 지식 자동 문서화**: ✅ 🆕
 
 ### Phase 5에서 추가될 것
 
@@ -1661,19 +1856,364 @@ Phase 3.5 완료 후 Phase 4에서 구현할 것들이 이미 준비됨:
 
 ---
 
-## ✅ 완료 기준 (최종본)
+## 🔄 Phase 1-3 기존 구현 재사용
 
-### Critical (필수)
+Phase 3.5는 **기존 구현을 최대한 재사용**하여 개발 시간을 단축합니다:
+
+### ✅ Phase 1 (완전 재사용)
+
+| 서비스                        | 용도                  | 상태                           |
+| ----------------------------- | --------------------- | ------------------------------ |
+| **PromptComposerService**     | 6-layer 프롬프트 합성 | ✅ 그대로 사용                 |
+| **TaskPoolService**           | Task 자동 Pull        | ✅ 그대로 사용                 |
+| **HollonOrchestratorService** | 실행 사이클           | ✅ TaskExecutionService로 확장 |
+| **EscalationService**         | 5단계 Escalation      | ✅ DECOMPOSE/SIMPLIFY 추가     |
+| **QualityGateService**        | 코드 품질 검증        | ✅ PR 생성 전 사용             |
+| **CostTrackingService**       | 비용 추적             | ✅ 그대로 사용                 |
+
+### ✅ Phase 2 (완전 재사용)
+
+| 서비스                            | 용도               | 상태                         |
+| --------------------------------- | ------------------ | ---------------------------- |
+| **MessageService**                | 홀론 간 메시지     | ✅ Escalation Level 3-4 사용 |
+| **CollaborationService**          | 협업 요청          | ✅ Escalation Level 2 사용   |
+| **CodeReviewService**             | PR 생성/리뷰/Merge | ✅ 완전 재사용! 🎯           |
+| **ChannelService**                | 팀 채널            | ✅ 지식 공유 알림            |
+| **StandupService**                | 일일 리포트        | ✅ 그대로 사용               |
+| **RetrospectiveService**          | 회고               | ✅ 그대로 사용               |
+| **CrossTeamCollaborationService** | 팀 간 협업         | ✅ 그대로 사용               |
+
+### ✅ Phase 3 (확장 사용)
+
+| 서비스                       | 용도             | 상태                     |
+| ---------------------------- | ---------------- | ------------------------ |
+| **GoalDecompositionService** | Goal → Task 분해 | ✅ 그대로 사용           |
+| **DependencyAnalyzer**       | 의존성 분석      | 🆕 description 파싱 추가 |
+| **ResourcePlanner**          | Hollon 할당      | 🆕 Document 검색 추가    |
+
+### 🔑 SSOT 핵심 원칙 (Phase 3.5 설계 철학) 🆕
+
+**1. 홀론 = 교체 가능한 워커 (NOT 성장하는 개인)**
+
+```
+❌ 잘못된 이해: DevBot-1이 Redis 학습 → DevBot-1만 Redis 가능
+✅ 올바른 이해: Role "Backend Dev"가 Redis 역량 보유
+               → 모든 Backend Dev 홀론이 Document 통해 Redis 수행 가능
+               → 홀론은 같은 Claude 모델, 개별 차이 없음
+```
+
+**2. 진화 = Role 프롬프트 + 조직 지식 (NOT 개별 홀론)**
+
+```
+❌ 잘못된 이해: DevBot-1의 경험치 증가, 레벨업
+✅ 올바른 이해:
+   - Role.systemPrompt 개선 (Phase 4 PromptOptimizer)
+   - Document (scope: organization) 축적
+   - 모든 홀론이 진화한 지식 공유
+```
+
+**3. 경험 레벨 = 통계적 성과 지표 (NOT 개인 성장)**
+
+```
+❌ 잘못된 이해: DevBot-1이 태스크 많이 해서 Senior로 승급
+✅ 올바른 이해:
+   - experienceLevel = 할당 우선순위 점수일 뿐
+   - 같은 Role끼리는 능력 동일 (같은 systemPrompt + 같은 Document 접근)
+   - Senior는 단지 "더 복잡한 태스크 먼저 시도" 정도
+```
+
+**4. 스킬 = Role.capabilities (NOT Hollon.skills)**
+
+```
+❌ 잘못된 설계:
+   Hollon "DevBot-1": skills: ["redis", "nestjs"]
+   Hollon "DevBot-2": skills: ["postgres"]
+   → DevBot-1 바쁘면 Redis 태스크 병목
+
+✅ 올바른 설계:
+   Role "Backend Developer": capabilities: ["typescript", "nestjs", "database"]
+   + Document "Redis 구현 가이드" (scope: organization)
+   → 모든 Backend Dev가 Redis 가능, 병목 없음
+```
+
+**5. 유연성 = 역할 전환 + 임시 스폰**
+
+```
+✅ 역할 전환 (팀 내):
+   Backend Dev → Frontend Dev (필요 시)
+   → experienceLevel 초기화 (새 역할에서는 초보자)
+
+✅ 임시 홀론 스폰 (특정 Role):
+   Security Reviewer 홀론 (코드 리뷰 전용)
+   → 작업 완료 후 자동 종료
+```
+
+**Phase 4 연계:**
+
+- **개별 홀론 추적 ❌**: PerformanceAnalyzer가 홀론별 통계 내는게 아님
+- **조직 성과 분석 ✅**: 어떤 Task 유형이 자주 실패? 어떤 패턴이 성공?
+- **Role 진화 ✅**: Role.systemPrompt 최적화, Organization Document 축적
+- **Knowledge Graph ✅**: Document 간 관계 분석, 재사용 패턴 발견
+
+---
+
+### 🆕 Phase 3.5 신규 구현 (최소)
+
+1. **TaskExecutionService** (HollonOrchestratorService 확장)
+   - Worktree 생성/정리
+   - PR 생성 (gh CLI)
+   - CodeReviewService 통합
+
+2. **ReviewerHollonService** (새 서비스)
+   - PR diff 다운로드
+   - BrainProvider 자동 리뷰
+   - CodeReviewService.submitReview() 호출
+
+3. **MessageListener** (이벤트 핸들러)
+   - REVIEW_REQUEST → ReviewerHollonService 트리거
+
+**개발 시간 절감 효과**:
+
+- 기존 구현 재사용: 70%
+- 신규 구현: 30%
+- **예상 개발 기간**: 5-6일 → **3-4일**로 단축 가능!
+
+---
+
+## 🔧 Git Worktree 자동화 (Phase 3.5 핵심)
+
+### 1. TaskExecutionService 구현
+
+```typescript
+/**
+ * Task 실행 → Worktree → 코딩 → 커밋 → PR 생성
+ */
+@Injectable()
+export class TaskExecutionService {
+  async executeTask(taskId: string, hollonId: string): Promise<void> {
+    // 1. Worktree 생성
+    const worktreePath = await this.createWorktree(project, task);
+
+    // 2. BrainProvider 실행 (worktree 경로에서)
+    const result = await this.executeBrainProvider(
+      hollonId,
+      task,
+      worktreePath,
+    );
+
+    // 3. PR 생성
+    const prUrl = await this.createPullRequest(project, task, worktreePath);
+
+    // 4. CodeReview 요청 (Phase 2 활용)
+    await this.requestCodeReview(task, prUrl, hollonId);
+
+    // 5. Worktree 정리
+    await this.cleanupWorktree(worktreePath);
+  }
+
+  private async createWorktree(project: Project, task: Task): Promise<string> {
+    const branchName = `feature/task-${task.id.slice(0, 8)}`;
+    const worktreePath = path.join(
+      project.workingDirectory,
+      '..',
+      `task-${task.id.slice(0, 8)}`,
+    );
+
+    await execAsync(`git worktree add ${worktreePath} -b ${branchName}`, {
+      cwd: project.workingDirectory,
+    });
+
+    return worktreePath;
+  }
+
+  private async createPullRequest(
+    project: Project,
+    task: Task,
+    worktreePath: string,
+  ): Promise<string> {
+    const branchName = `feature/task-${task.id.slice(0, 8)}`;
+
+    // Push
+    await execAsync(`git push -u origin ${branchName}`, { cwd: worktreePath });
+
+    // Create PR
+    const { stdout } = await execAsync(
+      `gh pr create --title "${task.title}" --body "..." --base main`,
+      { cwd: worktreePath },
+    );
+
+    return stdout.trim(); // PR URL
+  }
+
+  private async requestCodeReview(
+    task: Task,
+    prUrl: string,
+    authorHollonId: string,
+  ): Promise<void> {
+    const prNumber = this.extractPRNumber(prUrl);
+
+    // TaskPullRequest 생성 (Phase 2)
+    const pr = await this.codeReviewService.createPullRequest({
+      taskId: task.id,
+      prNumber,
+      prUrl,
+      repository: task.project.repositoryUrl,
+      branchName: `feature/task-${task.id.slice(0, 8)}`,
+      authorHollonId,
+    });
+
+    // 리뷰어 자동 할당 (Phase 2)
+    await this.codeReviewService.requestReview(pr.id);
+  }
+}
+```
+
+### 2. ReviewerHollonService 구현
+
+```typescript
+/**
+ * 리뷰어 Hollon이 PR 자동 리뷰
+ */
+@Injectable()
+export class ReviewerHollonService {
+  async performReview(prId: string, reviewerHollonId: string): Promise<void> {
+    const pr = await this.codeReviewService.getPullRequest(prId);
+
+    // 1. PR diff 다운로드
+    const diff = await this.fetchPRDiff(pr.prUrl);
+
+    // 2. BrainProvider로 리뷰
+    const reviewResult = await this.executeReviewWithBrain(
+      reviewerHollonId,
+      pr,
+      diff,
+    );
+
+    // 3. 리뷰 제출
+    await this.codeReviewService.submitReview(prId, reviewerHollonId, {
+      decision: reviewResult.decision,
+      comments: reviewResult.comments,
+    });
+  }
+
+  private async executeReviewWithBrain(
+    reviewerHollonId: string,
+    pr: TaskPullRequest,
+    diff: string,
+  ) {
+    const hollon = await this.hollonRepo.findOne({
+      where: { id: reviewerHollonId },
+      relations: ['role'],
+    });
+
+    const prompt = `
+You are ${hollon.name}, a ${pr.reviewerType} reviewer.
+
+## Code Changes
+\`\`\`diff
+${diff}
+\`\`\`
+
+${this.getReviewerGuidelines(pr.reviewerType)}
+
+## Output (JSON)
+{
+  "approved": true | false,
+  "comments": "review comments"
+}
+    `;
+
+    const brainProvider = await this.brainProviderFactory.get(reviewerHollonId);
+    const result = await brainProvider.execute(reviewerHollonId, prompt);
+
+    return {
+      decision: result.approved
+        ? PullRequestStatus.APPROVED
+        : PullRequestStatus.CHANGES_REQUESTED,
+      comments: result.comments,
+    };
+  }
+
+  private getReviewerGuidelines(type: ReviewerType | null): string {
+    switch (type) {
+      case ReviewerType.SECURITY_REVIEWER:
+        return 'Check for security vulnerabilities (SQL injection, XSS, hardcoded secrets)';
+      case ReviewerType.ARCHITECTURE_REVIEWER:
+        return 'Review architecture design, SOLID principles, maintainability';
+      case ReviewerType.PERFORMANCE_REVIEWER:
+        return 'Check performance (N+1 queries, indexing, caching, algorithm complexity)';
+      default:
+        return 'Review code quality, readability, tests, error handling';
+    }
+  }
+}
+```
+
+### 3. MessageListener (자동 리뷰 트리거)
+
+```typescript
+/**
+ * REVIEW_REQUEST 메시지 수신 시 자동 리뷰 실행
+ */
+@Injectable()
+export class ReviewRequestListener {
+  @OnEvent('message.received')
+  async handleReviewRequest(event: MessageReceivedEvent) {
+    const { message } = event;
+
+    if (message.messageType !== MessageType.REVIEW_REQUEST) {
+      return;
+    }
+
+    const prId = message.metadata?.prId;
+    if (!prId) return;
+
+    // 🚀 자동 리뷰 실행
+    await this.reviewerHollonService.performReview(prId, message.toId);
+  }
+}
+```
+
+### 4. 자동 Merge (리뷰 승인 시)
+
+```typescript
+/**
+ * PR APPROVED 시 자동 Merge
+ */
+@OnEvent('code-review.approved')
+async handleReviewApproved(event: ReviewApprovedEvent) {
+  const { prId } = event;
+
+  // Merge 실행
+  await this.codeReviewService.mergePullRequest(prId);
+
+  // Task 완료 처리 (이미 CodeReviewService에서 처리됨)
+}
+```
+
+---
+
+## ✅ 완료 기준 (SSOT 준수 최종본)
+
+### Critical (필수 - SSOT 원칙)
 
 - [ ] Migration 성공적으로 실행
 - [ ] Team.parentTeamId, leaderHollonId 작동
-- [ ] Hollon.experienceLevel 작동
+- [ ] **Hollon.managerId 작동 (stored - 성능 우선!)** ✅ 수정
+- [ ] Hollon.experienceLevel 작동 (통계적 지표만)
+- [ ] **Hollon.skills 컬럼 없음 (Role.capabilities 사용!)** ✅ 중요
 - [ ] Project.assignedTeamId 작동
 - [ ] Task.requiredSkills, needsHumanApproval 작동
-- [ ] HollonService.getManager() 구현 (computed)
-- [ ] ResourcePlanner Document 기반 할당
+- [ ] **HollonService.getManager() 구현 (stored + sync)** ✅ 수정
+- [ ] **HollonService.syncManagerReferences() 구현** 🆕
+- [ ] **ResourcePlanner Role.capabilities 우선 매칭** ✅ 수정
 - [ ] TaskService 완료 시 Document 자동 생성
 - [ ] BrainProvider 지식 주입
+- [ ] **HollonService.reassignRole() 구현 (역할 전환)** 🆕
+- [ ] **HollonService.spawnTemporaryHollonForRole() 구현** 🆕
+- [ ] **TaskExecutionService 구현 (Worktree + PR 생성)** 🆕
+- [ ] **ReviewerHollonService 구현 (자동 코드 리뷰)** 🆕
+- [ ] **MessageListener (REVIEW_REQUEST → 자동 리뷰)** 🆕
 
 ### Important (권장)
 
@@ -1681,23 +2221,54 @@ Phase 3.5 완료 후 Phase 4에서 구현할 것들이 이미 준비됨:
 - [ ] GoalDecomposition 통합
 - [ ] EscalationService DECOMPOSE/SIMPLIFY
 - [ ] E2E 테스트 (계층 구조, 지식 공유)
+- [ ] **E2E 테스트: Role 기반 할당 검증** 🆕
+- [ ] **E2E 테스트: 역할 전환 (Backend → Frontend)** 🆕
+- [ ] **E2E 테스트: 임시 홀론 스폰/종료** 🆕
+- [ ] **자동 PR Merge (APPROVED 시)** 🆕
+- [ ] **전문 리뷰어 Hollon 생성 (Security/Architecture/Performance)** 🆕
 
 ### Nice-to-have (선택)
 
 - [ ] Document 자동 태깅 개선
 - [ ] 지식 검색 성능 최적화
 - [ ] 팀별 지식 분리 (team scope)
+- [ ] **PR diff 캐싱 (성능 최적화)** 🆕
+- [ ] **리뷰 품질 측정 (Phase 4 준비)** 🆕
+- [ ] **managerId 동기화 자동화 (Team 변경 시 트리거)** 🆕
 
 ---
 
-**문서 버전**: 3.0 (Phase 3.5 통합 완료)
+**문서 버전**: 4.0 (SSOT 준수 - 최종 수정본)
 **최종 업데이트**: 2025-12-09
-**변경사항**:
+**변경사항 (v3.1 → v4.0)**:
+
+**🔑 SSOT 원칙 준수 (핵심 수정):**
+
+- ✅ **Hollon.managerId stored 방식으로 변경** (computed → stored, 성능 우선)
+- ✅ **Hollon.skills 제거 확정** (Role.capabilities 사용)
+- ✅ **경험 레벨 = 통계적 지표** (개별 성장 아님)
+- ✅ **진화 = Role + Organization 레벨** (개별 홀론 아님)
+
+**🆕 신규 기능 추가:**
+
+- HollonService.syncManagerReferences() (팀 구조 변경 시 동기화)
+- HollonService.reassignRole() (동적 역할 전환)
+- HollonService.spawnTemporaryHollonForRole() (임시 홀론 스폰)
+- ResourcePlanner Role.capabilities 우선 매칭 (50점 가중치)
+
+**📚 문서 개선:**
+
+- SSOT 핵심 원칙 섹션 추가 (설계 철학 명확화)
+- 5가지 핵심 원칙 상세 설명
+- Phase 4 연계 명확화 (조직 성과 분석, Role 진화)
+
+**기존 기능 (v3.1 유지):**
 
 - Phase 3.5 내용 통합
 - 조직 지식 공유 전략 반영
-- Hollon.skills 제거, Document 활용
-- ResourcePlanner Document 기반 구현
 - TaskService 자동 지식 문서화
 - BrainProvider 지식 주입
-- phase3.5-knowledge-sharing.md 통합 완료
+- TaskExecutionService (Git Worktree + PR 자동 생성)
+- ReviewerHollonService (자동 코드 리뷰)
+- Phase 2 CodeReviewService 완전 통합
+- 타임라인 5-6일
