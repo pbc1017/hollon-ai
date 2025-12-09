@@ -4205,26 +4205,35 @@ Week 17-18: 동적 우선순위 및 전략 변경 대응
 
 ---
 
-### Phase 4: 학습 및 성장 - 6주
+### Phase 4: 학습 및 성장 - 4주
 
-핵심 목표: **홀론과 조직이 경험에서 학습하여 지속 개선**
+핵심 목표: **홀론이 경험에서 학습하고 프롬프트를 스스로 최적화**
+
+> **철학 변경**: 홀론은 AI다. "온보딩"이나 "스킬 레벨"은 불필요.
+> **진짜 학습**: Layer 5 (Memory/Documents)를 통한 지식 주입이 핵심.
 
 ```
-Week 19-20: 온보딩 시스템
-├── OnboardingService
-└── SkillMatrixService
+Week 1-2: 지식 추출 및 Vector RAG
+├── KnowledgeExtractionService (Task 완료 → Document 자동 생성)
+├── VectorSearchService (pgvector + OpenAI embedding)
+└── KnowledgeGraphService (document_relationships)
 
-Week 21-22: 지식 관리 고도화
-├── KnowledgeExtractionService
-├── KnowledgeGraphService
-├── ExternalKnowledgeService
-└── BestPracticeService
-
-Week 23-24: 자기 개선 시스템
-├── PerformanceAnalyzer
-├── PromptOptimizer
-└── ProcessImprovementService
+Week 3-4: 자기 개선 시스템
+├── PerformanceAnalyzer (성과 메트릭 수집 및 분석)
+├── PromptOptimizer (Prompt 효과 분석 및 최적화)
+├── BestPracticeService (고성과 패턴 학습)
+└── ExternalKnowledgeService (선택적: 외부 지식 통합)
 ```
+
+**제거된 것**:
+
+- ❌ OnboardingService: AI는 프롬프트 설정만으로 즉시 기능
+- ❌ SkillMatrixService: 스킬은 Role의 capabilities에 이미 정의됨
+
+**추가된 것**:
+
+- ✅ VectorSearchService: pgvector embedding 필드 활용
+- ✅ Layer 5 (Memory) 강화: ILIKE → Vector similarity search
 
 ---
 
