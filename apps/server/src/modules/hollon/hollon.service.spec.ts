@@ -15,6 +15,8 @@ import {
 import { RoleService } from '../role/role.service';
 import { TeamService } from '../team/team.service';
 import { OrganizationService } from '../organization/organization.service';
+import { Team } from '../team/entities/team.entity';
+import { Role } from '../role/entities/role.entity';
 import {
   NotFoundException,
   ForbiddenException,
@@ -79,6 +81,15 @@ describe('HollonService', () => {
     settings: { maxHollonsPerTeam: 10 },
   };
 
+  const mockTeamRepository = {
+    findOne: jest.fn(),
+    save: jest.fn(),
+  };
+
+  const mockRoleRepository = {
+    findOne: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -86,6 +97,14 @@ describe('HollonService', () => {
         {
           provide: getRepositoryToken(Hollon),
           useValue: mockHollonRepository,
+        },
+        {
+          provide: getRepositoryToken(Team),
+          useValue: mockTeamRepository,
+        },
+        {
+          provide: getRepositoryToken(Role),
+          useValue: mockRoleRepository,
         },
         {
           provide: ApprovalService,
