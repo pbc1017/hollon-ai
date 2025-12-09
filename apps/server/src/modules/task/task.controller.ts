@@ -12,9 +12,13 @@ import {
 import { TaskService } from './task.service';
 import { DependencyAnalyzerService } from './services/dependency-analyzer.service';
 import { ResourcePlannerService } from './services/resource-planner.service';
+import { PriorityRebalancerService } from './services/priority-rebalancer.service';
+import { UncertaintyDecisionService } from './services/uncertainty-decision.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { TaskStatus, TaskPriority } from './entities/task.entity';
+import { RebalancingOptions } from './interfaces/priority-rebalancing.interface';
+import { DecisionOptions } from './interfaces/uncertainty-decision.interface';
 
 @Controller('tasks')
 export class TaskController {
@@ -22,6 +26,8 @@ export class TaskController {
     private readonly taskService: TaskService,
     private readonly dependencyAnalyzer: DependencyAnalyzerService,
     private readonly resourcePlanner: ResourcePlannerService,
+    private readonly priorityRebalancer: PriorityRebalancerService,
+    private readonly uncertaintyDecision: UncertaintyDecisionService,
   ) {}
 
   @Post()
@@ -108,5 +114,34 @@ export class TaskController {
   recommendHollon(@Param('id', ParseUUIDPipe) id: string) {
     const task = this.taskService.findOne(id);
     return this.resourcePlanner.recommendHollon(task as any);
+  }
+
+  // Priority Rebalancing endpoints
+  @Post('projects/:projectId/rebalance-priorities')
+  rebalancePriorities(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() options?: RebalancingOptions,
+  ) {
+    return this.priorityRebalancer.rebalanceProject(projectId, options);
+  }
+
+  @Get(':id/priority-score')
+  evaluateTaskPriority(@Param('id', ParseUUIDPipe) id: string) {
+    return this.priorityRebalancer.reevaluateTask(id);
+  }
+
+  // Uncertainty Detection endpoints
+  @Post('projects/:projectId/detect-uncertainty')
+  detectUncertainty(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() options?: DecisionOptions,
+  ) {
+    return this.uncertaintyDecision.detectUncertainty(projectId, options);
+  }
+
+  @Get(':id/uncertainty-analysis')
+  analyzeTaskUncertainty(@Param('id', ParseUUIDPipe) id: string) {
+    const task = this.taskService.findOne(id);
+    return this.uncertaintyDecision.analyzeTaskUncertainty(task as any);
   }
 }
