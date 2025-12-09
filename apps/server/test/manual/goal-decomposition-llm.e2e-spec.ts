@@ -245,7 +245,7 @@ describe('GoalDecomposition LLM Test (Manual)', () => {
       expect(response.body.metadata.model).toContain('claude');
       expect(response.body.metadata.promptTokens).toBeGreaterThan(0);
       expect(response.body.metadata.completionTokens).toBeGreaterThan(0);
-    }, 120000); // 2 minute timeout for LLM call
+    }, 180000); // 3 minute timeout for LLM call
 
     it('Step 6: Verify Goal is Marked as Auto-Decomposed', async () => {
       const response = await request(app.getHttpServer())

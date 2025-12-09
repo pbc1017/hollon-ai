@@ -2,8 +2,8 @@
   "moduleFileExtensions": ["js", "json", "ts"],
   "rootDir": ".",
   "testEnvironment": "node",
-  "testRegex": "e2e/.+\\.e2e-spec\\.ts$",
-  "testPathIgnorePatterns": ["/node_modules/", "/manual/"],
+  "testRegex": "(e2e|manual)/.+\\.e2e-spec\\.ts$",
+  "testPathIgnorePatterns": ["/node_modules/"],
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   },
