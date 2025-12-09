@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Task, TaskStatus, TaskPriority } from './entities/task.entity';
+import { Project } from '../project/entities/project.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 
@@ -17,10 +18,25 @@ export class TaskService {
   constructor(
     @InjectRepository(Task)
     private readonly taskRepo: Repository<Task>,
+    @InjectRepository(Project)
+    private readonly projectRepo: Repository<Project>,
   ) {}
 
   async create(dto: CreateTaskDto, creatorHollonId?: string): Promise<Task> {
     let depth = 0;
+    let organizationId = dto.organizationId;
+
+    // organizationId가 없으면 Project로부터 가져오기
+    if (!organizationId) {
+      const project = await this.projectRepo.findOne({
+        where: { id: dto.projectId },
+        select: ['organizationId'],
+      });
+      if (!project) {
+        throw new NotFoundException(`Project #${dto.projectId} not found`);
+      }
+      organizationId = project.organizationId;
+    }
 
     // 부모 태스크가 있으면 깊이 계산
     if (dto.parentTaskId) {
@@ -55,6 +71,7 @@ export class TaskService {
 
     const task = this.taskRepo.create({
       ...dto,
+      organizationId,
       depth,
       creatorHollonId,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,

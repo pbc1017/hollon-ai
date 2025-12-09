@@ -6,8 +6,8 @@ import request from 'supertest';
 import { HollonStatus } from '../../../src/modules/hollon/entities/hollon.entity';
 import {
   ConflictType,
-  ConflictResolutionStrategy,
-} from '../../../src/modules/conflict-resolution/entities/conflict.entity';
+  ResolutionStrategy,
+} from '../../../src/modules/conflict-resolution/entities/conflict-resolution.entity';
 
 /**
  * Scenario 4: File Conflict Resolution E2E Test
@@ -286,7 +286,7 @@ describe('File Conflict Resolution E2E (Scenario 4)', () => {
       const response = await request(app.getHttpServer())
         .post(`/api/conflict-resolution/conflicts/${conflictId}/resolve`)
         .send({
-          strategy: ConflictResolutionStrategy.SEQUENTIAL,
+          strategy: ResolutionStrategy.SEQUENTIAL_EXECUTION,
           resolutionData: {
             order: [task1Id, task2Id], // Alpha first, then Beta
             reason:
@@ -299,7 +299,7 @@ describe('File Conflict Resolution E2E (Scenario 4)', () => {
         .expect(201);
 
       expect(response.body.strategy).toBe(
-        ConflictResolutionStrategy.SEQUENTIAL,
+        ResolutionStrategy.SEQUENTIAL_EXECUTION,
       );
       expect(response.body.status).toBe('resolved');
     });
@@ -311,7 +311,7 @@ describe('File Conflict Resolution E2E (Scenario 4)', () => {
 
       expect(response.body.status).toBe('resolved');
       expect(response.body.strategy).toBe(
-        ConflictResolutionStrategy.SEQUENTIAL,
+        ResolutionStrategy.SEQUENTIAL_EXECUTION,
       );
       expect(response.body.resolutionData).toBeDefined();
     });
@@ -385,7 +385,7 @@ describe('File Conflict Resolution E2E (Scenario 4)', () => {
 
       expect(response.body.status).toBe('resolved');
       expect(response.body.strategy).toBe(
-        ConflictResolutionStrategy.SEQUENTIAL,
+        ResolutionStrategy.SEQUENTIAL_EXECUTION,
       );
     });
 
@@ -492,7 +492,7 @@ describe('File Conflict Resolution E2E (Scenario 4)', () => {
           `/api/conflict-resolution/conflicts/${conflictRes.body.id}/resolve`,
         )
         .send({
-          strategy: ConflictResolutionStrategy.PARALLEL,
+          strategy: ResolutionStrategy.RESOURCE_REALLOCATION,
           resolutionData: {
             reason: 'Changes are in different methods, no actual conflict',
             mergeInstructions: 'Both can proceed, will merge automatically',
@@ -502,7 +502,7 @@ describe('File Conflict Resolution E2E (Scenario 4)', () => {
         .expect(201);
 
       expect(resolveRes.body.strategy).toBe(
-        ConflictResolutionStrategy.PARALLEL,
+        ResolutionStrategy.RESOURCE_REALLOCATION,
       );
 
       // Cleanup

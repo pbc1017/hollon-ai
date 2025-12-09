@@ -98,7 +98,7 @@ export class GoalDecompositionService {
     return {
       ...result,
       metadata: {
-        model: options?.preferredModel || 'claude-sonnet-4-5',
+        model: options?.preferredModel || 'claude-sonnet-4-5-20250929',
         promptTokens: llmResponse.cost.inputTokens,
         completionTokens: llmResponse.cost.outputTokens,
         processingTime,
@@ -298,7 +298,7 @@ Please provide the decomposition in JSON format only, no additional text.`;
       projectsCreated: createdProjects.length,
       strategy: options?.strategy || DecompositionStrategy.TASK_BASED,
       metadata: {
-        model: options?.preferredModel || 'claude-sonnet-4-5',
+        model: options?.preferredModel || 'claude-sonnet-4-5-20250929',
         processingTime: 0, // Will be set by caller
       },
     };

@@ -25,6 +25,10 @@ export class CreateTaskDto {
   @IsEnum(TaskPriority)
   priority?: TaskPriority;
 
+  @IsOptional()
+  @IsUUID()
+  organizationId?: string;
+
   @IsUUID()
   projectId: string;
 

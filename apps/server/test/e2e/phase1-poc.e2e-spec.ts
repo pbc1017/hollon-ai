@@ -209,6 +209,7 @@ describe('Phase 1 POC (e2e)', () => {
       const response = await request(app.getHttpServer())
         .post('/api/tasks')
         .send({
+          organizationId,
           projectId,
           title: 'Implement Hello World function',
           description:

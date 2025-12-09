@@ -91,7 +91,7 @@ describe('GoalDecomposition LLM Test (Manual)', () => {
         providerId: 'claude_code',
         displayName: 'Claude Code (Sonnet 4.5)',
         config: {
-          model: 'claude-sonnet-4-5',
+          model: 'claude-sonnet-4-5-20250929',
           maxTokens: 8000,
           temperature: 0.7,
         },
@@ -274,7 +274,7 @@ describe('GoalDecomposition LLM Test (Manual)', () => {
 
     it('Step 8: Inspect Generated Tasks with Dependencies', async () => {
       const response = await request(app.getHttpServer())
-        .get(`/api/tasks?projectId=`)
+        .get(`/api/tasks`)
         .expect(200);
 
       const tasks = response.body.filter(
