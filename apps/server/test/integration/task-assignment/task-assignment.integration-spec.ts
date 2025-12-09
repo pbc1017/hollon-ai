@@ -59,17 +59,28 @@ describe('Task Assignment Integration Tests', () => {
         }),
         TypeOrmModule.forRootAsync({
           inject: [ConfigService],
-          useFactory: (configService: ConfigService) => ({
-            type: 'postgres',
-            host: configService.get<string>('DB_HOST'),
-            port: configService.get<number>('DB_PORT'),
-            username: configService.get<string>('DB_USER'),
-            password: configService.get<string>('DB_PASSWORD'),
-            database: configService.get<string>('DB_NAME'),
-            schema: configService.get<string>('DB_SCHEMA'),
-            entities: [__dirname + '/../../../src/**/*.entity{.ts,.js}'],
-            synchronize: false,
-          }),
+          useFactory: (configService: ConfigService) => {
+            // Generate schema name with worker ID for test isolation
+            let schema =
+              configService.get<string>('DB_SCHEMA') || 'hollon_test';
+            const workerId = process.env.JEST_WORKER_ID;
+            if (workerId && !schema.match(/_worker_\d+$/)) {
+              const normalizedWorkerId = workerId.replace(/\D/g, '') || '1';
+              schema = `${schema}_worker_${normalizedWorkerId}`;
+            }
+
+            return {
+              type: 'postgres',
+              host: configService.get<string>('DB_HOST'),
+              port: configService.get<number>('DB_PORT'),
+              username: configService.get<string>('DB_USER'),
+              password: configService.get<string>('DB_PASSWORD'),
+              database: configService.get<string>('DB_NAME'),
+              schema,
+              entities: [__dirname + '/../../../src/**/*.entity{.ts,.js}'],
+              synchronize: false,
+            };
+          },
         }),
         TypeOrmModule.forFeature([
           Task,
