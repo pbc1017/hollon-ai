@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { TaskService } from './task.service';
 import { DependencyAnalyzerService } from './services/dependency-analyzer.service';
+import { ResourcePlannerService } from './services/resource-planner.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { TaskStatus, TaskPriority } from './entities/task.entity';
@@ -20,6 +21,7 @@ export class TaskController {
   constructor(
     private readonly taskService: TaskService,
     private readonly dependencyAnalyzer: DependencyAnalyzerService,
+    private readonly resourcePlanner: ResourcePlannerService,
   ) {}
 
   @Post()
@@ -89,5 +91,22 @@ export class TaskController {
   @Get(':id/dependencies')
   analyzeTaskDependencies(@Param('id', ParseUUIDPipe) id: string) {
     return this.dependencyAnalyzer.analyzeTask(id);
+  }
+
+  // Resource Planning endpoints
+  @Post('projects/:projectId/assign-resources')
+  assignProjectResources(@Param('projectId', ParseUUIDPipe) projectId: string) {
+    return this.resourcePlanner.assignProject(projectId);
+  }
+
+  @Post('projects/:projectId/rebalance-workload')
+  rebalanceWorkload(@Param('projectId', ParseUUIDPipe) projectId: string) {
+    return this.resourcePlanner.rebalanceWorkload(projectId);
+  }
+
+  @Get(':id/recommend-hollon')
+  recommendHollon(@Param('id', ParseUUIDPipe) id: string) {
+    const task = this.taskService.findOne(id);
+    return this.resourcePlanner.recommendHollon(task as any);
   }
 }
