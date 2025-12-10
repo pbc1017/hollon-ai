@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Hollon } from '../hollon/entities/hollon.entity';
 import { Task } from '../task/entities/task.entity';
@@ -8,6 +8,7 @@ import { Project } from '../project/entities/project.entity';
 import { BrainProviderModule } from '../brain-provider/brain-provider.module';
 import { CollaborationModule } from '../collaboration/collaboration.module';
 import { GoalModule } from '../goal/goal.module';
+import { HollonModule } from '../hollon/hollon.module';
 import { PromptComposerService } from './services/prompt-composer.service';
 import { TaskPoolService } from './services/task-pool.service';
 import { HollonOrchestratorService } from './services/hollon-orchestrator.service';
@@ -35,6 +36,7 @@ import { GoalDecompositionService } from '../goal/services/goal-decomposition.se
     BrainProviderModule,
     CollaborationModule,
     GoalModule,
+    forwardRef(() => HollonModule),
   ],
   providers: [
     PromptComposerService,

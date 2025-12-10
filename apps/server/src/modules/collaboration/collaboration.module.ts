@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CollaborationSession } from './entities/collaboration-session.entity';
 import { TaskPullRequest } from './entities/task-pull-request.entity';
@@ -22,8 +22,8 @@ import { BrainProviderModule } from '../brain-provider/brain-provider.module';
       Hollon,
       Task,
     ]),
-    MessageModule,
-    HollonModule,
+    forwardRef(() => MessageModule),
+    forwardRef(() => HollonModule),
     BrainProviderModule,
   ],
   controllers: [CollaborationController],
