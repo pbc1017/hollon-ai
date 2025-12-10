@@ -19,6 +19,14 @@ describe('HollonOrchestratorService', () => {
   const mockHollonRepo = {
     findOne: jest.fn(),
     update: jest.fn(),
+    manager: {
+      findOne: jest.fn(),
+      save: jest.fn(),
+      create: jest.fn(),
+      getRepository: jest.fn(),
+      find: jest.fn(),
+      remove: jest.fn(),
+    },
   };
 
   const mockDocumentRepo = {
@@ -205,6 +213,7 @@ describe('HollonOrchestratorService', () => {
 
       mockHollonRepo.findOne.mockResolvedValue(mockHollon);
       mockHollonRepo.update.mockResolvedValue({ affected: 1 });
+      mockHollonRepo.manager.findOne.mockResolvedValue(null); // Task not complex
       mockTaskPool.pullNextTask.mockResolvedValue({
         task: mockTask,
         reason: 'Directly assigned',
@@ -280,6 +289,7 @@ describe('HollonOrchestratorService', () => {
 
       mockHollonRepo.findOne.mockResolvedValue(mockHollon);
       mockHollonRepo.update.mockResolvedValue({ affected: 1 });
+      mockHollonRepo.manager.findOne.mockResolvedValue(null); // Task not complex
       mockTaskPool.pullNextTask.mockResolvedValue({
         task: mockTask,
         reason: 'Directly assigned',

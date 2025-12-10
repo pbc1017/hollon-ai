@@ -372,11 +372,11 @@ describe('HollonService', () => {
         organizationId: 'org-123',
         lifecycle: HollonLifecycle.TEMPORARY,
         status: HollonStatus.WORKING,
-        depth: 3,
+        depth: 1,
       });
 
       await expect(service.createTemporary(config)).rejects.toThrow(
-        'Maximum temporary hollon depth (3) exceeded',
+        'Maximum temporary hollon depth (1) exceeded',
       );
     });
 
@@ -394,7 +394,7 @@ describe('HollonService', () => {
         ...config,
         lifecycle: HollonLifecycle.TEMPORARY,
         createdByHollonId: 'permanent-hollon',
-        depth: 0,
+        depth: 1, // Permanent (depth=0) + 1 = 1
         status: HollonStatus.IDLE,
       };
 
@@ -407,7 +407,7 @@ describe('HollonService', () => {
         organizationId: 'org-123',
         lifecycle: HollonLifecycle.PERMANENT,
         status: HollonStatus.IDLE,
-        depth: 5, // 영구 홀론의 depth는 제한 없음
+        depth: 0, // 영구 홀론은 항상 depth 0
       });
       mockHollonRepository.create.mockReturnValue(tempHollon);
       mockHollonRepository.save.mockResolvedValue({
@@ -417,7 +417,7 @@ describe('HollonService', () => {
 
       const result = await service.createTemporary(config);
 
-      expect(result.depth).toBe(0); // 영구 홀론이 만든 임시 홀론은 depth 0
+      expect(result.depth).toBe(1); // 영구 홀론(depth=0)이 만든 임시 홀론은 depth 1
       expect(result.lifecycle).toBe(HollonLifecycle.TEMPORARY);
     });
 

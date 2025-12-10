@@ -18,6 +18,7 @@ import { Organization } from '../../src/modules/organization/entities/organizati
 import { Project } from '../../src/modules/project/entities/project.entity';
 import { Document } from '../../src/modules/document/entities/document.entity';
 import { Goal } from '../../src/modules/goal/entities/goal.entity';
+import { GoalProgressRecord } from '../../src/modules/goal/entities/goal-progress-record.entity';
 import { BrainProviderModule } from '../../src/modules/brain-provider/brain-provider.module';
 import { BrainProviderService } from '../../src/modules/brain-provider/brain-provider.service';
 
@@ -61,6 +62,7 @@ describe('TeamTaskDistributionService Integration Test', () => {
             Project,
             Document,
             Goal,
+            GoalProgressRecord,
           ],
           synchronize: false,
           logging: false,
@@ -74,6 +76,7 @@ describe('TeamTaskDistributionService Integration Test', () => {
           Project,
           Document,
           Goal,
+          GoalProgressRecord,
         ]),
         BrainProviderModule,
       ],

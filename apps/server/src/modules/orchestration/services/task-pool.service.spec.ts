@@ -180,9 +180,11 @@ describe('TaskPoolService', () => {
       expect(mockTaskRepo.update).toHaveBeenCalledWith(
         { id: 'task-1' },
         expect.objectContaining({
-          status: TaskStatus.FAILED,
+          status: TaskStatus.READY,
           errorMessage: 'Test error',
-          completedAt: expect.any(Date),
+          consecutiveFailures: 1,
+          lastFailedAt: expect.any(Date),
+          blockedUntil: expect.any(Date),
         }),
       );
     });
