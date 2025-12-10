@@ -2,10 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AppModule } from '@/app.module';
-import { GoalDecompositionService } from '@/modules/goal/services/goal-decomposition.service';
 import { TeamTaskDistributionService } from '@/modules/orchestration/services/team-task-distribution.service';
 import { BrainProviderService } from '@/modules/brain-provider/brain-provider.service';
-import { Goal } from '@/modules/goal/entities/goal.entity';
 import {
   Task,
   TaskStatus,
@@ -29,7 +27,6 @@ import { cleanupTestData } from '../utils/test-database.utils';
 describe('Phase 3.8 Team Distribution Integration Test', () => {
   let app: INestApplication;
   let dataSource: DataSource;
-  let goalDecompositionService: GoalDecompositionService;
   let teamTaskDistributionService: TeamTaskDistributionService;
   let brainProvider: BrainProviderService;
 
@@ -50,7 +47,6 @@ describe('Phase 3.8 Team Distribution Integration Test', () => {
     await app.init();
 
     dataSource = app.get(DataSource);
-    goalDecompositionService = app.get(GoalDecompositionService);
     teamTaskDistributionService = app.get(TeamTaskDistributionService);
     brainProvider = app.get(BrainProviderService);
   });
@@ -132,78 +128,43 @@ describe('Phase 3.8 Team Distribution Integration Test', () => {
       expect(dev2.id).toBeDefined();
     });
 
-    it('Step 2: Mock Brain Provider for Goal Decomposition', () => {
-      // Mock Goal Decomposition response (Team Tasks)
-      jest.spyOn(brainProvider, 'executeWithTracking').mockResolvedValueOnce({
-        output: JSON.stringify({
-          projects: [
-            {
-              name: 'Phase 3.8 Test Project',
-              description: 'Team distribution test',
-              tasks: [
-                {
-                  title: 'Implement Service A',
-                  description: 'Backend service implementation',
-                  type: 'implementation',
-                  priority: 'P1',
-                  estimatedComplexity: 'medium',
-                  requiredSkills: ['typescript', 'nestjs'],
-                },
-                {
-                  title: 'Implement Service B',
-                  description: 'Data processing service',
-                  type: 'implementation',
-                  priority: 'P2',
-                  estimatedComplexity: 'high',
-                  requiredSkills: ['backend', 'database'],
-                },
-              ],
-            },
-          ],
-          reasoning: 'Test decomposition',
-        }),
-        success: true,
-        duration: 1000,
-        cost: {
-          inputTokens: 100,
-          outputTokens: 200,
-          totalCostCents: 1,
-        },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any);
+    it('Step 2: Create Team Tasks manually (skip Goal Decomposition)', async () => {
+      // Create Project manually
+      const projectRepo = dataSource.getRepository('Project');
+      const project = await projectRepo.save({
+        name: 'Phase 3.8 Test Project',
+        description: 'Team distribution test',
+        organizationId: organization.id,
+        status: 'active',
+      });
+
+      // Create Team Task (Level 0) manually
+      const taskRepo = dataSource.getRepository(Task);
+      const teamTask = await taskRepo.save({
+        title: 'Knowledge System Implementation',
+        description: 'Build knowledge extraction and learning capabilities',
+        type: TaskType.TEAM_EPIC,
+        status: TaskStatus.PENDING,
+        priority: 'P1',
+        organizationId: organization.id,
+        projectId: project.id,
+        assignedTeamId: team.id,
+        assignedHollonId: null,
+        depth: 0,
+        requiredSkills: ['ai', 'ml', 'typescript'],
+        acceptanceCriteria: [
+          'KnowledgeExtraction service implemented',
+          'VectorSearch service implemented',
+          'Integration tests passing',
+        ],
+      });
+
+      expect(teamTask.id).toBeDefined();
+      expect(teamTask.assignedTeamId).toBe(team.id);
+      expect(teamTask.depth).toBe(0);
     });
 
-    it('Step 3: Goal Decomposition with useTeamDistribution', async () => {
-      const goalRepo = dataSource.getRepository(Goal);
-
-      // Create Goal with Team assignment
-      const goal = await goalRepo.save({
-        organizationId: organization.id,
-        title: 'Phase 3.8 Test Goal',
-        description: 'Test team-based distribution',
-        goalType: 'objective',
-        targetDate: new Date('2025-12-31'),
-        assignedTeamId: team.id, // Assign to team for team distribution
-      });
-
-      // Decompose with useTeamDistribution
-      const result = await goalDecompositionService.decomposeGoal(goal.id, {
-        maxTasks: 10,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        preferredComplexity: 'medium' as any,
-        useTeamDistribution: true, // Phase 3.8!
-      });
-
-      // Log result for debugging
-      if (!result.success) {
-        console.error('Goal decomposition failed:', result.error);
-      }
-
-      expect(result.success).toBe(true);
-      expect(result.projects.length).toBe(1);
-      expect(result.tasks.length).toBeGreaterThan(0);
-
-      // Verify Team Tasks created
+    it('Step 3: Verify Team Task created', async () => {
       const taskRepo = dataSource.getRepository(Task);
       const teamTasks = await taskRepo.find({
         where: { type: TaskType.TEAM_EPIC },

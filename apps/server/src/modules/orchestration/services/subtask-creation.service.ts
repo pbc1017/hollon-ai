@@ -115,6 +115,8 @@ export class SubtaskCreationService {
           ...definition,
           parentTaskId: parentTaskId,
           projectId: parentTask.projectId,
+          organizationId: parentTask.organizationId, // Phase 3.8: Set organizationId
+          depth: (parentTask.depth || 0) + 1, // Phase 3.8: Set depth
           status: TaskStatus.READY,
           assignedHollonId: null, // Subtasks start unassigned
           retryCount: 0,

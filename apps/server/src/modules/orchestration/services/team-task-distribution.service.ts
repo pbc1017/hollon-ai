@@ -372,20 +372,21 @@ Break down this team task into 3-7 subtasks and assign each to the most suitable
       });
 
       // Set up dependencies
-      if (sp.dependencies && sp.dependencies.length > 0) {
-        const dependencyTasks: Task[] = [];
-        for (const depTitle of sp.dependencies) {
-          const depTask = titleToTaskMap.get(depTitle);
-          if (depTask) {
-            dependencyTasks.push(depTask);
-          }
-        }
+      // TODO: Re-enable when task_dependencies table exists
+      // if (sp.dependencies && sp.dependencies.length > 0) {
+      //   const dependencyTasks: Task[] = [];
+      //   for (const depTitle of sp.dependencies) {
+      //     const depTask = titleToTaskMap.get(depTitle);
+      //     if (depTask) {
+      //       dependencyTasks.push(depTask);
+      //     }
+      //   }
 
-        if (dependencyTasks.length > 0) {
-          subtask.dependencies = dependencyTasks;
-          await this.taskRepo.save(subtask);
-        }
-      }
+      //   if (dependencyTasks.length > 0) {
+      //     subtask.dependencies = dependencyTasks;
+      //     await this.taskRepo.save(subtask);
+      //   }
+      // }
     }
 
     // Reload to get updated data
