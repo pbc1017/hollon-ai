@@ -614,6 +614,15 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
         `Successfully delegated task ${task.id} to ${totalCreated} Sub-Hollons. Duration: ${Date.now() - startTime}ms`,
       );
 
+      // SSOT: Update parent task status to IN_PROGRESS
+      // This prevents the parent hollon from pulling the same task again
+      await this.hollonRepo.manager.getRepository(Task).update(task.id, {
+        status: TaskStatus.IN_PROGRESS,
+      });
+      this.logger.log(
+        `Parent task ${task.id} status updated: READY → IN_PROGRESS`,
+      );
+
       // Sub-Hollons will be automatically executed by HollonExecutionService
       // BLOCKED tasks will auto-unblock when dependencies complete
       // Temporary Hollons will be cleaned up after all subtasks complete
