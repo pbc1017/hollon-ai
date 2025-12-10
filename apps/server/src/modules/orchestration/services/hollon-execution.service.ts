@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
-import { TaskStatus } from '../../task/entities/task.entity';
+import { Task, TaskStatus } from '../../task/entities/task.entity';
 import { Organization } from '../../organization/entities/organization.entity';
 import { HollonOrchestratorService } from './hollon-orchestrator.service';
 
@@ -41,6 +41,154 @@ export class HollonExecutionService {
     private readonly orgRepo: Repository<Organization>,
     private readonly orchestrator: HollonOrchestratorService,
   ) {}
+
+  /**
+   * 매 30분마다 Stuck Task 감지 및 처리
+   * Phase 3.7: 2시간 이상 IN_PROGRESS 상태인 Task를 BLOCKED로 변경
+   */
+  @Cron(CronExpression.EVERY_30_MINUTES)
+  async detectStuckTasks(): Promise<void> {
+    try {
+      this.logger.debug('Checking for stuck tasks...');
+
+      const STUCK_THRESHOLD_HOURS = 2;
+      const thresholdTime = new Date(
+        Date.now() - STUCK_THRESHOLD_HOURS * 60 * 60 * 1000,
+      );
+
+      // Find tasks that have been IN_PROGRESS for more than 2 hours
+      const stuckTasks = await this.hollonRepo.manager
+        .getRepository(Task)
+        .createQueryBuilder('task')
+        .where('task.status = :status', { status: TaskStatus.IN_PROGRESS })
+        .andWhere('task.started_at < :threshold', { threshold: thresholdTime })
+        .getMany();
+
+      if (stuckTasks.length === 0) {
+        this.logger.debug('No stuck tasks found');
+        return;
+      }
+
+      this.logger.warn(
+        `Found ${stuckTasks.length} stuck tasks (IN_PROGRESS > ${STUCK_THRESHOLD_HOURS}h)`,
+      );
+
+      for (const task of stuckTasks) {
+        const duration = Date.now() - task.startedAt!.getTime();
+        const hours = (duration / (1000 * 60 * 60)).toFixed(1);
+
+        await this.hollonRepo.manager.getRepository(Task).update(
+          { id: task.id },
+          {
+            status: TaskStatus.BLOCKED,
+            blockedReason: `Task stuck in IN_PROGRESS for ${hours} hours. Possible infinite loop or hang.`,
+          },
+        );
+
+        this.logger.warn(
+          `Marked task ${task.id} (${task.title}) as BLOCKED after ${hours}h`,
+        );
+      }
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(`Error in detectStuckTasks: ${err.message}`, err.stack);
+    }
+  }
+
+  /**
+   * 매 30분마다 진행 상황 모니터링 (Progress Monitoring)
+   * Phase 3.7: 자율 실행 상태를 주기적으로 로깅
+   */
+  @Cron(CronExpression.EVERY_30_MINUTES)
+  async monitorProgress(): Promise<void> {
+    try {
+      this.logger.debug('Monitoring autonomous execution progress...');
+
+      const orgs = await this.orgRepo.find();
+
+      for (const org of orgs) {
+        // Get task statistics
+        const taskStats = await this.hollonRepo.manager
+          .getRepository(Task)
+          .createQueryBuilder('task')
+          .select('task.status', 'status')
+          .addSelect('COUNT(*)', 'count')
+          .where(
+            'task.project_id IN (SELECT id FROM projects WHERE organization_id = :orgId)',
+            { orgId: org.id },
+          )
+          .groupBy('task.status')
+          .getRawMany();
+
+        // Get hollon statistics
+        const hollonStats = await this.hollonRepo
+          .createQueryBuilder('hollon')
+          .select('hollon.status', 'status')
+          .addSelect('COUNT(*)', 'count')
+          .where('hollon.organizationId = :orgId', { orgId: org.id })
+          .groupBy('hollon.status')
+          .getRawMany();
+
+        // Convert to readable format
+        const taskCounts = taskStats.reduce(
+          (acc, row) => {
+            acc[row.status] = parseInt(row.count);
+            return acc;
+          },
+          {} as Record<string, number>,
+        );
+
+        const hollonCounts = hollonStats.reduce(
+          (acc, row) => {
+            acc[row.status] = parseInt(row.count);
+            return acc;
+          },
+          {} as Record<string, number>,
+        );
+
+        // Calculate totals
+        const totalTasks = Object.values(taskCounts).reduce(
+          (sum, count) => (sum as number) + (count as number),
+          0,
+        );
+        const totalHollons = Object.values(hollonCounts).reduce(
+          (sum, count) => (sum as number) + (count as number),
+          0,
+        );
+
+        // Log progress report
+        this.logger.log(
+          `[Progress Report] Organization: ${org.name} | ` +
+            `Tasks: ${totalTasks} total (` +
+            `completed: ${taskCounts['completed'] || 0}, ` +
+            `in_progress: ${taskCounts['in_progress'] || 0}, ` +
+            `ready: ${taskCounts['ready'] || 0}, ` +
+            `pending: ${taskCounts['pending'] || 0}, ` +
+            `blocked: ${taskCounts['blocked'] || 0}, ` +
+            `failed: ${taskCounts['failed'] || 0}` +
+            `) | Hollons: ${totalHollons} total (` +
+            `idle: ${hollonCounts['idle'] || 0}, ` +
+            `working: ${hollonCounts['working'] || 0}, ` +
+            `paused: ${hollonCounts['paused'] || 0}, ` +
+            `blocked: ${hollonCounts['blocked'] || 0}` +
+            `)`,
+        );
+
+        // Check autonomous execution status
+        const settings = (org.settings || {}) as OrganizationSettings;
+        const isEnabled = settings.autonomousExecutionEnabled !== false;
+
+        if (!isEnabled) {
+          this.logger.warn(
+            `[Progress Report] Organization ${org.name}: Autonomous execution is DISABLED - ${settings.emergencyStopReason || 'Unknown reason'}`,
+          );
+        }
+      }
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(`Error in monitorProgress: ${err.message}`, err.stack);
+    }
+  }
 
   /**
    * 매 10초마다 할당된 Task가 있는 IDLE Hollon 실행
