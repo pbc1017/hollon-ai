@@ -22,6 +22,7 @@ import { GoalProgressRecord } from '../../src/modules/goal/entities/goal-progres
 import { Cycle } from '../../src/modules/project/entities/cycle.entity';
 import { BrainProviderModule } from '../../src/modules/brain-provider/brain-provider.module';
 import { BrainProviderService } from '../../src/modules/brain-provider/brain-provider.service';
+import { cleanupTestData } from '../utils/test-database.utils';
 
 /**
  * Integration Test for TeamTaskDistributionService
@@ -93,21 +94,12 @@ describe('TeamTaskDistributionService Integration Test', () => {
     dataSource = module.get<DataSource>(DataSource);
 
     // Clean up before tests
-    await dataSource.query('TRUNCATE tasks CASCADE');
-    await dataSource.query('TRUNCATE hollons CASCADE');
-    await dataSource.query('TRUNCATE teams CASCADE');
-    await dataSource.query('TRUNCATE roles CASCADE');
-    await dataSource.query('TRUNCATE organizations CASCADE');
+    await cleanupTestData(dataSource);
   });
 
   afterAll(async () => {
     // Clean up after tests
-    await dataSource.query('TRUNCATE tasks CASCADE');
-    await dataSource.query('TRUNCATE hollons CASCADE');
-    await dataSource.query('TRUNCATE teams CASCADE');
-    await dataSource.query('TRUNCATE roles CASCADE');
-    await dataSource.query('TRUNCATE organizations CASCADE');
-
+    await cleanupTestData(dataSource);
     await module.close();
   });
 
