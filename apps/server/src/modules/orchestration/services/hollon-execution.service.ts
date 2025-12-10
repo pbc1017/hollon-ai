@@ -6,13 +6,8 @@ import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
 import { Task, TaskStatus, TaskType } from '../../task/entities/task.entity';
 import { Organization } from '../../organization/entities/organization.entity';
 import { HollonOrchestratorService } from './hollon-orchestrator.service';
+import { OrganizationSettings } from '../../organization/interfaces/organization-settings.interface';
 import { TeamTaskDistributionService } from './team-task-distribution.service';
-
-interface OrganizationSettings {
-  maxConcurrentHolons?: number;
-  autonomousExecutionEnabled?: boolean;
-  emergencyStopReason?: string;
-}
 
 /**
  * HollonExecutionService
@@ -202,15 +197,13 @@ export class HollonExecutionService {
       this.logger.debug('Checking for undistributed team tasks...');
 
       // Find PENDING Team Tasks (TEAM_EPIC) that haven't been distributed yet
-      const teamTasks = await this.hollonRepo.manager
-        .getRepository(Task)
-        .find({
-          where: {
-            type: TaskType.TEAM_EPIC,
-            status: TaskStatus.PENDING,
-          },
-          relations: ['assignedTeam', 'assignedTeam.manager'],
-        });
+      const teamTasks = await this.hollonRepo.manager.getRepository(Task).find({
+        where: {
+          type: TaskType.TEAM_EPIC,
+          status: TaskStatus.PENDING,
+        },
+        relations: ['assignedTeam', 'assignedTeam.manager'],
+      });
 
       if (teamTasks.length === 0) {
         this.logger.debug('No undistributed team tasks found');
