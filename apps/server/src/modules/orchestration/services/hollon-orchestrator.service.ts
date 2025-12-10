@@ -13,13 +13,15 @@ import {
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 import { PromptComposerService } from './prompt-composer.service';
 import { TaskPoolService } from './task-pool.service';
-import { Task, TaskType, TaskStatus } from '../../task/entities/task.entity';
+import { Task, TaskStatus } from '../../task/entities/task.entity';
 import { QualityGateService } from './quality-gate.service';
 import { Organization } from '../../organization/entities/organization.entity';
 import { EscalationService, EscalationLevel } from './escalation.service';
 import { HollonService } from '../../hollon/hollon.service';
 import { SubtaskCreationService } from './subtask-creation.service';
 import { Role } from '../../role/entities/role.entity';
+import { ComposedPrompt } from '../interfaces/prompt-context.interface';
+import { TaskDecompositionResult } from '../dto/task-decomposition.dto';
 
 export interface ExecutionCycleResult {
   success: boolean;
@@ -310,7 +312,7 @@ export class HollonOrchestratorService {
     task: Task,
     hollon: Hollon,
     output: string,
-    composedPrompt: any,
+    composedPrompt: ComposedPrompt,
   ): Promise<void> {
     const document = this.documentRepo.create({
       title: `Result: ${task.title}`,
@@ -448,12 +450,18 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
   }
 
   /**
-   * Phase 3.7: Handle complex task by creating Sub-Hollons (Planner/Analyzer/Coder pattern)
+   * Phase 3.7: Handle complex task by DYNAMIC Sub-Hollon delegation
    *
-   * Creates specialized temporary Sub-Hollons to handle complex tasks through delegation:
-   * 1. Planner → Analyzes requirements and creates implementation plan
-   * 2. Analyzer → Designs architecture and identifies dependencies
-   * 3. Coder → Implements the solution with tests
+   * Asks Brain Provider (Claude) to decompose the task into optimal subtasks
+   * with dynamic role assignment and dependency management.
+   *
+   * Flow:
+   * 1. Query available roles for temporary hollons
+   * 2. Ask Brain Provider to decompose task → JSON response
+   * 3. Parse subtask specs (with dependencies)
+   * 4. Create temporary Sub-Hollons dynamically
+   * 5. Create subtasks with dependency relationships
+   * 6. Set BLOCKED status for dependent tasks, READY for independent tasks
    *
    * Returns true if task was successfully delegated to Sub-Hollons
    */
@@ -465,118 +473,139 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
 
     try {
       this.logger.log(
-        `Handling complex task ${task.id}: ${task.title} with Sub-Hollon delegation`,
+        `[Dynamic Delegation] Handling complex task ${task.id}: ${task.title}`,
       );
 
-      // 1. Find or create specialized roles (Planner, Analyzer, Coder)
-      const plannerRole = await this.findOrCreateRole(
-        'Planner',
-        parentHollon.organizationId,
-      );
-      const analyzerRole = await this.findOrCreateRole(
-        'Analyzer',
-        parentHollon.organizationId,
-      );
-      const coderRole = await this.findOrCreateRole(
-        'Coder',
-        parentHollon.organizationId,
-      );
+      // 1. Query roles available for temporary hollon creation
+      const availableRoles = await this.hollonRepo.manager
+        .getRepository(Role)
+        .find({
+          where: {
+            organizationId: parentHollon.organizationId,
+            availableForTemporaryHollon: true,
+          },
+        });
 
-      // 2. Create temporary Sub-Hollons
-      const plannerHollon = await this.hollonService.createTemporary({
-        name: `Planner-${task.id.substring(0, 8)}`,
-        organizationId: parentHollon.organizationId,
-        teamId: parentHollon.teamId || undefined,
-        roleId: plannerRole.id,
-        brainProviderId: parentHollon.brainProviderId || 'claude_code',
-        createdBy: parentHollon.id,
-      });
-
-      const analyzerHollon = await this.hollonService.createTemporary({
-        name: `Analyzer-${task.id.substring(0, 8)}`,
-        organizationId: parentHollon.organizationId,
-        teamId: parentHollon.teamId || undefined,
-        roleId: analyzerRole.id,
-        brainProviderId: parentHollon.brainProviderId || 'claude_code',
-        createdBy: parentHollon.id,
-      });
-
-      const coderHollon = await this.hollonService.createTemporary({
-        name: `Coder-${task.id.substring(0, 8)}`,
-        organizationId: parentHollon.organizationId,
-        teamId: parentHollon.teamId || undefined,
-        roleId: coderRole.id,
-        brainProviderId: parentHollon.brainProviderId || 'claude_code',
-        createdBy: parentHollon.id,
-      });
-
-      this.logger.log(
-        `Created 3 Sub-Hollons for task ${task.id}: Planner, Analyzer, Coder`,
-      );
-
-      // 3. Create subtasks for each phase
-      const subtaskResult = await this.subtaskService.createSubtasks(task.id, [
-        {
-          title: `[Research] ${task.title}`,
-          description:
-            'Analyze requirements and create detailed implementation plan',
-          type: TaskType.RESEARCH,
-          priority: task.priority as string,
-          affectedFiles: task.affectedFiles,
-        },
-        {
-          title: `[Implementation] Phase 1 - ${task.title}`,
-          description: 'Design architecture and implement core functionality',
-          type: TaskType.IMPLEMENTATION,
-          priority: task.priority as string,
-          affectedFiles: task.affectedFiles,
-        },
-        {
-          title: `[Review] ${task.title}`,
-          description: 'Review implementation and create tests',
-          type: TaskType.REVIEW,
-          priority: task.priority as string,
-          affectedFiles: task.affectedFiles,
-        },
-      ]);
-
-      if (!subtaskResult.success || subtaskResult.createdSubtasks.length < 3) {
-        throw new Error(
-          `Failed to create subtasks: ${subtaskResult.errors?.join(', ')}`,
+      if (availableRoles.length === 0) {
+        this.logger.warn(
+          'No roles available for temporary hollons - falling back to direct execution',
         );
+        return false; // Fallback to parent hollon executing directly
       }
 
       this.logger.log(
-        `Created ${subtaskResult.createdSubtasks.length} subtasks for task ${task.id}`,
+        `Found ${availableRoles.length} available roles: ${availableRoles.map((r) => r.name).join(', ')}`,
       );
 
-      // 4. Assign subtasks to Sub-Hollons
-      const [planningTask, analysisTask, implementationTask] =
-        subtaskResult.createdSubtasks;
+      // 2. Ask Brain Provider to decompose task
+      const decompositionPrompt =
+        await this.promptComposer.composeTaskDecompositionPrompt(
+          task,
+          availableRoles,
+        );
 
-      // Update tasks to assign them to the Sub-Hollons
-      await this.hollonRepo.manager.update(
-        Task,
-        { id: planningTask.id },
-        { assignedHollonId: plannerHollon.id, status: TaskStatus.READY },
-      );
-      await this.hollonRepo.manager.update(
-        Task,
-        { id: analysisTask.id },
-        { assignedHollonId: analyzerHollon.id, status: TaskStatus.READY },
-      );
-      await this.hollonRepo.manager.update(
-        Task,
-        { id: implementationTask.id },
-        { assignedHollonId: coderHollon.id, status: TaskStatus.READY },
-      );
+      const brainResult = await this.brainProvider.execute({
+        prompt: decompositionPrompt,
+        systemPrompt:
+          'You are a task decomposition expert. Return ONLY valid JSON with no markdown formatting.',
+      });
+
+      if (!brainResult.success) {
+        throw new Error(
+          `Brain decomposition failed: ${brainResult.output || 'Unknown error'}`,
+        );
+      }
+
+      // 3. Parse JSON response
+      const decomposition = this.parseDecompositionResult(brainResult.output);
+
+      if (!decomposition.subtasks || decomposition.subtasks.length === 0) {
+        throw new Error('Brain returned empty subtask list');
+      }
 
       this.logger.log(
-        `Assigned subtasks to Sub-Hollons. Duration: ${Date.now() - startTime}ms`,
+        `Brain decomposed into ${decomposition.subtasks.length} subtasks`,
+      );
+      if (decomposition.reasoning) {
+        this.logger.log(`Reasoning: ${decomposition.reasoning}`);
+      }
+
+      // 4. Create Sub-Hollons and subtasks dynamically
+      const subtaskMap = new Map<string, Task>(); // title → Task entity
+
+      for (const subtaskSpec of decomposition.subtasks) {
+        // 4.1 Find role
+        const role = availableRoles.find((r) => r.id === subtaskSpec.roleId);
+        if (!role) {
+          this.logger.warn(
+            `Role ${subtaskSpec.roleId} not found - skipping subtask "${subtaskSpec.title}"`,
+          );
+          continue;
+        }
+
+        // 4.2 Create temporary Sub-Hollon
+        const subHollon = await this.hollonService.createTemporary({
+          name: `${role.name}-${task.id.substring(0, 8)}`,
+          organizationId: parentHollon.organizationId,
+          teamId: parentHollon.teamId || undefined,
+          roleId: role.id,
+          brainProviderId: parentHollon.brainProviderId || 'claude_code',
+          createdBy: parentHollon.id,
+        });
+
+        // 4.3 Resolve dependencies (by title lookup)
+        const dependencyTasks = subtaskSpec.dependencies
+          .map((depTitle) => subtaskMap.get(depTitle))
+          .filter((t) => t != null) as Task[];
+
+        // 4.4 Determine initial status
+        const hasUnresolvedDeps = dependencyTasks.length > 0;
+        const initialStatus = hasUnresolvedDeps
+          ? TaskStatus.BLOCKED
+          : TaskStatus.READY;
+
+        // 4.5 Create subtask entity
+        const subtask = this.hollonRepo.manager.create(Task, {
+          organizationId: parentHollon.organizationId,
+          projectId: task.projectId,
+          parentTaskId: task.id,
+          assignedHollonId: subHollon.id,
+          title: subtaskSpec.title,
+          description: subtaskSpec.description,
+          type: subtaskSpec.type,
+          priority: subtaskSpec.priority || task.priority,
+          status: initialStatus,
+          depth: (task.depth || 0) + 1,
+          creatorHollonId: parentHollon.id,
+          affectedFiles: subtaskSpec.affectedFiles || [],
+          estimatedComplexity: 'low', // Subtasks are granular
+        });
+
+        // Save without dependencies first
+        const savedSubtask = await this.hollonRepo.manager.save(Task, subtask);
+
+        // 4.6 Set dependencies (many-to-many)
+        if (dependencyTasks.length > 0) {
+          savedSubtask.dependencies = dependencyTasks;
+          await this.hollonRepo.manager.save(Task, savedSubtask);
+        }
+
+        // 4.7 Store in map for future dependency resolution
+        subtaskMap.set(subtaskSpec.title, savedSubtask);
+
+        this.logger.log(
+          `Created subtask "${savedSubtask.title}" → ${role.name} (${subHollon.id.substring(0, 8)}) [${initialStatus}] deps: ${dependencyTasks.length}`,
+        );
+      }
+
+      const totalCreated = subtaskMap.size;
+      this.logger.log(
+        `Successfully delegated task ${task.id} to ${totalCreated} Sub-Hollons. Duration: ${Date.now() - startTime}ms`,
       );
 
       // Sub-Hollons will be automatically executed by HollonExecutionService
-      // Temporary Hollons will be cleaned up by SubtaskCreationService after all subtasks complete
+      // BLOCKED tasks will auto-unblock when dependencies complete
+      // Temporary Hollons will be cleaned up after all subtasks complete
 
       return true; // Task delegated successfully
     } catch (error) {
@@ -601,6 +630,44 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
       }
 
       return false; // Fall back to direct execution
+    }
+  }
+
+  /**
+   * Parse Brain Provider's decomposition result (JSON)
+   *
+   * Extracts JSON from response (handles markdown code blocks)
+   * and validates structure.
+   */
+  private parseDecompositionResult(output: string): TaskDecompositionResult {
+    try {
+      // Remove markdown code blocks if present
+      let jsonStr = output.trim();
+
+      // Try to extract JSON from markdown
+      const jsonMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      if (jsonMatch) {
+        jsonStr = jsonMatch[1].trim();
+      }
+
+      // Also try to find standalone JSON object
+      const objectMatch = jsonStr.match(/\{[\s\S]*\}/);
+      if (objectMatch && !jsonMatch) {
+        jsonStr = objectMatch[0];
+      }
+
+      const parsed = JSON.parse(jsonStr);
+
+      // Validate structure
+      if (!parsed.subtasks || !Array.isArray(parsed.subtasks)) {
+        throw new Error('Invalid decomposition: missing subtasks array');
+      }
+
+      return parsed;
+    } catch (error) {
+      this.logger.error(`Failed to parse decomposition JSON: ${error}`);
+      this.logger.error(`Raw output: ${output.substring(0, 500)}...`);
+      throw new Error(`JSON parsing failed: ${error}`);
     }
   }
 

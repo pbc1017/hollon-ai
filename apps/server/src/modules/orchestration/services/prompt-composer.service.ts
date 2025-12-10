@@ -355,4 +355,129 @@ Before submitting, verify your code compiles without errors by mentally checking
 
     return taskPrompt;
   }
+
+  /**
+   * Phase 3.7: Compose Task Decomposition Prompt for Dynamic Sub-Hollon Delegation
+   *
+   * This prompt asks the Brain Provider (Claude) to decompose a complex task
+   * into optimal subtasks with dependencies, dynamically selecting appropriate roles.
+   */
+  async composeTaskDecompositionPrompt(
+    task: Task,
+    availableRoles: Role[],
+  ): Promise<string> {
+    return `You are a task decomposition expert for a Hollon autonomous agent system.
+
+**Complex Task to Decompose:**
+- **Title**: ${task.title}
+- **Description**: ${task.description}
+- **Type**: ${task.type}
+- **Complexity**: ${task.estimatedComplexity || 'unspecified'}
+- **Story Points**: ${task.storyPoints || 'unspecified'}
+- **Required Skills**: ${task.requiredSkills?.join(', ') || 'none specified'}
+- **Affected Files**: ${task.affectedFiles?.join(', ') || 'none specified'}
+
+**Available Roles for Temporary Sub-Hollons:**
+${availableRoles
+  .map(
+    (role) =>
+      `- **${role.name}** (ID: ${role.id})
+  Capabilities: ${role.capabilities?.join(', ') || 'general'}
+  System Prompt: ${role.systemPrompt?.substring(0, 100) || 'Standard agent'}...`,
+  )
+  .join('\n\n')}
+
+**Your Task:**
+Decompose this complex task into optimal subtasks following these principles:
+
+1. **Minimize Dependencies**: Enable maximum parallelization
+   - Only create sequential dependencies when absolutely necessary
+   - Group parallel-executable tasks with same dependency
+
+2. **Appropriate Role Assignment**: Select the best role for each subtask
+   - Match role capabilities to subtask requirements
+   - Distribute workload evenly across roles
+
+3. **Independent Execution**: Each subtask should be self-contained
+   - Clear, actionable description
+   - Specific deliverables
+   - Roughly equal story points (aim for 3-5 points per subtask)
+
+4. **Dependency Strategy**:
+   - Research/Planning first (no dependencies)
+   - Design/Architecture second (depends on research)
+   - Implementation tasks in parallel (depend on design)
+   - Testing/Review last (depends on implementation)
+
+**Output Requirements:**
+Return ONLY valid JSON in this exact format (no markdown, no explanations outside JSON):
+
+\`\`\`json
+{
+  "subtasks": [
+    {
+      "title": "Research authentication requirements and security standards",
+      "description": "Analyze OAuth 2.0, JWT, and 2FA implementation patterns. Research security best practices and compliance requirements.",
+      "type": "research",
+      "roleId": "ROLE_ID_HERE",
+      "dependencies": [],
+      "estimatedHours": 4,
+      "priority": "P1",
+      "affectedFiles": []
+    },
+    {
+      "title": "Design authentication architecture",
+      "description": "Create system design for auth service, define API contracts, database schema, and integration points.",
+      "type": "implementation",
+      "roleId": "ROLE_ID_HERE",
+      "dependencies": ["Research authentication requirements and security standards"],
+      "estimatedHours": 6,
+      "priority": "P1",
+      "affectedFiles": ["src/auth/auth.service.ts"]
+    },
+    {
+      "title": "Implement JWT authentication",
+      "description": "Build JWT token generation, validation, and refresh logic.",
+      "type": "implementation",
+      "roleId": "ROLE_ID_HERE",
+      "dependencies": ["Design authentication architecture"],
+      "estimatedHours": 8,
+      "priority": "P1",
+      "affectedFiles": ["src/auth/jwt.strategy.ts"]
+    },
+    {
+      "title": "Implement OAuth integration",
+      "description": "Build OAuth 2.0 provider integration (Google, GitHub).",
+      "type": "implementation",
+      "roleId": "ROLE_ID_HERE",
+      "dependencies": ["Design authentication architecture"],
+      "estimatedHours": 8,
+      "priority": "P1",
+      "affectedFiles": ["src/auth/oauth.controller.ts"]
+    },
+    {
+      "title": "Review and test authentication system",
+      "description": "Write integration tests, security audit, and documentation.",
+      "type": "review",
+      "roleId": "ROLE_ID_HERE",
+      "dependencies": ["Implement JWT authentication", "Implement OAuth integration"],
+      "estimatedHours": 6,
+      "priority": "P1",
+      "affectedFiles": []
+    }
+  ],
+  "reasoning": "Split into research phase first to establish requirements. Architecture design follows research. JWT and OAuth can be implemented in parallel after design is complete. Final review depends on all implementations.",
+  "totalEstimatedHours": 32
+}
+\`\`\`
+
+**CRITICAL REQUIREMENTS:**
+- Use dependency TITLES exactly as they appear in the "title" field (NOT IDs)
+- Ensure JSON is valid and parseable (no trailing commas, proper quotes)
+- Use roleId values from the Available Roles list above
+- Aim for 3-8 subtasks total (balance granularity with overhead)
+- Return ONLY the JSON object, nothing else
+
+Now decompose the task:`;
+  }
 }

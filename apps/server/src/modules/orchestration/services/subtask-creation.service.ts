@@ -1,7 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Task, TaskStatus } from '../../task/entities/task.entity';
+import {
+  Task,
+  TaskStatus,
+  TaskPriority,
+  TaskType,
+} from '../../task/entities/task.entity';
 import { Hollon, HollonLifecycle } from '../../hollon/entities/hollon.entity';
 
 export interface SubtaskDefinition {
@@ -120,8 +125,9 @@ export class SubtaskCreationService {
           status: TaskStatus.READY,
           assignedHollonId: null, // Subtasks start unassigned
           retryCount: 0,
-          priority: definition.priority as any,
-          type: definition.type as any, // Cast to any to avoid TypeScript error
+          priority:
+            (definition.priority as TaskPriority) || parentTask.priority,
+          type: (definition.type as TaskType) || TaskType.IMPLEMENTATION,
         });
 
         const savedSubtask = await this.taskRepo.save(subtask);
@@ -228,6 +234,9 @@ export class SubtaskCreationService {
 
       // Phase 3.7: Clean up temporary Hollon if it created these subtasks
       await this.cleanupTemporaryHollon(parentTask);
+
+      // Phase 3.7: Check and unblock dependent tasks
+      await this.checkAndUnblockDependentTasks(parentTaskId);
     } else if (anyFailed) {
       newStatus = TaskStatus.BLOCKED;
       this.logger.log(
@@ -391,5 +400,99 @@ export class SubtaskCreationService {
       maxDepth: this.MAX_SUBTASK_DEPTH,
       maxSubtasksPerParent: this.MAX_SUBTASKS_PER_PARENT,
     };
+  }
+
+  /**
+   * Phase 3.7: Check and unblock BLOCKED tasks when their dependencies complete
+   *
+   * Called when a task completes. Searches for BLOCKED tasks that depend on this task
+   * and unblocks them if ALL their dependencies are now completed.
+   *
+   * This enables sequential-parallel execution:
+   * - Research (READY) → executes immediately
+   * - Design (BLOCKED, depends on Research) → unblocks when Research completes
+   * - Implementation 1,2,3 (BLOCKED, depend on Design) → all unblock in parallel when Design completes
+   */
+  private async checkAndUnblockDependentTasks(
+    completedTaskId: string,
+  ): Promise<void> {
+    try {
+      // Find the completed task to get its parent context
+      const completedTask = await this.taskRepo.findOne({
+        where: { id: completedTaskId },
+        relations: ['parentTask'],
+      });
+
+      if (!completedTask || !completedTask.parentTask) {
+        // Not a subtask, nothing to unblock
+        return;
+      }
+
+      // Find all BLOCKED siblings (subtasks with same parent)
+      const blockedSiblings = await this.taskRepo.find({
+        where: {
+          parentTaskId: completedTask.parentTask.id,
+          status: TaskStatus.BLOCKED,
+        },
+        relations: ['dependencies'],
+      });
+
+      if (blockedSiblings.length === 0) {
+        this.logger.debug(
+          `No blocked siblings to check for task ${completedTaskId}`,
+        );
+        return;
+      }
+
+      this.logger.log(
+        `Checking ${blockedSiblings.length} blocked siblings for unblocking after task ${completedTaskId} completed`,
+      );
+
+      // Check each blocked task
+      for (const blockedTask of blockedSiblings) {
+        if (
+          !blockedTask.dependencies ||
+          blockedTask.dependencies.length === 0
+        ) {
+          // No dependencies but still BLOCKED? Unblock immediately
+          await this.taskRepo.update(
+            { id: blockedTask.id },
+            { status: TaskStatus.READY },
+          );
+          this.logger.log(
+            `Unblocked task ${blockedTask.id} "${blockedTask.title}": no dependencies`,
+          );
+          continue;
+        }
+
+        // Check if ALL dependencies are completed
+        const allDepsCompleted = blockedTask.dependencies.every(
+          (dep) => dep.status === TaskStatus.COMPLETED,
+        );
+
+        if (allDepsCompleted) {
+          // Unblock: BLOCKED → READY
+          await this.taskRepo.update(
+            { id: blockedTask.id },
+            { status: TaskStatus.READY },
+          );
+          this.logger.log(
+            `✅ Unblocked task ${blockedTask.id} "${blockedTask.title}": all ${blockedTask.dependencies.length} dependencies completed`,
+          );
+        } else {
+          const remainingDeps = blockedTask.dependencies.filter(
+            (dep) => dep.status !== TaskStatus.COMPLETED,
+          );
+          this.logger.debug(
+            `Task ${blockedTask.id} still blocked: ${remainingDeps.length}/${blockedTask.dependencies.length} dependencies pending`,
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error checking dependent tasks for ${completedTaskId}: ${error}`,
+      );
+      // Don't throw - unblocking is best-effort
+    }
   }
 }
