@@ -517,24 +517,24 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
       // 3. Create subtasks for each phase
       const subtaskResult = await this.subtaskService.createSubtasks(task.id, [
         {
-          title: `[Planning] ${task.title}`,
+          title: `[Research] ${task.title}`,
           description:
             'Analyze requirements and create detailed implementation plan',
-          type: TaskType.PLANNING,
+          type: TaskType.RESEARCH,
           priority: task.priority as string,
           affectedFiles: task.affectedFiles,
         },
         {
-          title: `[Analysis] ${task.title}`,
-          description: 'Design architecture and identify dependencies',
-          type: TaskType.ANALYSIS,
-          priority: task.priority as string,
-          affectedFiles: task.affectedFiles,
-        },
-        {
-          title: `[Implementation] ${task.title}`,
-          description: 'Implement the planned solution with tests',
+          title: `[Implementation] Phase 1 - ${task.title}`,
+          description: 'Design architecture and implement core functionality',
           type: TaskType.IMPLEMENTATION,
+          priority: task.priority as string,
+          affectedFiles: task.affectedFiles,
+        },
+        {
+          title: `[Review] ${task.title}`,
+          description: 'Review implementation and create tests',
+          type: TaskType.REVIEW,
           priority: task.priority as string,
           affectedFiles: task.affectedFiles,
         },
