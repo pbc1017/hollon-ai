@@ -10,6 +10,7 @@ import { TaskStatus } from '../../task/entities/task.entity';
 import { Organization } from '../../organization/entities/organization.entity';
 import { QualityGateService } from './quality-gate.service';
 import { EscalationService } from './escalation.service';
+import { HollonService } from '../../hollon/hollon.service';
 
 describe('HollonOrchestratorService', () => {
   let service: HollonOrchestratorService;
@@ -91,9 +92,10 @@ describe('HollonOrchestratorService', () => {
           useValue: mockEscalationService,
         },
         {
-          provide: 'HollonService',
+          provide: HollonService,
           useValue: {
             createTemporary: jest.fn(),
+            findOne: jest.fn(),
           },
         },
       ],
