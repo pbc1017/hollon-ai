@@ -21,7 +21,76 @@
 
 ## ⚡ 3단계 빠른 실행 (5분)
 
-### 전제 조건 확인
+### 🔐 사전 준비 (인간이 반드시 먼저 해야 하는 작업)
+
+#### 1. OpenAI API Key 설정 (Vector Embedding용)
+
+```bash
+# .env 파일에 OpenAI API Key 추가
+cd /Users/perry/Documents/Development/hollon-ai/apps/server
+
+# .env 파일 편집
+echo "OPENAI_API_KEY=sk-..." >> .env
+
+# 또는 직접 편집
+nano .env
+# OPENAI_API_KEY=sk-your-actual-key-here 추가
+
+# 확인
+cat .env | grep OPENAI_API_KEY
+```
+
+**⚠️ 중요:**
+
+- Phase 4에서 VectorSearchService가 OpenAI Embedding API를 사용합니다
+- text-embedding-3-small 모델 사용 (비용: $0.02/1M tokens)
+- API Key 없으면 Vector Search 기능이 작동하지 않습니다
+
+#### 2. GitHub CLI 인증 (자동 PR 생성용)
+
+```bash
+# 1. GitHub CLI 설치 확인
+gh --version
+# 예상: gh version 2.40.0+
+
+# 2. 인증 (아직 안 했으면)
+gh auth login
+# - What account do you want to log into? GitHub.com
+# - What is your preferred protocol for Git operations? HTTPS
+# - Authenticate Git with your GitHub credentials? Yes
+# - How would you like to authenticate? Login with a web browser
+
+# 3. 필요한 권한 확인
+gh auth refresh -s repo,workflow
+
+# 4. 인증 상태 확인
+gh auth status
+# 예상: ✓ Logged in to github.com as <your-username>
+
+# 5. 현재 repo 확인
+gh repo view
+# 예상: hollon-ai/hollon-ai (또는 your-org/hollon-ai)
+```
+
+**⚠️ 중요:**
+
+- Hollon이 자동으로 PR을 생성하려면 GitHub CLI 인증 필요
+- `repo`, `workflow` 권한 필수
+- 인증 안 하면 PR 생성 시 에러 발생
+
+#### 3. Git 설정 확인
+
+```bash
+# Git user 설정 확인
+git config user.name
+git config user.email
+
+# 설정 안 되어 있으면 추가
+git config --global user.name "Your Name"
+git config --global user.email "your.email@example.com"
+```
+
+### ✅ 전제 조건 확인
 
 ```bash
 # Phase 3.8 완료 확인
@@ -32,6 +101,8 @@ pnpm --filter @hollon-ai/server test:integration
 # ✅ Phase 3.7 (HollonExecutionService 완전 자율 실행)
 # ✅ Phase 3.5 (자율 코드 리뷰, PR 자동 병합)
 # ✅ Document/Memory 인프라 (pgvector)
+# ✅ OpenAI API Key 설정 (.env에 OPENAI_API_KEY)
+# ✅ GitHub CLI 인증 (gh auth status 통과)
 ```
 
 ### Step 1: DB Seed + 서버 시작 (2분)
@@ -1646,8 +1717,36 @@ pnpm --filter @hollon-ai/server test:coverage
 
 ### Phase 4 킥오프 전 체크리스트
 
+#### 🔐 인간이 먼저 해야 할 작업
+
 ```bash
-# 1. Phase 3.8 완료 확인
+# 1. OpenAI API Key 설정 확인
+cat /Users/perry/Documents/Development/hollon-ai/apps/server/.env | grep OPENAI_API_KEY
+# 예상: OPENAI_API_KEY=sk-...
+
+# 없으면 추가:
+# echo "OPENAI_API_KEY=sk-your-key" >> .env
+
+# 2. GitHub CLI 인증 확인
+gh auth status
+# 예상: ✓ Logged in to github.com as <your-username>
+
+# 인증 안 되어 있으면:
+# gh auth login
+# gh auth refresh -s repo,workflow
+
+# 3. Git user 설정 확인
+git config user.name
+git config user.email
+# 설정 안 되어 있으면:
+# git config --global user.name "Your Name"
+# git config --global user.email "your.email@example.com"
+```
+
+#### ✅ 시스템 상태 확인
+
+```bash
+# 4. Phase 3.8 완료 확인
 pnpm --filter @hollon-ai/server test:integration
 
 # 필수 통과 테스트:
@@ -1655,22 +1754,17 @@ pnpm --filter @hollon-ai/server test:integration
 # ✅ phase3.7-autonomous-execution.integration-spec.ts
 # ✅ phase3.7-infinite-loop-prevention.integration-spec.ts
 
-# 2. Manager Hollon 확인
+# 5. Manager Hollon 확인
 curl -s http://localhost:3001/organizations | jq '.[0].id' | \
   xargs -I {} curl -s "http://localhost:3001/teams?organizationId={}" | \
   jq '.[] | select(.name == "Phase 4 Knowledge Team") | {name, managerHollonId}'
 
 # 예상: managerHollonId가 존재해야 함
 
-# 3. Document 인프라 확인
+# 6. Document 인프라 확인
 psql -U hollon_dev -d hollon_dev -c "\d hollon.documents" | grep embedding
 
 # 예상: embedding | vector(1536) 확인
-
-# 4. GitHub CLI 인증
-gh auth status
-
-# 예상: "Logged in to github.com"
 ```
 
 ### Phase 4 진행 중 체크리스트 (주간)
@@ -1734,10 +1828,17 @@ curl -s "http://localhost:3001/tasks?projectId=$PROJECT_ID&depth=1" | \
 
 **Phase 4 킥오프 전 (필수):**
 
+**🔐 인간이 먼저 해야 할 작업:**
+
+- [ ] OpenAI API Key 설정 (.env에 OPENAI_API_KEY 추가)
+- [ ] GitHub CLI 인증 완료 (gh auth login + repo/workflow 권한)
+- [ ] Git user 설정 확인 (user.name, user.email)
+
+**✅ 시스템 상태 확인:**
+
 - [ ] Phase 3.8 integration tests 통과
 - [ ] Manager Hollon 생성 확인
 - [ ] Document + pgvector 인프라 확인
-- [ ] GitHub CLI 인증 완료
 
 **Phase 4 진행 중 (주간):**
 
