@@ -498,7 +498,7 @@ describe('Phase 3.7 Autonomous Execution (integration)', () => {
           organizationId,
           createdBy: tempHollonId,
         }),
-      ).rejects.toThrow(/Cannot create temporary hollon from depth 1 hollon/);
+      ).rejects.toThrow(/Maximum temporary hollon depth \(1\) exceeded/);
     });
   });
 });

@@ -202,7 +202,7 @@ describe('Phase 3.7: Sub-Hollon Creation and Cleanup', () => {
           brainProviderId: 'claude_code',
           createdBy: depth1Hollon.id, // Parent is depth=1, should fail
         }),
-      ).rejects.toThrow(/Cannot create temporary hollon from depth/);
+      ).rejects.toThrow(/Maximum temporary hollon depth \(1\) exceeded/);
 
       console.log(
         '✅ Depth constraint enforced: depth=1 hollons cannot create more temporary hollons',
