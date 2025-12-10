@@ -225,21 +225,23 @@ export class EscalationService {
       };
     }
 
-    // Unassign from current hollon and make available for team
+    // Phase 3.8: Unassign from current hollon and make available for team
+    // Task should be assigned to TEAM (not null) so Manager can redistribute
     await this.taskRepo.update(request.taskId, {
       assignedHollonId: null,
+      assignedTeamId: hollon.teamId, // Phase 3.8: Assign to team for Manager redistribution
       status: TaskStatus.READY,
       errorMessage: `Reassigned from ${hollon.name}: ${request.reason}`,
     });
 
     this.logger.log(
-      `Task ${request.taskId} unassigned and available for ${availableHollons.length} team members`,
+      `Task ${request.taskId} reassigned to team ${hollon.teamId} for Manager redistribution (${availableHollons.length} team members available)`,
     );
 
     return {
       success: true,
       action: 'task_reassigned_to_team',
-      message: `Task made available to ${availableHollons.length} team member(s)`,
+      message: `Task reassigned to team for Manager redistribution (${availableHollons.length} team member(s) available)`,
     };
   }
 
@@ -251,21 +253,64 @@ export class EscalationService {
     request: EscalationRequest,
   ): Promise<EscalationResult> {
     this.logger.log(
-      `Level 3 - Team leader decision: Marking task ${request.taskId} for leader review`,
+      `Level 3 - Team leader decision: Assigning task ${request.taskId} to Manager for review`,
     );
 
-    // Update task to IN_REVIEW status for team leader
-    await this.taskRepo.update(request.taskId, {
-      status: TaskStatus.IN_REVIEW,
-      errorMessage: `Escalated to team leader: ${request.reason}`,
+    // Phase 3.8: Get hollon's team and Manager
+    const hollon = await this.hollonRepo.findOne({
+      where: { id: request.hollonId },
+      relations: ['team', 'team.manager'],
     });
 
-    this.logger.log(`Task ${request.taskId} marked for team leader review`);
+    if (!hollon?.team) {
+      this.logger.error(
+        `Cannot escalate to team leader: Hollon ${request.hollonId} has no team`,
+      );
+      return {
+        success: false,
+        action: 'no_team_leader',
+        nextLevel: EscalationLevel.ORGANIZATION,
+        message: 'No team to escalate to, escalating to organization level',
+      };
+    }
+
+    const manager = hollon.team.manager;
+    if (!manager) {
+      this.logger.warn(
+        `Team ${hollon.team.name} has no manager, assigning to team instead`,
+      );
+
+      // Fallback: Assign to team if no manager exists
+      await this.taskRepo.update(request.taskId, {
+        assignedHollonId: null,
+        assignedTeamId: hollon.teamId,
+        status: TaskStatus.IN_REVIEW,
+        errorMessage: `Escalated to team (no manager): ${request.reason}`,
+      });
+
+      return {
+        success: true,
+        action: 'escalated_to_team',
+        message: 'Task assigned to team (no manager available)',
+      };
+    }
+
+    // Phase 3.8: Assign task to Manager hollon
+    await this.taskRepo.update(request.taskId, {
+      assignedHollonId: manager.id,
+      assignedTeamId: null, // XOR: Assigned to Manager, not team
+      status: TaskStatus.IN_REVIEW,
+      errorMessage: `Escalated to Manager ${manager.name}: ${request.reason}`,
+    });
+
+    this.logger.log(
+      `Task ${request.taskId} assigned to Manager ${manager.name} for review`,
+    );
 
     return {
       success: true,
       action: 'escalated_to_team_leader',
-      message: 'Task marked for team leader review',
+      message: `Task assigned to Manager ${manager.name} for review`,
     };
   }
 
@@ -410,7 +455,7 @@ export class EscalationService {
 
     const task = await this.taskRepo.findOne({
       where: { id: request.taskId },
-      relations: ['project'],
+      relations: ['project', 'assignedHollon', 'assignedHollon.team'],
     });
 
     if (!task) {
@@ -421,50 +466,78 @@ export class EscalationService {
       };
     }
 
+    // Phase 3.8: Determine if we should use Team Distribution
+    const shouldUseTeamDistribution =
+      task.assignedHollon?.team !== undefined &&
+      task.assignedHollon?.team !== null;
+
     // Task를 BLOCKED 상태로 변경 (서브태스크 생성 대기)
     await this.taskRepo.update(task.id, {
       status: TaskStatus.BLOCKED,
       errorMessage: `Decomposition requested: ${request.reason}`,
     });
 
-    // Phase 3.5: GoalDecompositionService 통합
+    // Phase 3.5/3.8: GoalDecompositionService 통합
     // Task를 자동으로 Goal로 변환 후 분해
     if (this.goalDecompositionService) {
       try {
         this.logger.log(
-          `Attempting automatic task decomposition using GoalDecompositionService`,
+          `Attempting automatic task decomposition using GoalDecompositionService` +
+            (shouldUseTeamDistribution ? ' with Team Distribution' : ''),
         );
 
         // Task를 임시 Goal로 변환하여 분해
         const tempGoal = await this.convertTaskToGoal(task);
 
-        // Goal 분해 실행
+        // Phase 3.8: Goal 분해 실행 (useTeamDistribution 옵션)
         const decomposition = await this.goalDecompositionService.decomposeGoal(
           tempGoal.id,
           {
             strategy: 'task_based',
             maxDepth: 2,
             createDependencies: true,
+            useTeamDistribution: shouldUseTeamDistribution, // Phase 3.8
+            autoAssign: !shouldUseTeamDistribution, // Only auto-assign if not using team distribution
           },
         );
 
         this.logger.log(
-          `Automatic decomposition completed: ${decomposition.tasksCreated} subtasks created`,
+          `Automatic decomposition completed: ${decomposition.tasksCreated} subtasks created` +
+            (shouldUseTeamDistribution ? ' (Team Distribution enabled)' : ''),
         );
 
         // 원본 Task를 부모로 설정
         await this.linkSubtasksToParent(task.id, decomposition);
 
-        // 원본 Task를 READY로 복구 (서브태스크가 완료되면 자동 완료)
-        await this.taskRepo.update(task.id, {
-          status: TaskStatus.READY,
-          errorMessage: null,
-        });
+        // Phase 3.8: Update task based on decomposition type
+        if (shouldUseTeamDistribution) {
+          // Convert original task to Team Task (TEAM_EPIC)
+          await this.taskRepo.update(task.id, {
+            assignedHollonId: null,
+            assignedTeamId: task.assignedHollon!.teamId,
+            status: TaskStatus.PENDING, // Wait for Manager distribution
+            errorMessage: null,
+          });
+
+          this.logger.log(
+            `Task ${task.id} converted to Team Task, waiting for Manager distribution`,
+          );
+        } else {
+          // Keep as regular task
+          await this.taskRepo.update(task.id, {
+            status: TaskStatus.READY,
+            errorMessage: null,
+          });
+        }
 
         return {
           success: true,
           action: EscalationAction.DECOMPOSE,
-          message: `Task automatically decomposed into ${decomposition.tasksCreated} subtasks`,
+          message:
+            `Task automatically decomposed into ${decomposition.tasksCreated} subtasks` +
+            (shouldUseTeamDistribution
+              ? ' and converted to Team Task for Manager distribution'
+              : ''),
         };
       } catch (error) {
         const err = error as Error;
