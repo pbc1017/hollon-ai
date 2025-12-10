@@ -1,27 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { INestApplication } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { GoalDecompositionService } from '../../src/modules/goal/services/goal-decomposition.service';
-import { TeamTaskDistributionService } from '../../src/modules/orchestration/services/team-task-distribution.service';
-import { Goal } from '../../src/modules/goal/entities/goal.entity';
+import { AppModule } from '@/app.module';
+import { GoalDecompositionService } from '@/modules/goal/services/goal-decomposition.service';
+import { TeamTaskDistributionService } from '@/modules/orchestration/services/team-task-distribution.service';
+import { BrainProviderService } from '@/modules/brain-provider/brain-provider.service';
+import { Goal } from '@/modules/goal/entities/goal.entity';
 import {
   Task,
   TaskStatus,
   TaskType,
-} from '../../src/modules/task/entities/task.entity';
-import { Team } from '../../src/modules/team/entities/team.entity';
-import {
-  Hollon,
-  HollonStatus,
-} from '../../src/modules/hollon/entities/hollon.entity';
-import { Role } from '../../src/modules/role/entities/role.entity';
-import { Organization } from '../../src/modules/organization/entities/organization.entity';
-import { Project } from '../../src/modules/project/entities/project.entity';
-import { BrainProviderModule } from '../../src/modules/brain-provider/brain-provider.module';
-import { BrainProviderService } from '../../src/modules/brain-provider/brain-provider.service';
-import { SubtaskCreationService } from '../../src/modules/orchestration/services/subtask-creation.service';
-import { GoalService } from '../../src/modules/goal/goal.service';
-import { ResourcePlannerService } from '../../src/modules/task/services/resource-planner.service';
+} from '@/modules/task/entities/task.entity';
+import { Team } from '@/modules/team/entities/team.entity';
+import { Hollon, HollonStatus } from '@/modules/hollon/entities/hollon.entity';
+import { Role } from '@/modules/role/entities/role.entity';
+import { Organization } from '@/modules/organization/entities/organization.entity';
+import { cleanupTestData } from '../utils/test-database.utils';
 
 /**
  * Phase 3.8: Team Distribution Integration Test
@@ -33,11 +27,11 @@ import { ResourcePlannerService } from '../../src/modules/task/services/resource
  * 4. Manager-driven distribution (Level 0 → Level 1)
  */
 describe('Phase 3.8 Team Distribution Integration Test', () => {
-  let module: TestingModule;
+  let app: INestApplication;
+  let dataSource: DataSource;
   let goalDecompositionService: GoalDecompositionService;
   let teamTaskDistributionService: TeamTaskDistributionService;
   let brainProvider: BrainProviderService;
-  let dataSource: DataSource;
 
   let organization: Organization;
   let team: Team;
@@ -48,80 +42,22 @@ describe('Phase 3.8 Team Distribution Integration Test', () => {
   let dev2: Hollon;
 
   beforeAll(async () => {
-    module = await Test.createTestingModule({
-      imports: [
-        TypeOrmModule.forRoot({
-          type: 'postgres',
-          host: process.env.DB_HOST || 'localhost',
-          port: parseInt(process.env.DB_PORT || '5432'),
-          username: process.env.DB_USERNAME || 'hollon_dev',
-          password: process.env.DB_PASSWORD || 'hollon_dev_password',
-          database: process.env.DB_DATABASE || 'hollon_dev',
-          schema: process.env.DB_SCHEMA || 'hollon_test_worker_1',
-          entities: [Goal, Task, Team, Hollon, Role, Organization, Project],
-          synchronize: false,
-          logging: false,
-        }),
-        TypeOrmModule.forFeature([
-          Goal,
-          Task,
-          Team,
-          Hollon,
-          Role,
-          Organization,
-          Project,
-        ]),
-        BrainProviderModule,
-      ],
-      providers: [
-        GoalDecompositionService,
-        TeamTaskDistributionService,
-        SubtaskCreationService,
-        // Add missing dependencies
-        {
-          provide: GoalService,
-          useValue: {
-            // Mock GoalService - not needed for this test
-          },
-        },
-        {
-          provide: ResourcePlannerService,
-          useValue: {
-            // Mock ResourcePlannerService - not needed for this test
-          },
-        },
-      ],
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
     }).compile();
 
-    goalDecompositionService = module.get<GoalDecompositionService>(
-      GoalDecompositionService,
-    );
-    teamTaskDistributionService = module.get<TeamTaskDistributionService>(
-      TeamTaskDistributionService,
-    );
-    brainProvider = module.get<BrainProviderService>(BrainProviderService);
-    dataSource = module.get<DataSource>(DataSource);
+    app = moduleFixture.createNestApplication();
+    await app.init();
 
-    // Clean up
-    await dataSource.query('TRUNCATE tasks CASCADE');
-    await dataSource.query('TRUNCATE hollons CASCADE');
-    await dataSource.query('TRUNCATE teams CASCADE');
-    await dataSource.query('TRUNCATE roles CASCADE');
-    await dataSource.query('TRUNCATE organizations CASCADE');
-    await dataSource.query('TRUNCATE goals CASCADE');
-    await dataSource.query('TRUNCATE projects CASCADE');
+    dataSource = app.get(DataSource);
+    goalDecompositionService = app.get(GoalDecompositionService);
+    teamTaskDistributionService = app.get(TeamTaskDistributionService);
+    brainProvider = app.get(BrainProviderService);
   });
 
   afterAll(async () => {
-    await dataSource.query('TRUNCATE tasks CASCADE');
-    await dataSource.query('TRUNCATE hollons CASCADE');
-    await dataSource.query('TRUNCATE teams CASCADE');
-    await dataSource.query('TRUNCATE roles CASCADE');
-    await dataSource.query('TRUNCATE organizations CASCADE');
-    await dataSource.query('TRUNCATE goals CASCADE');
-    await dataSource.query('TRUNCATE projects CASCADE');
-
-    await module.close();
+    await cleanupTestData(dataSource);
+    await app.close();
   });
 
   describe('Complete Team Distribution Flow', () => {
@@ -240,26 +176,28 @@ describe('Phase 3.8 Team Distribution Integration Test', () => {
     it('Step 3: Goal Decomposition with useTeamDistribution', async () => {
       const goalRepo = dataSource.getRepository(Goal);
 
-      // Create Goal
+      // Create Goal with Team assignment
       const goal = await goalRepo.save({
         organizationId: organization.id,
         title: 'Phase 3.8 Test Goal',
         description: 'Test team-based distribution',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        goalType: 'project' as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        priority: 'high' as any,
+        goalType: 'objective',
         targetDate: new Date('2025-12-31'),
+        assignedTeamId: team.id, // Assign to team for team distribution
       });
 
       // Decompose with useTeamDistribution
-
       const result = await goalDecompositionService.decomposeGoal(goal.id, {
         maxTasks: 10,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         preferredComplexity: 'medium' as any,
         useTeamDistribution: true, // Phase 3.8!
       });
+
+      // Log result for debugging
+      if (!result.success) {
+        console.error('Goal decomposition failed:', result.error);
+      }
 
       expect(result.success).toBe(true);
       expect(result.projects.length).toBe(1);
