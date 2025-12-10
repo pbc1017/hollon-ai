@@ -34,6 +34,8 @@ export enum TaskPriority {
 }
 
 export enum TaskType {
+  PLANNING = 'planning',
+  ANALYSIS = 'analysis',
   IMPLEMENTATION = 'implementation',
   REVIEW = 'review',
   RESEARCH = 'research',

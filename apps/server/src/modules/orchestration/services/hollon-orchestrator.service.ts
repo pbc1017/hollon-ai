@@ -1,7 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
+import {
+  Hollon,
+  HollonStatus,
+  HollonLifecycle,
+} from '../../hollon/entities/hollon.entity';
 import {
   Document,
   DocumentType,
@@ -9,10 +13,13 @@ import {
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 import { PromptComposerService } from './prompt-composer.service';
 import { TaskPoolService } from './task-pool.service';
-import { Task } from '../../task/entities/task.entity';
+import { Task, TaskType, TaskStatus } from '../../task/entities/task.entity';
 import { QualityGateService } from './quality-gate.service';
 import { Organization } from '../../organization/entities/organization.entity';
 import { EscalationService, EscalationLevel } from './escalation.service';
+import { HollonService } from '../../hollon/hollon.service';
+import { SubtaskCreationService } from './subtask-creation.service';
+import { Role } from '../../role/entities/role.entity';
 
 export interface ExecutionCycleResult {
   success: boolean;
@@ -51,6 +58,10 @@ export class HollonOrchestratorService {
     private readonly taskPool: TaskPoolService,
     private readonly qualityGate: QualityGateService,
     private readonly escalationService: EscalationService,
+    @Inject(forwardRef(() => HollonService))
+    private readonly hollonService: HollonService,
+    @Inject(forwardRef(() => SubtaskCreationService))
+    private readonly subtaskService: SubtaskCreationService,
   ) {}
 
   /**
@@ -437,41 +448,224 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
   }
 
   /**
-   * Phase 3.7: Handle complex task by creating Sub-Hollons
+   * Phase 3.7: Handle complex task by creating Sub-Hollons (Planner/Analyzer/Coder pattern)
    *
-   * Note: For Phase 3.7, we detect complex tasks but delegate to existing
-   * subtask creation mechanism. Full Sub-Hollon specialization (Planner/Analyzer/Coder)
-   * will be implemented in a future phase.
+   * Creates specialized temporary Sub-Hollons to handle complex tasks through delegation:
+   * 1. Planner → Analyzes requirements and creates implementation plan
+   * 2. Analyzer → Designs architecture and identifies dependencies
+   * 3. Coder → Implements the solution with tests
    *
-   * Returns true if task was successfully delegated
+   * Returns true if task was successfully delegated to Sub-Hollons
    */
   private async handleComplexTask(
     task: Task,
-    _parentHollon: Hollon,
+    parentHollon: Hollon,
   ): Promise<boolean> {
+    const startTime = Date.now();
+
     try {
       this.logger.log(
-        `Complex task detected: ${task.id}. Task will use enhanced analysis.`,
+        `Handling complex task ${task.id}: ${task.title} with Sub-Hollon delegation`,
       );
 
-      // Phase 3.7: For now, we log complex tasks and fall back to direct execution
-      // In a future phase, we will:
-      // 1. Create specialized Sub-Hollons (Planner, Analyzer, Coder)
-      // 2. Decompose the task using Brain Provider
-      // 3. Create subtasks with SubtaskCreationService
-      // 4. Assign subtasks to Sub-Hollons
+      // 1. Find or create specialized roles (Planner, Analyzer, Coder)
+      const plannerRole = await this.findOrCreateRole(
+        'Planner',
+        parentHollon.organizationId,
+      );
+      const analyzerRole = await this.findOrCreateRole(
+        'Analyzer',
+        parentHollon.organizationId,
+      );
+      const coderRole = await this.findOrCreateRole(
+        'Coder',
+        parentHollon.organizationId,
+      );
 
-      // For now, execute directly but with enhanced logging
+      // 2. Create temporary Sub-Hollons
+      const plannerHollon = await this.hollonService.createTemporary({
+        name: `Planner-${task.id.substring(0, 8)}`,
+        organizationId: parentHollon.organizationId,
+        teamId: parentHollon.teamId || undefined,
+        roleId: plannerRole.id,
+        brainProviderId: parentHollon.brainProviderId || 'claude_code',
+        createdBy: parentHollon.id,
+      });
+
+      const analyzerHollon = await this.hollonService.createTemporary({
+        name: `Analyzer-${task.id.substring(0, 8)}`,
+        organizationId: parentHollon.organizationId,
+        teamId: parentHollon.teamId || undefined,
+        roleId: analyzerRole.id,
+        brainProviderId: parentHollon.brainProviderId || 'claude_code',
+        createdBy: parentHollon.id,
+      });
+
+      const coderHollon = await this.hollonService.createTemporary({
+        name: `Coder-${task.id.substring(0, 8)}`,
+        organizationId: parentHollon.organizationId,
+        teamId: parentHollon.teamId || undefined,
+        roleId: coderRole.id,
+        brainProviderId: parentHollon.brainProviderId || 'claude_code',
+        createdBy: parentHollon.id,
+      });
+
       this.logger.log(
-        `Task ${task.id} marked as complex. Executing with enhanced context.`,
+        `Created 3 Sub-Hollons for task ${task.id}: Planner, Analyzer, Coder`,
       );
 
-      return false; // Execute directly for now
+      // 3. Create subtasks for each phase
+      const subtaskResult = await this.subtaskService.createSubtasks(task.id, [
+        {
+          title: `[Planning] ${task.title}`,
+          description:
+            'Analyze requirements and create detailed implementation plan',
+          type: TaskType.PLANNING,
+          priority: task.priority as string,
+          affectedFiles: task.affectedFiles,
+        },
+        {
+          title: `[Analysis] ${task.title}`,
+          description: 'Design architecture and identify dependencies',
+          type: TaskType.ANALYSIS,
+          priority: task.priority as string,
+          affectedFiles: task.affectedFiles,
+        },
+        {
+          title: `[Implementation] ${task.title}`,
+          description: 'Implement the planned solution with tests',
+          type: TaskType.IMPLEMENTATION,
+          priority: task.priority as string,
+          affectedFiles: task.affectedFiles,
+        },
+      ]);
+
+      if (!subtaskResult.success || subtaskResult.createdSubtasks.length < 3) {
+        throw new Error(
+          `Failed to create subtasks: ${subtaskResult.errors?.join(', ')}`,
+        );
+      }
+
+      this.logger.log(
+        `Created ${subtaskResult.createdSubtasks.length} subtasks for task ${task.id}`,
+      );
+
+      // 4. Assign subtasks to Sub-Hollons
+      const [planningTask, analysisTask, implementationTask] =
+        subtaskResult.createdSubtasks;
+
+      // Update tasks to assign them to the Sub-Hollons
+      await this.hollonRepo.manager.update(
+        Task,
+        { id: planningTask.id },
+        { assignedHollonId: plannerHollon.id, status: TaskStatus.READY },
+      );
+      await this.hollonRepo.manager.update(
+        Task,
+        { id: analysisTask.id },
+        { assignedHollonId: analyzerHollon.id, status: TaskStatus.READY },
+      );
+      await this.hollonRepo.manager.update(
+        Task,
+        { id: implementationTask.id },
+        { assignedHollonId: coderHollon.id, status: TaskStatus.READY },
+      );
+
+      this.logger.log(
+        `Assigned subtasks to Sub-Hollons. Duration: ${Date.now() - startTime}ms`,
+      );
+
+      // Sub-Hollons will be automatically executed by HollonExecutionService
+      // Temporary Hollons will be cleaned up by SubtaskCreationService after all subtasks complete
+
+      return true; // Task delegated successfully
     } catch (error) {
       this.logger.error(
-        `Error handling complex task ${task.id}: ${error}. Falling back to direct execution.`,
+        `Error delegating complex task ${task.id}: ${error}. Falling back to direct execution.`,
       );
-      return false;
+
+      // Cleanup any created Sub-Hollons
+      try {
+        const tempHollons = await this.hollonRepo.find({
+          where: {
+            createdByHollonId: parentHollon.id,
+            lifecycle: HollonLifecycle.TEMPORARY,
+          },
+        });
+
+        for (const hollon of tempHollons) {
+          await this.hollonRepo.remove(hollon);
+        }
+      } catch (cleanupError) {
+        this.logger.error(`Failed to cleanup Sub-Hollons: ${cleanupError}`);
+      }
+
+      return false; // Fall back to direct execution
     }
+  }
+
+  /**
+   * Find or create a specialized role (Planner, Analyzer, Coder)
+   *
+   * These roles are used for Sub-Hollon delegation of complex tasks
+   */
+  private async findOrCreateRole(
+    roleName: string,
+    organizationId: string,
+  ): Promise<Role> {
+    // Try to find existing role by name and organization
+    let role = await this.hollonRepo.manager.findOne(Role, {
+      where: { name: roleName, organizationId },
+    });
+
+    if (!role) {
+      const roleConfigs: Record<
+        string,
+        { systemPrompt: string; capabilities: string[] }
+      > = {
+        Planner: {
+          systemPrompt:
+            'You are a planning specialist. Analyze requirements and create detailed implementation plans.',
+          capabilities: [
+            'planning',
+            'requirements-analysis',
+            'architecture-design',
+          ],
+        },
+        Analyzer: {
+          systemPrompt:
+            'You are an architecture analyst. Design system architecture and identify dependencies.',
+          capabilities: [
+            'architecture',
+            'design-patterns',
+            'dependency-analysis',
+          ],
+        },
+        Coder: {
+          systemPrompt:
+            'You are an implementation specialist. Write clean, tested code following the plan.',
+          capabilities: ['typescript', 'nestjs', 'testing', 'implementation'],
+        },
+      };
+
+      const config = roleConfigs[roleName];
+      if (!config) {
+        throw new Error(`Unknown specialized role: ${roleName}`);
+      }
+
+      // Create role directly via repository
+      role = this.hollonRepo.manager.create(Role, {
+        name: roleName,
+        organizationId,
+        systemPrompt: config.systemPrompt,
+        capabilities: config.capabilities,
+      });
+
+      role = await this.hollonRepo.manager.save(Role, role);
+
+      this.logger.log(`Created specialized role: ${roleName}`);
+    }
+
+    return role;
   }
 }

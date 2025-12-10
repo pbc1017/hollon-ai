@@ -191,18 +191,77 @@ curl -s "http://localhost:3001/hollons?organizationId=$ORG_ID" | \
 curl -X POST "http://localhost:3001/tasks/projects/$PROJECT_ID/rebalance"
 ```
 
-### **Step 7: Sprint 시작 (자동)**
+### **Step 7: Sprint 자동 시작 ✨ (Phase 3.7 완전 자율 실행)**
 
-**MessageListener + TaskExecutionService 자동 실행:**
+**HollonExecutionService + TaskExecutionService 자동 실행:**
 
-1. Task `ready` + `assignedHollonId` → MessageListener 알림
-2. Hollon Pull → TaskExecutionService 실행:
-   - Git Worktree 생성 (`feature/task-xxx`)
-   - Brain Provider 실행 (코딩 + 커밋)
-   - `git push origin feature/task-xxx`
-   - `gh pr create`
-   - CodeReviewService 자동 리뷰
-   - AutoMergeService 자동 병합
+Goal 분해 + autoAssign 완료 후, **아무것도 하지 않아도** Hollon이 자율 실행 시작!
+
+#### 자동 실행 메커니즘:
+
+**1️⃣ HollonExecutionService (매 10초)**
+
+- IDLE + assignedTask 있는 Hollon 감지
+- HollonOrchestrator.runCycle() 자동 호출
+- Emergency Stop 체크 (Organization.autonomousExecutionEnabled)
+- 동시 실행 제한 (maxConcurrentHolons)
+
+**2️⃣ Task 실행 플로우 (완전 자동)**
+
+```
+Task 할당됨 (autoAssign)
+↓ 10초 후
+HollonExecutionService 감지
+↓
+HollonOrchestrator.runCycle()
+↓
+Git Worktree 생성 (feature/task-xxx)
+↓
+Brain Provider 실행 (코딩 + 커밋)
+↓
+git push origin feature/task-xxx
+↓
+gh pr create → PR 생성
+↓
+MessageListener (1분 후)
+↓
+CodeReviewService → 자동 리뷰
+↓
+AutoMergeService → 자동 병합
+↓
+Task 완료 → Hollon IDLE
+↓ 10초 후
+다음 Task 자동 시작 (반복)
+```
+
+#### 🎉 완전 자율 실행!
+
+- ✅ **인간 개입 불필요**: Goal 생성 후 모니터링만 하면 됨
+- ✅ **자동 Task Pull**: Hollon이 스스로 다음 Task 선택
+- ✅ **자동 PR 생성**: gh CLI를 통한 PR 자동 생성
+- ✅ **자동 Code Review**: MessageListener가 자동 리뷰 실행
+- ✅ **자동 Merge**: 승인 시 자동 병합
+- ✅ **무한 반복**: Task 완료 후 다음 Task 자동 시작
+
+#### 안전장치 (Phase 3.7):
+
+- ✅ **동시 실행 제한**: Organization.maxConcurrentHolons
+- ✅ **무한 루프 방지**: Exponential backoff (5분 → 15분 → 1시간)
+- ✅ **Emergency Stop**: POST /organizations/:id/emergency-stop
+- ✅ **Stuck Task 감지**: 2시간 이상 IN_PROGRESS → 자동 복구
+- ✅ **진행률 모니터링**: 30분마다 진행 상황 로그
+
+#### Emergency Stop (긴급 중단):
+
+```bash
+# 자율 실행 중단
+curl -X POST "http://localhost:3001/organizations/$ORG_ID/emergency-stop" \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "Testing Phase 4 setup"}'
+
+# 실행 재개
+curl -X POST "http://localhost:3001/organizations/$ORG_ID/resume-execution"
+```
 
 ```bash
 # 진행 상황 확인
