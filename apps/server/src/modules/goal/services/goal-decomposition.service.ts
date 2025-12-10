@@ -290,7 +290,7 @@ Please provide the decomposition in JSON format only, no additional text.`;
         // Group tasks by team (simple round-robin for now)
         // In production, this would use intelligent team matching
         const tasksPerTeam = Math.ceil(projectDef.tasks.length / teams.length);
-        
+
         for (let i = 0; i < teams.length; i++) {
           const team = teams[i];
           const teamTasks = projectDef.tasks.slice(
@@ -342,7 +342,11 @@ Please provide the decomposition in JSON format only, no additional text.`;
 
     // ✅ Phase 3 Week 15-16: autoAssign 통합
     // Goal 분해 직후 ResourcePlannerService로 자동 할당
-    if (options?.autoAssign && createdProjects.length > 0 && !options?.useTeamDistribution) {
+    if (
+      options?.autoAssign &&
+      createdProjects.length > 0 &&
+      !options?.useTeamDistribution
+    ) {
       this.logger.log(
         `Auto-assigning tasks for ${createdProjects.length} projects`,
       );
@@ -409,7 +413,7 @@ Please provide the decomposition in JSON format only, no additional text.`;
       description += `\n${index + 1}. **${taskDef.title}**\n`;
       description += `   ${taskDef.description}\n`;
       description += `   Priority: ${taskDef.priority}\n`;
-      
+
       if (taskDef.requiredSkills && taskDef.requiredSkills.length > 0) {
         description += `   Required Skills: ${taskDef.requiredSkills.join(', ')}\n`;
       }

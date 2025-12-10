@@ -84,7 +84,11 @@ describe('Phase 3.8 Hierarchical Task Distribution (e2e)', () => {
           name: 'Manager',
           description: 'Team manager role for task distribution',
           organizationId,
-          capabilities: ['task-distribution', 'team-coordination', 'decision-making'],
+          capabilities: [
+            'task-distribution',
+            'team-coordination',
+            'decision-making',
+          ],
         })
         .expect(201);
 
@@ -204,7 +208,9 @@ describe('Phase 3.8 Hierarchical Task Distribution (e2e)', () => {
           teamId: knowledgeTeamId,
           goalType: 'strategic',
           priority: 'P1',
-          targetDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(), // 90 days
+          targetDate: new Date(
+            Date.now() + 90 * 24 * 60 * 60 * 1000,
+          ).toISOString(), // 90 days
         })
         .expect(201);
 
@@ -228,7 +234,7 @@ describe('Phase 3.8 Hierarchical Task Distribution (e2e)', () => {
       expect(response.body.tasks).toBeDefined();
 
       projectId = response.body.projects[0].id;
-      
+
       // Filter for Team Tasks (TEAM_EPIC type)
       const teamTasks = response.body.tasks.filter(
         (task: any) => task.type === 'team_epic',
@@ -264,18 +270,19 @@ describe('Phase 3.8 Hierarchical Task Distribution (e2e)', () => {
     it('Step 10: Trigger Team Task Distribution (Manager)', async () => {
       // Get TeamTaskDistributionService from the app
       const teamDistributionService = app.get('TeamTaskDistributionService');
-      
+
       expect(teamDistributionService).toBeDefined();
 
       for (const teamTaskId of teamTaskIds) {
-        const subtasks = await teamDistributionService.distributeToTeam(teamTaskId);
-        
+        const subtasks =
+          await teamDistributionService.distributeToTeam(teamTaskId);
+
         expect(subtasks).toBeDefined();
         expect(subtasks.length).toBeGreaterThan(0);
         expect(subtasks.length).toBeLessThanOrEqual(7); // Manager should create 3-7 subtasks
-        
+
         hollonTaskIds.push(...subtasks.map((t: any) => t.id));
-        
+
         console.log(
           `Manager distributed Team Task ${teamTaskId} into ${subtasks.length} subtasks`,
         );
@@ -346,7 +353,7 @@ describe('Phase 3.8 Hierarchical Task Distribution (e2e)', () => {
       );
 
       console.log('\n=== Hierarchical Task Structure ===');
-      
+
       // Level 0: Team Tasks
       const level0Tasks = allTasks.filter((t: any) => t.depth === 0);
       console.log(`\nLevel 0 (Team Tasks): ${level0Tasks.length}`);
