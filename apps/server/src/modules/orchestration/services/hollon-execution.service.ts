@@ -366,7 +366,7 @@ export class HollonExecutionService {
     });
 
     const settings = (org.settings || {}) as OrganizationSettings;
-    const maxConcurrent = settings.maxConcurrentHolons || 10;
+    const maxConcurrent = settings.maxConcurrentHollons || 10;
 
     if (activeCount >= maxConcurrent) {
       this.logger.warn(

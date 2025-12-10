@@ -90,6 +90,12 @@ describe('HollonOrchestratorService', () => {
           provide: EscalationService,
           useValue: mockEscalationService,
         },
+        {
+          provide: 'HollonService',
+          useValue: {
+            createTemporary: jest.fn(),
+          },
+        },
       ],
     }).compile();
 

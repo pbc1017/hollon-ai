@@ -193,7 +193,7 @@ export class HollonService {
       // Phase 3.7: depth >= 1인 홀론(임시 홀론 포함)은 더 이상 임시 홀론을 생성할 수 없음
       if (parentHollon.depth >= MAX_TEMPORARY_HOLLON_DEPTH) {
         throw new BadRequestException(
-          `Cannot create temporary hollon from depth ${parentHollon.depth} hollon. Only depth 0 (permanent) hollons can create temporary sub-hollons.`,
+          `Maximum temporary hollon depth (${MAX_TEMPORARY_HOLLON_DEPTH}) exceeded`,
         );
       }
 

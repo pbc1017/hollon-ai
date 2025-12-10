@@ -13,12 +13,17 @@ import {
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 import { PromptComposerService } from './prompt-composer.service';
 import { TaskPoolService } from './task-pool.service';
-import { Task, TaskStatus } from '../../task/entities/task.entity';
+import {
+  Task,
+  TaskStatus,
+  TaskType,
+  TaskPriority,
+} from '../../task/entities/task.entity';
 import { QualityGateService } from './quality-gate.service';
 import { Organization } from '../../organization/entities/organization.entity';
 import { EscalationService, EscalationLevel } from './escalation.service';
 import { HollonService } from '../../hollon/hollon.service';
-import { SubtaskCreationService } from './subtask-creation.service';
+// Removed unused import: SubtaskCreationService
 import { Role } from '../../role/entities/role.entity';
 import { ComposedPrompt } from '../interfaces/prompt-context.interface';
 import { TaskDecompositionResult } from '../dto/task-decomposition.dto';
@@ -62,8 +67,7 @@ export class HollonOrchestratorService {
     private readonly escalationService: EscalationService,
     @Inject(forwardRef(() => HollonService))
     private readonly hollonService: HollonService,
-    @Inject(forwardRef(() => SubtaskCreationService))
-    private readonly subtaskService: SubtaskCreationService,
+    // Removed unused subtaskService injection
   ) {}
 
   /**
@@ -504,11 +508,18 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
           availableRoles,
         );
 
-      const brainResult = await this.brainProvider.execute({
-        prompt: decompositionPrompt,
-        systemPrompt:
-          'You are a task decomposition expert. Return ONLY valid JSON with no markdown formatting.',
-      });
+      const brainResult = await this.brainProvider.executeWithTracking(
+        {
+          prompt: decompositionPrompt,
+          systemPrompt:
+            'You are a task decomposition expert. Return ONLY valid JSON with no markdown formatting.',
+        },
+        {
+          organizationId: parentHollon.organizationId,
+          hollonId: parentHollon.id,
+          taskId: task.id,
+        },
+      );
 
       if (!brainResult.success) {
         throw new Error(
@@ -565,24 +576,24 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
           : TaskStatus.READY;
 
         // 4.5 Create subtask entity
-        const subtask = this.hollonRepo.manager.create(Task, {
-          organizationId: parentHollon.organizationId,
-          projectId: task.projectId,
-          parentTaskId: task.id,
-          assignedHollonId: subHollon.id,
-          title: subtaskSpec.title,
-          description: subtaskSpec.description,
-          type: subtaskSpec.type,
-          priority: subtaskSpec.priority || task.priority,
-          status: initialStatus,
-          depth: (task.depth || 0) + 1,
-          creatorHollonId: parentHollon.id,
-          affectedFiles: subtaskSpec.affectedFiles || [],
-          estimatedComplexity: 'low', // Subtasks are granular
-        });
+        const subtask = new Task();
+        subtask.organizationId = parentHollon.organizationId;
+        subtask.projectId = task.projectId;
+        subtask.parentTaskId = task.id;
+        subtask.assignedHollonId = subHollon.id;
+        subtask.title = subtaskSpec.title;
+        subtask.description = subtaskSpec.description;
+        subtask.type = subtaskSpec.type as TaskType;
+        subtask.priority =
+          (subtaskSpec.priority as TaskPriority) || task.priority;
+        subtask.status = initialStatus;
+        subtask.depth = (task.depth || 0) + 1;
+        subtask.creatorHollonId = parentHollon.id;
+        subtask.affectedFiles = subtaskSpec.affectedFiles || [];
+        subtask.estimatedComplexity = 'low'; // Subtasks are granular
 
         // Save without dependencies first
-        const savedSubtask = await this.hollonRepo.manager.save(Task, subtask);
+        const savedSubtask = await this.hollonRepo.manager.save(subtask);
 
         // 4.6 Set dependencies (many-to-many)
         if (dependencyTasks.length > 0) {
@@ -676,6 +687,8 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
    *
    * These roles are used for Sub-Hollon delegation of complex tasks
    */
+  // @ts-expect-error - Reserved for future use
+
   private async findOrCreateRole(
     roleName: string,
     organizationId: string,

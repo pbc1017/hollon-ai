@@ -94,10 +94,7 @@ export class ManagerService {
       this.logger.log('Team task monitoring completed');
     } catch (error) {
       const err = error as Error;
-      this.logger.error(
-        `Error in monitorAllTeams: ${err.message}`,
-        err.stack,
-      );
+      this.logger.error(`Error in monitorAllTeams: ${err.message}`, err.stack);
     }
   }
 
@@ -107,11 +104,17 @@ export class ManagerService {
   async monitorTeamTask(teamTaskId: string, team?: Team): Promise<void> {
     const teamTask = await this.taskRepo.findOne({
       where: { id: teamTaskId },
-      relations: ['assignedTeam', 'assignedTeam.manager', 'assignedTeam.hollons'],
+      relations: [
+        'assignedTeam',
+        'assignedTeam.manager',
+        'assignedTeam.hollons',
+      ],
     });
 
     if (!teamTask || !teamTask.assignedTeam) {
-      this.logger.warn(`Team task ${teamTaskId} not found or not assigned to team`);
+      this.logger.warn(
+        `Team task ${teamTaskId} not found or not assigned to team`,
+      );
       return;
     }
 
@@ -196,7 +199,8 @@ export class ManagerService {
       }
     });
 
-    stats.progress = stats.total > 0 ? (stats.completed / stats.total) * 100 : 0;
+    stats.progress =
+      stats.total > 0 ? (stats.completed / stats.total) * 100 : 0;
 
     return stats;
   }
@@ -210,7 +214,9 @@ export class ManagerService {
     subtasks: Task[],
   ): Promise<void> {
     const manager = team.manager!;
-    const blockedTasks = subtasks.filter((t) => t.status === TaskStatus.BLOCKED);
+    const blockedTasks = subtasks.filter(
+      (t) => t.status === TaskStatus.BLOCKED,
+    );
 
     if (blockedTasks.length === 0) return;
 
@@ -233,16 +239,14 @@ ${blockedTasks
 
 **Team Members Availability:**
 ${teamMembers
-  .map(
-    (m) => {
-      const workload = workloads.find((w) => w.hollonId === m.id);
-      return `
+  .map((m) => {
+    const workload = workloads.find((w) => w.hollonId === m.id);
+    return `
 - ${m.name}
   Active tasks: ${workload?.taskCount || 0}
   Completion rate: ${workload?.completionRate.toFixed(1) || 0}%
 `;
-    },
-  )
+  })
   .join('\n')}
 
 **What should we do?**
@@ -292,10 +296,7 @@ Options:
       );
 
       if (decision.action === 'reassign' && decision.reassignments) {
-        await this.executeReassignments(
-          teamTask,
-          decision.reassignments,
-        );
+        await this.executeReassignments(teamTask, decision.reassignments);
       } else if (decision.action === 'escalate') {
         this.logger.warn(
           `Manager escalated blocked tasks to human: ${decision.details}`,
@@ -350,11 +351,17 @@ Options:
   ): Promise<void> {
     const teamTask = await this.taskRepo.findOne({
       where: { id: teamTaskId },
-      relations: ['assignedTeam', 'assignedTeam.manager', 'assignedTeam.hollons'],
+      relations: [
+        'assignedTeam',
+        'assignedTeam.manager',
+        'assignedTeam.hollons',
+      ],
     });
 
     if (!teamTask || !teamTask.assignedTeam) {
-      throw new Error(`Team task ${teamTaskId} not found or not assigned to team`);
+      throw new Error(
+        `Team task ${teamTaskId} not found or not assigned to team`,
+      );
     }
 
     const team = teamTask.assignedTeam;

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Task } from '../../task/entities/task.entity';
 import { BrainResponse } from '../../brain-provider/interfaces/brain-provider.interface';
 import { execSync } from 'child_process';
@@ -403,7 +404,7 @@ export class QualityGateService {
    * 3. Parse test results
    */
   // @ts-expect-error - Reserved for future implementation
-   
+
   private async _checkTestsPassing(
     _workingDirectory?: string,
   ): Promise<ValidationResult> {

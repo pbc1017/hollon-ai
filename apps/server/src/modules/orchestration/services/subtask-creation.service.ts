@@ -484,6 +484,8 @@ export class SubtaskCreationService {
    *
    * @deprecated Use checkAndUnblockDependencies(parentTaskId) instead
    */
+  // @ts-expect-error - Reserved for future use
+
   private async checkAndUnblockDependentTasks(
     completedTaskId: string,
   ): Promise<void> {

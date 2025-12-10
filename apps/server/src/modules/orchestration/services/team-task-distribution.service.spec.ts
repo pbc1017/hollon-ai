@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { TeamTaskDistributionService } from './team-task-distribution.service';
 import { Task, TaskStatus, TaskType } from '../../task/entities/task.entity';
@@ -290,9 +291,7 @@ describe('TeamTaskDistributionService', () => {
     it('should throw error for invalid JSON', () => {
       const response = 'invalid json';
 
-      expect(() =>
-        (service as any).parseDistributionPlan(response),
-      ).toThrow();
+      expect(() => (service as any).parseDistributionPlan(response)).toThrow();
     });
   });
 
@@ -360,9 +359,7 @@ describe('TeamTaskDistributionService', () => {
         hollons: [{ name: 'DevBot-1' }, { name: 'DevBot-2' }],
       } as any;
 
-      await expect(
-        (service as any).validatePlan(plan, team),
-      ).rejects.toThrow(
+      await expect((service as any).validatePlan(plan, team)).rejects.toThrow(
         'Invalid assignee "NonExistentBot" - not a member of team Test Team',
       );
     });
@@ -398,9 +395,9 @@ describe('TeamTaskDistributionService', () => {
         hollons: [{ name: 'DevBot-1' }, { name: 'DevBot-2' }],
       } as any;
 
-      await expect(
-        (service as any).validatePlan(plan, team),
-      ).rejects.toThrow('Circular dependency detected in distribution plan');
+      await expect((service as any).validatePlan(plan, team)).rejects.toThrow(
+        'Circular dependency detected in distribution plan',
+      );
     });
 
     it('should pass validation for valid plan', async () => {
