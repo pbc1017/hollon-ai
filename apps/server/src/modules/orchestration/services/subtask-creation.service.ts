@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Task, TaskStatus } from '../../task/entities/task.entity';
+import { Hollon, HollonLifecycle } from '../../hollon/entities/hollon.entity';
 
 export interface SubtaskDefinition {
   title: string;
@@ -34,6 +35,8 @@ export class SubtaskCreationService {
   constructor(
     @InjectRepository(Task)
     private readonly taskRepo: Repository<Task>,
+    @InjectRepository(Hollon)
+    private readonly hollonRepo: Repository<Hollon>,
   ) {}
 
   /**
@@ -220,6 +223,9 @@ export class SubtaskCreationService {
       this.logger.log(
         `Parent task ${parentTaskId}: All subtasks completed → COMPLETED`,
       );
+
+      // Phase 3.7: Clean up temporary Hollon if it created these subtasks
+      await this.cleanupTemporaryHollon(parentTask);
     } else if (anyFailed) {
       newStatus = TaskStatus.BLOCKED;
       this.logger.log(
@@ -245,6 +251,60 @@ export class SubtaskCreationService {
       this.logger.log(
         `Updated parent task ${parentTaskId} status: ${parentTask.status} → ${newStatus}`,
       );
+    }
+  }
+
+  /**
+   * Phase 3.7: Clean up temporary Hollon after all subtasks complete
+   *
+   * If the creator of subtasks was a temporary Hollon and all its created tasks
+   * are now complete, delete the temporary Hollon.
+   */
+  private async cleanupTemporaryHollon(parentTask: Task): Promise<void> {
+    // Load the task with creator hollon relation
+    const taskWithCreator = await this.taskRepo.findOne({
+      where: { id: parentTask.id },
+      relations: ['creatorHollon', 'creatorHollon.createdTasks'],
+    });
+
+    if (!taskWithCreator || !taskWithCreator.creatorHollon) {
+      return; // No creator hollon to clean up
+    }
+
+    const creatorHollon = taskWithCreator.creatorHollon;
+
+    // Only clean up temporary hollons
+    if (creatorHollon.lifecycle !== HollonLifecycle.TEMPORARY) {
+      return;
+    }
+
+    // Check if ALL tasks created by this hollon are completed
+    if (
+      !creatorHollon.createdTasks ||
+      creatorHollon.createdTasks.length === 0
+    ) {
+      return;
+    }
+
+    const allCreatedTasksComplete = creatorHollon.createdTasks.every(
+      (task) => task.status === TaskStatus.COMPLETED,
+    );
+
+    if (allCreatedTasksComplete) {
+      this.logger.log(
+        `Cleaning up temporary Hollon ${creatorHollon.id} (${creatorHollon.name}) - all created tasks completed`,
+      );
+
+      try {
+        await this.hollonRepo.remove(creatorHollon);
+        this.logger.log(
+          `Successfully deleted temporary Hollon ${creatorHollon.name}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to delete temporary Hollon ${creatorHollon.name}: ${error}`,
+        );
+      }
     }
   }
 

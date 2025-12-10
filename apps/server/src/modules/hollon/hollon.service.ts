@@ -118,10 +118,10 @@ export class HollonService {
   /**
    * 임시 홀론 생성 (자율 가능)
    * ssot.md 6.2: 임시 홀론 생성/종료는 홀론이 자율적으로 수행
-   * 안전장치: 최대 3단계 깊이까지만 임시 홀론 생성 가능
+   * Phase 3.7: 최대 1단계 깊이까지만 임시 홀론 생성 가능 (depth=1 제약)
    */
   async createTemporary(config: CreateTemporaryHollonDto): Promise<Hollon> {
-    const MAX_TEMPORARY_HOLLON_DEPTH = 3;
+    const MAX_TEMPORARY_HOLLON_DEPTH = 1; // Phase 3.7: depth=1 제약
 
     let depth = 0;
 

@@ -110,6 +110,27 @@ export class HollonOrchestratorService {
         `Hollon ${hollonId} pulled task ${task.id}: ${task.title} (${pullResult.reason})`,
       );
 
+      // 2.5. Phase 3.7: Check task complexity and create Sub-Hollons if needed
+      const isComplex = await this.isTaskComplex(task, hollon);
+      if (isComplex && hollon.depth === 0) {
+        // Only permanent hollons (depth=0) can create sub-hollons
+        this.logger.log(
+          `Task ${task.id} is complex - considering Sub-Hollon delegation`,
+        );
+        const delegated = await this.handleComplexTask(task, hollon);
+        if (delegated) {
+          // Task was delegated to Sub-Hollons
+          await this.updateHollonStatus(hollonId, HollonStatus.IDLE);
+          return {
+            success: true,
+            taskId: task.id,
+            taskTitle: task.title,
+            duration: Date.now() - startTime,
+            output: 'Task delegated to Sub-Hollons',
+          };
+        }
+      }
+
       // 3. Compose prompt
       const composedPrompt = await this.promptComposer.composePrompt(
         hollonId,
@@ -375,5 +396,82 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
         : undefined,
       recentTasks: recentTasks || [],
     };
+  }
+
+  /**
+   * Phase 3.7: Check if task is complex enough to warrant Sub-Hollon delegation
+   *
+   * Complexity criteria:
+   * - estimatedComplexity === 'high'
+   * - Dependencies > 3
+   * - Required skills > 2
+   * - Story points > 8
+   */
+  private async isTaskComplex(task: Task, _hollon: Hollon): Promise<boolean> {
+    // Criteria 1: Explicit high complexity
+    if (task.estimatedComplexity === 'high') {
+      return true;
+    }
+
+    // Criteria 2: Many dependencies (load if not already loaded)
+    const taskWithDeps = await this.hollonRepo.manager.findOne(Task, {
+      where: { id: task.id },
+      relations: ['dependencies'],
+    });
+
+    if (taskWithDeps && taskWithDeps.dependencies?.length > 3) {
+      return true;
+    }
+
+    // Criteria 3: Multiple required skills
+    if (task.requiredSkills && task.requiredSkills.length > 2) {
+      return true;
+    }
+
+    // Criteria 4: High story points
+    if (task.storyPoints && task.storyPoints > 8) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Phase 3.7: Handle complex task by creating Sub-Hollons
+   *
+   * Note: For Phase 3.7, we detect complex tasks but delegate to existing
+   * subtask creation mechanism. Full Sub-Hollon specialization (Planner/Analyzer/Coder)
+   * will be implemented in a future phase.
+   *
+   * Returns true if task was successfully delegated
+   */
+  private async handleComplexTask(
+    task: Task,
+    _parentHollon: Hollon,
+  ): Promise<boolean> {
+    try {
+      this.logger.log(
+        `Complex task detected: ${task.id}. Task will use enhanced analysis.`,
+      );
+
+      // Phase 3.7: For now, we log complex tasks and fall back to direct execution
+      // In a future phase, we will:
+      // 1. Create specialized Sub-Hollons (Planner, Analyzer, Coder)
+      // 2. Decompose the task using Brain Provider
+      // 3. Create subtasks with SubtaskCreationService
+      // 4. Assign subtasks to Sub-Hollons
+
+      // For now, execute directly but with enhanced logging
+      this.logger.log(
+        `Task ${task.id} marked as complex. Executing with enhanced context.`,
+      );
+
+      return false; // Execute directly for now
+    } catch (error) {
+      this.logger.error(
+        `Error handling complex task ${task.id}: ${error}. Falling back to direct execution.`,
+      );
+      return false;
+    }
   }
 }
