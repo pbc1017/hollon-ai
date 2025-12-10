@@ -5,6 +5,7 @@ import { GoalProgressRecord } from './entities/goal-progress-record.entity';
 import { Task } from '../task/entities/task.entity';
 import { Project } from '../project/entities/project.entity';
 import { Organization } from '../organization/entities/organization.entity';
+import { Team } from '../team/entities/team.entity';
 import { GoalService } from './goal.service';
 import { GoalController } from './goal.controller';
 import { GoalTrackingService } from './services/goal-tracking.service';
@@ -21,6 +22,7 @@ import { TaskModule } from '../task/task.module';
       Task,
       Project,
       Organization,
+      Team,
     ]),
     BrainProviderModule,
     TaskModule,

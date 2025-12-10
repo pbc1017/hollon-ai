@@ -5,6 +5,7 @@ import { Task } from '../task/entities/task.entity';
 import { Document } from '../document/entities/document.entity';
 import { Organization } from '../organization/entities/organization.entity';
 import { Project } from '../project/entities/project.entity';
+import { Team } from '../team/entities/team.entity';
 import { BrainProviderModule } from '../brain-provider/brain-provider.module';
 import { CollaborationModule } from '../collaboration/collaboration.module';
 import { GoalModule } from '../goal/goal.module';
@@ -20,6 +21,7 @@ import { DecisionLogService } from './services/decision-log.service';
 import { CostTrackingService } from './services/cost-tracking.service';
 import { TaskExecutionService } from './services/task-execution.service';
 import { HollonExecutionService } from './services/hollon-execution.service';
+import { TeamTaskDistributionService } from './services/team-task-distribution.service';
 import { CostRecord } from '../cost-tracking/entities/cost-record.entity';
 import { GoalDecompositionService } from '../goal/services/goal-decomposition.service';
 
@@ -31,6 +33,7 @@ import { GoalDecompositionService } from '../goal/services/goal-decomposition.se
       Document,
       Organization,
       Project,
+      Team,
       CostRecord,
     ]),
     BrainProviderModule,
@@ -50,6 +53,7 @@ import { GoalDecompositionService } from '../goal/services/goal-decomposition.se
     TaskExecutionService,
     HollonOrchestratorService,
     HollonExecutionService,
+    TeamTaskDistributionService,
     {
       provide: 'GoalDecompositionService',
       useExisting: GoalDecompositionService,
@@ -61,6 +65,7 @@ import { GoalDecompositionService } from '../goal/services/goal-decomposition.se
     TaskExecutionService,
     HollonOrchestratorService,
     HollonExecutionService,
+    TeamTaskDistributionService,
   ],
 })
 export class OrchestrationModule {}
