@@ -409,4 +409,96 @@ describe('Phase 3.7 Autonomous Execution (integration)', () => {
       ]);
     });
   });
+
+  describe('5. Sub-Hollon Depth Restriction', () => {
+    let hollonService;
+
+    beforeAll(() => {
+      const {
+        HollonService,
+      } = require('../../src/modules/hollon/hollon.service');
+      hollonService = app.get(HollonService);
+    });
+
+    beforeEach(async () => {
+      const org = await dataSource.query(
+        `INSERT INTO organizations (name, description) VALUES ($1, $2) RETURNING id`,
+        [
+          `Test Org Depth ${testRunId}`,
+          'Test organization for depth restriction',
+        ],
+      );
+      organizationId = org[0].id;
+
+      const role = await dataSource.query(
+        `INSERT INTO roles (name, organization_id) VALUES ($1, $2) RETURNING id`,
+        ['Test Role', organizationId],
+      );
+      roleId = role[0].id;
+    });
+
+    afterEach(async () => {
+      await dataSource.query('DELETE FROM hollons WHERE organization_id = $1', [
+        organizationId,
+      ]);
+      await dataSource.query('DELETE FROM roles WHERE id = $1', [roleId]);
+      await dataSource.query('DELETE FROM organizations WHERE id = $1', [
+        organizationId,
+      ]);
+    });
+
+    it('should allow depth 0 (permanent) hollon to create temporary sub-hollon', async () => {
+      // Create permanent hollon (depth 0)
+      const permanentHollon = await dataSource.query(
+        `INSERT INTO hollons (name, role_id, organization_id, status, depth, lifecycle) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [
+          `Permanent Hollon ${testRunId}`,
+          roleId,
+          organizationId,
+          'idle',
+          0,
+          'permanent',
+        ],
+      );
+      const permanentHollonId = permanentHollon[0].id;
+
+      // Should be able to create temporary sub-hollon
+      const result = await hollonService.createTemporary({
+        name: `Temp Sub-Hollon ${testRunId}`,
+        roleId,
+        organizationId,
+        createdBy: permanentHollonId,
+      });
+
+      expect(result).toBeDefined();
+      expect(result.depth).toBe(1);
+      expect(result.lifecycle).toBe('temporary');
+    });
+
+    it('should prevent depth 1 (temporary) hollon from creating sub-hollon', async () => {
+      // Create temporary hollon (depth 1)
+      const tempHollon = await dataSource.query(
+        `INSERT INTO hollons (name, role_id, organization_id, status, depth, lifecycle) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [
+          `Temp Hollon ${testRunId}`,
+          roleId,
+          organizationId,
+          'idle',
+          1,
+          'temporary',
+        ],
+      );
+      const tempHollonId = tempHollon[0].id;
+
+      // Should NOT be able to create sub-hollon from temporary hollon
+      await expect(
+        hollonService.createTemporary({
+          name: `Should Fail ${testRunId}`,
+          roleId,
+          organizationId,
+          createdBy: tempHollonId,
+        }),
+      ).rejects.toThrow(/Cannot create temporary hollon from depth 1 hollon/);
+    });
+  });
 });

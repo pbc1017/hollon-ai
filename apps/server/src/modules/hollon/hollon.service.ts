@@ -189,16 +189,18 @@ export class HollonService {
         );
       }
 
-      // 안전장치: 최대 깊이 체크 (임시 홀론만)
-      if (parentHollon.lifecycle === HollonLifecycle.TEMPORARY) {
-        if (parentHollon.depth >= MAX_TEMPORARY_HOLLON_DEPTH) {
-          throw new BadRequestException(
-            `Maximum temporary hollon depth (${MAX_TEMPORARY_HOLLON_DEPTH}) exceeded`,
-          );
-        }
-        depth = parentHollon.depth + 1;
+      // 안전장치: 최대 깊이 체크
+      // Phase 3.7: depth >= 1인 홀론(임시 홀론 포함)은 더 이상 임시 홀론을 생성할 수 없음
+      if (parentHollon.depth >= MAX_TEMPORARY_HOLLON_DEPTH) {
+        throw new BadRequestException(
+          `Cannot create temporary hollon from depth ${parentHollon.depth} hollon. Only depth 0 (permanent) hollons can create temporary sub-hollons.`,
+        );
       }
-      // 영구 홀론이 만든 임시 홀론은 depth 0부터 시작
+
+      // 임시 홀론의 depth는 항상 부모 + 1
+      // Permanent hollon (depth=0) → Temporary hollon (depth=1)
+      // Temporary hollon (depth=1) → cannot create (blocked above)
+      depth = parentHollon.depth + 1;
     }
 
     // 임시 홀론만 자율 생성 가능
