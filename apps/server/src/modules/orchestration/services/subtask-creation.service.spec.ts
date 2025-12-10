@@ -10,6 +10,7 @@ import {
   TaskType,
   TaskPriority,
 } from '../../task/entities/task.entity';
+import { Hollon } from '../../hollon/entities/hollon.entity';
 
 describe('SubtaskCreationService', () => {
   let service: SubtaskCreationService;
@@ -23,6 +24,13 @@ describe('SubtaskCreationService', () => {
     create: jest.fn(),
   };
 
+  const mockHollonRepo = {
+    findOne: jest.fn(),
+    find: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+  };
+
   beforeEach(async () => {
     module = await Test.createTestingModule({
       providers: [
@@ -30,6 +38,10 @@ describe('SubtaskCreationService', () => {
         {
           provide: getRepositoryToken(Task),
           useValue: mockTaskRepo,
+        },
+        {
+          provide: getRepositoryToken(Hollon),
+          useValue: mockHollonRepo,
         },
       ],
     }).compile();

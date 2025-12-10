@@ -3,11 +3,21 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { TeamTaskDistributionService } from '../../src/modules/orchestration/services/team-task-distribution.service';
 import { SubtaskCreationService } from '../../src/modules/orchestration/services/subtask-creation.service';
-import { Task, TaskStatus, TaskType } from '../../src/modules/task/entities/task.entity';
+import {
+  Task,
+  TaskStatus,
+  TaskType,
+} from '../../src/modules/task/entities/task.entity';
 import { Team } from '../../src/modules/team/entities/team.entity';
-import { Hollon, HollonStatus } from '../../src/modules/hollon/entities/hollon.entity';
+import {
+  Hollon,
+  HollonStatus,
+} from '../../src/modules/hollon/entities/hollon.entity';
 import { Role } from '../../src/modules/role/entities/role.entity';
 import { Organization } from '../../src/modules/organization/entities/organization.entity';
+import { Project } from '../../src/modules/project/entities/project.entity';
+import { Document } from '../../src/modules/document/entities/document.entity';
+import { Goal } from '../../src/modules/goal/entities/goal.entity';
 import { BrainProviderModule } from '../../src/modules/brain-provider/brain-provider.module';
 import { BrainProviderService } from '../../src/modules/brain-provider/brain-provider.service';
 
@@ -38,15 +48,33 @@ describe('TeamTaskDistributionService Integration Test', () => {
           type: 'postgres',
           host: process.env.DB_HOST || 'localhost',
           port: parseInt(process.env.DB_PORT || '5432'),
-          username: process.env.DB_USERNAME || 'hollon_dev',
+          username: process.env.DB_USER || 'hollon',
           password: process.env.DB_PASSWORD || 'hollon_dev_password',
-          database: process.env.DB_DATABASE || 'hollon_dev',
+          database: process.env.DB_NAME || 'hollon',
           schema: process.env.DB_SCHEMA || 'hollon_test_worker_1',
-          entities: [Task, Team, Hollon, Role, Organization],
+          entities: [
+            Task,
+            Team,
+            Hollon,
+            Role,
+            Organization,
+            Project,
+            Document,
+            Goal,
+          ],
           synchronize: false,
           logging: false,
         }),
-        TypeOrmModule.forFeature([Task, Team, Hollon, Role, Organization]),
+        TypeOrmModule.forFeature([
+          Task,
+          Team,
+          Hollon,
+          Role,
+          Organization,
+          Project,
+          Document,
+          Goal,
+        ]),
         BrainProviderModule,
       ],
       providers: [TeamTaskDistributionService, SubtaskCreationService],
@@ -175,50 +203,48 @@ describe('TeamTaskDistributionService Integration Test', () => {
 
     it('Step 2: Mock Brain Provider response', () => {
       // Mock the Brain Provider to return a valid distribution plan
-      jest
-        .spyOn(brainProvider, 'executeWithTracking')
-        .mockResolvedValue({
-          output: JSON.stringify({
-            subtasks: [
-              {
-                title: 'KnowledgeExtractionService',
-                description: 'Implement knowledge extraction from code',
-                assignedTo: 'DevBot-AI',
-                type: 'implementation',
-                priority: 'P1',
-                estimatedComplexity: 'high',
-                dependencies: [],
-              },
-              {
-                title: 'VectorSearchService',
-                description: 'Implement vector similarity search',
-                assignedTo: 'DevBot-Data',
-                type: 'implementation',
-                priority: 'P2',
-                estimatedComplexity: 'medium',
-                dependencies: ['KnowledgeExtractionService'],
-              },
-              {
-                title: 'IntegrationTests',
-                description: 'Write integration tests for knowledge system',
-                assignedTo: 'DevBot-AI',
-                type: 'review',
-                priority: 'P3',
-                estimatedComplexity: 'low',
-                dependencies: ['VectorSearchService'],
-              },
-            ],
-            reasoning:
-              'Distributed based on expertise: AI specialist for extraction, Data engineer for search',
-          }),
-          success: true,
-          duration: 1500,
-          cost: {
-            inputTokens: 500,
-            outputTokens: 300,
-            totalCostCents: 2,
-          },
-        } as any);
+      jest.spyOn(brainProvider, 'executeWithTracking').mockResolvedValue({
+        output: JSON.stringify({
+          subtasks: [
+            {
+              title: 'KnowledgeExtractionService',
+              description: 'Implement knowledge extraction from code',
+              assignedTo: 'DevBot-AI',
+              type: 'implementation',
+              priority: 'P1',
+              estimatedComplexity: 'high',
+              dependencies: [],
+            },
+            {
+              title: 'VectorSearchService',
+              description: 'Implement vector similarity search',
+              assignedTo: 'DevBot-Data',
+              type: 'implementation',
+              priority: 'P2',
+              estimatedComplexity: 'medium',
+              dependencies: ['KnowledgeExtractionService'],
+            },
+            {
+              title: 'IntegrationTests',
+              description: 'Write integration tests for knowledge system',
+              assignedTo: 'DevBot-AI',
+              type: 'review',
+              priority: 'P3',
+              estimatedComplexity: 'low',
+              dependencies: ['VectorSearchService'],
+            },
+          ],
+          reasoning:
+            'Distributed based on expertise: AI specialist for extraction, Data engineer for search',
+        }),
+        success: true,
+        duration: 1500,
+        cost: {
+          inputTokens: 500,
+          outputTokens: 300,
+          totalCostCents: 2,
+        },
+      } as any);
     });
 
     it('Step 3: Distribute Team Task via Manager', async () => {
