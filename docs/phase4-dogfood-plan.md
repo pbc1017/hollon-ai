@@ -1,49 +1,591 @@
-# 🐕 Phase 4 Dogfooding 실행 계획
+# 🚀 Phase 4: 지식 시스템 자율 실행 가이드
 
-> **작성일**: 2025-12-10  
-> **최종 수정**: 2025-12-10  
-> **목표**: Phase 3.5 완료 후 Phase 4 (지식 시스템 및 자기 개선)를 홀론 팀에게 자율적으로 맡기기
+> **작성일**: 2025-12-10
+> **최종 수정**: 2025-12-10
+> **목표**: Phase 4 (지식 시스템 및 자기 개선)를 Manager Hollon이 팀원에게 자율 분배하여 완전 자동 실행
+>
+> ⚠️ **이 문서는 phase4-execution-guide.md를 통합하여 대체합니다**
 
 ---
 
-## 🚀 빠른 실행 가이드 (Quick Start)
+## 📖 목차
 
-### 전제 조건
+1. [3단계 빠른 실행](#-3단계-빠른-실행-5분)
+2. [상세 실행 절차](#-상세-실행-절차)
+3. [전체 워크플로우 이해](#-전체-워크플로우-이해)
+4. [모니터링 및 트러블슈팅](#-모니터링-및-트러블슈팅)
+5. [Phase 4 계획 및 타임라인](#-phase-4-계획-및-타임라인)
+6. [성공 기준 및 검증](#-성공-기준-및-검증)
 
-- ✅ Phase 3.5 완료 (자율 코드 리뷰, PR 자동 병합, 목표 분해 통합)
-- ✅ **Phase 3.7 완료 (100% 자율 실행 인프라)** ← **신규**
-  - ✅ HollonExecutionService (자동 Task 시작, 매 10초)
-  - ✅ Exponential Backoff (무한 루프 방지: 5분 → 15분 → 1시간)
-  - ✅ Emergency Stop API (긴급 중단/재개)
-  - ✅ Sub-Hollon 생성 (depth=1 제약)
-  - ✅ Temporary Hollon 자동 정리
-  - ✅ Stuck Task 감지 (2시간 threshold)
-  - ✅ Progress Monitoring (30분마다 통계)
-- ✅ Document/Memory 인프라 구축 완료 (pgvector 포함)
-- ✅ PromptComposerService Layer 5 (Memory) 구현 완료
+---
 
-### 5단계로 Phase 4 시작하기
+## ⚡ 3단계 빠른 실행 (5분)
+
+### 전제 조건 확인
 
 ```bash
-# Step 1: DB Seed (5개 Hollon, 2개 Team 생성)
-pnpm --filter @hollon-ai/server db:seed
+# Phase 3.8 완료 확인
+pnpm --filter @hollon-ai/server test:integration
 
-# Step 2: 서버 시작
-pnpm --filter @hollon-ai/server dev
-
-# Step 3: Phase 4 Goal 생성 (별도 터미널)
-curl -X POST http://localhost:3001/goals \
-  -H "Content-Type: application/json" \
-  -d @docs/phase4-goal.json
-
-# Step 4: Goal Decomposition 실행 (30개 Task 자동 생성)
-curl -X POST http://localhost:3001/goals/{GOAL_ID}/decompose
-
-# Step 5: Hollon 할당 및 모니터링
-curl http://localhost:3001/tasks?projectId={PROJECT_ID}
+# 필수 조건:
+# ✅ Phase 3.8 (TeamTaskDistributionService + Manager)
+# ✅ Phase 3.7 (HollonExecutionService 완전 자율 실행)
+# ✅ Phase 3.5 (자율 코드 리뷰, PR 자동 병합)
+# ✅ Document/Memory 인프라 (pgvector)
 ```
 
-**상세 절차는 아래 "실행 가이드 (Execution Playbook)" 참조**
+### Step 1: DB Seed + 서버 시작 (2분)
+
+```bash
+# Terminal 1: DB Seed (Manager + Phase 4 Team 자동 생성)
+pnpm --filter @hollon-ai/server db:seed
+
+# 생성되는 Hollon:
+# ✅ Manager-Knowledge (Phase 4 Knowledge Team의 Manager)
+# ✅ DevBot-AI (팀원: NLP, embedding, vector 전문)
+# ✅ DevBot-Data (팀원: graph, database 전문)
+# ✅ DevBot-Backend (팀원: TypeScript, NestJS 전문)
+# ✅ ReviewBot-QA (팀원: testing 전문)
+
+# Terminal 1: 서버 시작
+pnpm --filter @hollon-ai/server dev
+```
+
+### Step 2: Goal 생성 (1분)
+
+```bash
+# Terminal 2: Organization ID 조회
+ORG_ID=$(curl -s http://localhost:3001/organizations | jq -r '.[0].id')
+echo "Organization ID: $ORG_ID"
+
+# Phase 4 Goal 생성
+GOAL=$(curl -s -X POST http://localhost:3001/goals \
+  -H "Content-Type: application/json" \
+  -d '{
+    "organizationId": "'$ORG_ID'",
+    "title": "Phase 4: 지식 시스템 및 자기 개선",
+    "description": "홀론이 경험에서 학습하고 프롬프트를 최적화하는 시스템 구축. Week 1-2: KnowledgeExtraction, VectorSearch, KnowledgeGraph. Week 3-4: PerformanceAnalyzer, PromptOptimizer, BestPractice.",
+    "goalType": "project",
+    "priority": "high",
+    "targetDate": "2025-01-10"
+  }')
+
+GOAL_ID=$(echo $GOAL | jq -r '.id')
+echo "✅ Goal ID: $GOAL_ID"
+```
+
+### Step 3: 자동 분해 + Manager 분배 (2분)
+
+```bash
+# Goal Decomposition with Team Distribution
+curl -X POST "http://localhost:3001/goals/$GOAL_ID/decompose" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "maxTasks": 30,
+    "preferredComplexity": "medium",
+    "useTeamDistribution": true
+  }' | jq .
+
+# Project ID 조회
+PROJECT_ID=$(curl -s http://localhost:3001/projects | \
+  jq -r '.[] | select(.name | contains("Phase 4")) | .id')
+
+echo "✅ Project ID: $PROJECT_ID"
+
+# 30초 대기 (HollonExecutionService가 자동 분배)
+echo "⏳ Manager가 Team Task를 팀원에게 분배 중... (30초)"
+sleep 30
+
+# 분배 결과 확인
+echo "\n📋 팀원별 Task 분배 현황:"
+curl -s "http://localhost:3001/tasks?projectId=$PROJECT_ID" | \
+  jq 'group_by(.assignedHollon.name) | map({hollon: .[0].assignedHollon.name, tasks: length})'
+```
+
+### 🎉 완료! 이제 완전 자동 실행됩니다
+
+```bash
+# 실시간 진행 상황 모니터링
+watch -n 10 "curl -s http://localhost:3001/tasks?projectId=$PROJECT_ID | \
+  jq 'group_by(.status) | map({status: .[0].status, count: length})'"
+```
+
+**다음 단계**: [모니터링 및 트러블슈팅](#-모니터링-및-트러블슈팅)으로 이동
+
+---
+
+## 📚 상세 실행 절차
+
+### 🔍 Phase 3.8 자동 분배 메커니즘 이해
+
+**완전 자율 실행 워크플로우:**
+
+```
+Goal 생성 (인간, 1회만)
+    ↓
+useTeamDistribution: true
+    ↓
+GoalDecompositionService
+    → 3-7개 Team Task 생성 (TEAM_EPIC, depth=0)
+    → Phase 4 Knowledge Team에 할당
+    → status: PENDING
+    ↓
+[매 30초] HollonExecutionService.distributeTeamTasks()
+    → PENDING Team Task 자동 감지
+    → TeamTaskDistributionService.distributeToTeam() 호출
+    ↓
+Manager-Knowledge (Brain Provider AI 판단)
+    → 팀원 스킬 분석 (DevBot-AI, DevBot-Data, etc.)
+    → 현재 워크로드 확인
+    → 3-7개 Hollon Task 생성 (depth=1)
+    → 각 Task를 적절한 팀원에게 할당
+    → status: READY
+    → Team Task status: IN_PROGRESS
+    ↓
+[매 10초] HollonExecutionService.executeAssignedHollons()
+    → IDLE Hollon + READY Task 자동 감지
+    → HollonOrchestrator.runCycle() 호출
+    ↓
+Task 실행 (완전 자동)
+    → Git Worktree 생성
+    → Brain Provider 실행 (코딩)
+    → git commit + push
+    → gh pr create (자동 PR 생성)
+    ↓
+[1분 후] MessageListener
+    → CodeReviewService 자동 실행
+    → AutoMergeService (승인 시 자동 병합)
+    ↓
+Task 완료 → Hollon IDLE
+    ↓
+[10초 후] 다음 Task 자동 시작 (반복)
+```
+
+### 🎯 API 호출 가이드 (인간이 실행)
+
+#### 1️⃣ 초기 설정 확인
+
+```bash
+# Organization 확인
+curl -s http://localhost:3001/organizations | jq '.[0] | {id, name}'
+
+# Phase 4 Team 확인
+ORG_ID="<your-org-id>"
+curl -s "http://localhost:3001/teams?organizationId=$ORG_ID" | \
+  jq '.[] | select(.name == "Phase 4 Knowledge Team") | {id, name, managerHollonId}'
+
+# Manager Hollon 확인
+TEAM_ID="<phase4-team-id>"
+curl -s "http://localhost:3001/teams/$TEAM_ID" | \
+  jq '{manager: .manager.name, members: [.members[].name]}'
+```
+
+#### 2️⃣ Goal 생성 (POST /goals)
+
+```bash
+ORG_ID="<your-org-id>"
+
+curl -X POST http://localhost:3001/goals \
+  -H "Content-Type: application/json" \
+  -d '{
+    "organizationId": "'$ORG_ID'",
+    "title": "Phase 4: 지식 시스템 및 자기 개선",
+    "description": "홀론이 경험에서 학습하고 프롬프트를 최적화하는 시스템 구축. Week 1-2: KnowledgeExtraction, VectorSearch, KnowledgeGraph. Week 3-4: PerformanceAnalyzer, PromptOptimizer, BestPractice.",
+    "goalType": "project",
+    "priority": "high",
+    "targetDate": "2025-01-10",
+    "successCriteria": [
+      "Task 완료 후 Document 자동 생성 (100%)",
+      "Vector similarity search 정확도 85%+",
+      "동일 Task 5회 수행 시 효율성 20% 향상",
+      "Prompt 최적화로 토큰 15% 절감"
+    ]
+  }'
+```
+
+#### 3️⃣ Goal Decomposition (POST /goals/:id/decompose)
+
+```bash
+GOAL_ID="<goal-id-from-step-2>"
+
+curl -X POST "http://localhost:3001/goals/$GOAL_ID/decompose" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "maxTasks": 30,
+    "preferredComplexity": "medium",
+    "useTeamDistribution": true
+  }'
+
+# 응답 예시:
+# {
+#   "goalId": "...",
+#   "projectId": "...",
+#   "teamTasksCreated": 5,
+#   "teamTasks": [
+#     {
+#       "id": "...",
+#       "title": "Week 1-2: Knowledge Extraction System",
+#       "type": "team_epic",
+#       "assignedTeamId": "...",
+#       "status": "pending"
+#     },
+#     ...
+#   ]
+# }
+```
+
+#### 4️⃣ 자동 실행 대기 (API 호출 불필요!)
+
+```bash
+# 30초 대기 - HollonExecutionService가 Team Task 자동 분배
+echo "⏳ Waiting for automatic distribution (30 seconds)..."
+sleep 30
+
+# Hollon Task 확인
+PROJECT_ID="<project-id-from-step-3>"
+curl -s "http://localhost:3001/tasks?projectId=$PROJECT_ID&depth=1" | \
+  jq '.[] | {title, assignedHollon: .assignedHollon.name, status}'
+```
+
+#### 5️⃣ Emergency Stop (긴급 중단 필요 시)
+
+```bash
+# 자율 실행 중단
+curl -X POST "http://localhost:3001/organizations/$ORG_ID/emergency-stop" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reason": "Phase 4 setup verification needed"
+  }'
+
+# 실행 재개
+curl -X POST "http://localhost:3001/organizations/$ORG_ID/resume-execution"
+```
+
+---
+
+## 🔍 전체 워크플로우 이해
+
+### Phase 3.8 Manager 기반 분배
+
+**Manager-Knowledge가 하는 일:**
+
+1. **팀원 스킬 분석**
+
+   ```typescript
+   // TeamTaskDistributionService.distributeToTeam()
+   const teamMembers = await this.getTeamMembers(teamTask.assignedTeamId);
+
+   // Brain Provider에 전달되는 정보:
+   {
+     teamMembers: [
+       { name: "DevBot-AI", skills: ["nlp", "embedding", "vector"], workload: 2 },
+       { name: "DevBot-Data", skills: ["graph", "database"], workload: 1 },
+       { name: "DevBot-Backend", skills: ["typescript", "nestjs"], workload: 3 },
+       { name: "ReviewBot-QA", skills: ["testing"], workload: 1 }
+     ],
+     teamTask: {
+       title: "Week 1-2: Knowledge Extraction System",
+       description: "KnowledgeExtraction, VectorSearch, KnowledgeGraph 구현"
+     }
+   }
+   ```
+
+2. **Manager AI 판단**
+   - Brain Provider (Claude Code)가 최적 할당 결정
+   - 스킬 매칭 + 워크로드 밸런싱
+   - 의존성 고려 (순차/병렬 실행)
+
+3. **Hollon Task 생성**
+   ```typescript
+   // Manager가 생성하는 Task 예시:
+   [
+     {
+       title: 'KnowledgeExtractionService 기본 구조',
+       assignedHollonId: 'DevBot-AI',
+       dependencies: [],
+       status: 'ready',
+     },
+     {
+       title: 'VectorSearchService 구현',
+       assignedHollonId: 'DevBot-AI',
+       dependencies: ['KnowledgeExtractionService'],
+       status: 'blocked', // 의존성 대기
+     },
+     {
+       title: 'KnowledgeGraphService 구현',
+       assignedHollonId: 'DevBot-Data',
+       dependencies: [],
+       status: 'ready',
+     },
+   ];
+   ```
+
+### Hollon 자율 실행
+
+**DevBot-AI가 Task 실행하는 과정:**
+
+```bash
+1. HollonExecutionService.executeAssignedHollons() (매 10초)
+   → DevBot-AI: IDLE + Task "KnowledgeExtractionService" READY
+
+2. HollonOrchestrator.runCycle(DevBot-AI)
+   → TaskExecutionService.executeTask()
+
+3. Git Worktree 생성
+   → git worktree add ../task-xxx feature/task-xxx
+
+4. Brain Provider 실행
+   → Prompt 합성 (Organization → Team → Role → Hollon → Memory → Task)
+   → Claude Code 실행
+   → 코드 작성 + 테스트
+   → git commit -m "feat: KnowledgeExtractionService 구현"
+
+5. PR 생성
+   → git push origin feature/task-xxx
+   → gh pr create --title "..." --body "..."
+
+6. Task 상태 업데이트
+   → status: IN_PROGRESS → COMPLETED
+   → DevBot-AI: WORKING → IDLE
+
+7. MessageListener (1분 후)
+   → CodeReviewService 자동 실행
+   → AutoMergeService (CI 통과 + 승인 시)
+
+8. 다음 Task 자동 시작
+   → 10초 후 executeAssignedHollons() 다시 실행
+   → DevBot-AI가 다음 READY Task pull
+```
+
+---
+
+## 📊 모니터링 및 트러블슈팅
+
+### 실시간 모니터링
+
+#### 1️⃣ Dashboard 확인
+
+```bash
+PROJECT_ID="<your-project-id>"
+
+# Task 상태별 통계
+curl -s "http://localhost:3001/tasks?projectId=$PROJECT_ID" | \
+  jq 'group_by(.status) | map({status: .[0].status, count: length})'
+
+# Hollon별 Task 분배 현황
+curl -s "http://localhost:3001/tasks?projectId=$PROJECT_ID" | \
+  jq 'group_by(.assignedHollon.name) | map({hollon: .[0].assignedHollon.name, tasks: length})'
+
+# 진행 중인 Task
+curl -s "http://localhost:3001/tasks?projectId=$PROJECT_ID&status=in_progress" | \
+  jq '.[] | {title, hollon: .assignedHollon.name, startedAt}'
+```
+
+#### 2️⃣ Hollon 상태 확인
+
+```bash
+ORG_ID="<your-org-id>"
+
+curl -s "http://localhost:3001/hollons?organizationId=$ORG_ID" | \
+  jq '.[] | {name, status, tasksCompleted: (.tasksCompleted // 0), tasksInProgress: (.tasksInProgress // 0)}'
+```
+
+#### 3️⃣ PR 및 Code Review 확인
+
+```bash
+# GitHub PR 목록
+gh pr list --label "phase-4"
+
+# PR 상태 상세
+gh pr view <PR-NUMBER>
+```
+
+#### 4️⃣ 블로커 감지
+
+```bash
+# BLOCKED Task 확인
+curl -s "http://localhost:3001/tasks?projectId=$PROJECT_ID&status=blocked" | \
+  jq '.[] | {title, reason: .blockedReason, dependencies: [.dependencies[].title]}'
+
+# Stuck Task 확인 (2시간 이상 IN_PROGRESS)
+curl -s "http://localhost:3001/tasks?projectId=$PROJECT_ID&status=in_progress" | \
+  jq '.[] | select(.startedAt | fromdateiso8601 < (now - 7200)) | {title, startedAt, duration: ((now - (.startedAt | fromdateiso8601)) / 3600 | floor)}'
+```
+
+### 트러블슈팅
+
+#### ❌ "Team Task가 분배되지 않음"
+
+**증상:**
+
+```bash
+curl -s "http://localhost:3001/tasks?projectId=$PROJECT_ID&type=team_epic" | \
+  jq '.[] | {title, status}'
+# 결과: status가 계속 "pending"
+```
+
+**원인:**
+
+- Team에 Manager가 할당되지 않음
+- Manager Hollon이 IDLE 상태가 아님
+
+**해결:**
+
+```bash
+# 1. Manager 확인
+TEAM_ID="<phase4-team-id>"
+curl -s "http://localhost:3001/teams/$TEAM_ID" | jq '.managerHollonId'
+
+# 2. Manager 없으면 DB re-seed
+pnpm --filter @hollon-ai/server db:seed
+
+# 3. Manager 상태 확인
+MANAGER_ID="<manager-hollon-id>"
+curl -s "http://localhost:3001/hollons/$MANAGER_ID" | jq '.status'
+```
+
+#### ❌ "Manager 분배 실패 (Brain Provider 에러)"
+
+**증상:**
+
+```bash
+# 로그에 에러 발생
+tail -f logs/app.log | grep "TeamTaskDistributionService"
+# 결과: "Failed to parse Brain Provider response"
+```
+
+**원인:**
+
+- Manager system prompt가 잘못됨
+- Brain Provider JSON 응답 파싱 실패
+
+**해결:**
+
+```bash
+# 1. Manager Role 확인
+curl -s "http://localhost:3001/roles" | \
+  jq '.[] | select(.name == "Manager") | {systemPrompt, capabilities}'
+
+# 2. Team Task 수동 재시도
+TEAM_TASK_ID="<team-task-id>"
+curl -X POST "http://localhost:3001/tasks/$TEAM_TASK_ID/retry"
+```
+
+#### ❌ "Hollon Task가 실행 안 됨"
+
+**증상:**
+
+```bash
+curl -s "http://localhost:3001/tasks?projectId=$PROJECT_ID&depth=1" | \
+  jq '.[] | {title, status, assignedHollon: .assignedHollon.name}'
+# 결과: status가 "pending" 또는 "blocked"
+```
+
+**원인:**
+
+- Task status가 READY가 아님
+- Hollon이 IDLE 상태가 아님
+- 의존성 미완료
+
+**해결:**
+
+```bash
+# 1. Task 의존성 확인
+TASK_ID="<task-id>"
+curl -s "http://localhost:3001/tasks/$TASK_ID" | \
+  jq '{title, status, dependencies: [.dependencies[] | {title, status}]}'
+
+# 2. Hollon 상태 확인
+HOLLON_ID="<hollon-id>"
+curl -s "http://localhost:3001/hollons/$HOLLON_ID" | \
+  jq '{name, status, currentTaskId}'
+
+# 3. Task 수동 READY 전환 (의존성 완료된 경우)
+curl -X PATCH "http://localhost:3001/tasks/$TASK_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "ready"}'
+```
+
+#### ❌ "Worktree creation failed"
+
+**증상:**
+
+```bash
+# 로그 에러
+tail -f logs/app.log | grep "worktree"
+# 결과: "fatal: 'task-xxx' is already checked out"
+```
+
+**해결:**
+
+```bash
+# 1. 기존 worktree 확인
+git worktree list
+
+# 2. 강제 제거
+git worktree remove --force ../task-xxx
+
+# 3. Task 재시도
+curl -X POST "http://localhost:3001/tasks/$TASK_ID/retry"
+```
+
+#### ❌ "gh pr create failed"
+
+**증상:**
+
+```bash
+# 로그 에러
+tail -f logs/app.log | grep "gh pr"
+# 결과: "error: could not create pull request"
+```
+
+**해결:**
+
+```bash
+# 1. GitHub CLI 인증 확인
+gh auth status
+
+# 2. 재인증
+gh auth login
+
+# 3. 권한 확인
+gh auth refresh -s repo,workflow
+```
+
+### 안전장치 활용
+
+#### Emergency Stop (모든 자율 실행 중단)
+
+```bash
+ORG_ID="<your-org-id>"
+
+# 중단
+curl -X POST "http://localhost:3001/organizations/$ORG_ID/emergency-stop" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reason": "Critical bug detected in KnowledgeExtractionService"
+  }'
+
+# 상태 확인
+curl -s "http://localhost:3001/organizations/$ORG_ID" | \
+  jq '.settings | {autonomousExecutionEnabled, emergencyStopReason}'
+
+# 재개
+curl -X POST "http://localhost:3001/organizations/$ORG_ID/resume-execution"
+```
+
+#### Exponential Backoff (실패 Task 자동 복구)
+
+```bash
+# 실패 Task 확인
+curl -s "http://localhost:3001/tasks?projectId=$PROJECT_ID&status=failed" | \
+  jq '.[] | {title, consecutiveFailures, blockedUntil, errorMessage}'
+
+# Backoff 스케줄:
+# 1회 실패 → 5분 후 재시도
+# 2회 실패 → 15분 후 재시도
+# 3회 실패 → 1시간 후 재시도 (최대)
+```
 
 ---
 
@@ -185,7 +727,7 @@ Layer 5 (Memory/Documents):
 
 ---
 
-## 🗓️ 전체 타임라인
+## 🗓️ Phase 4 계획 및 타임라인
 
 ### Phase 3.5: 완료됨 ✅
 
@@ -1046,7 +1588,236 @@ Week 21-22: 지식 관리 고도화
 
 ---
 
-**문서 버전**: 2.0
+## ✅ 성공 기준 및 검증
+
+### Phase 4 완료 기준 (필수)
+
+| 기준                    | 측정 방법              | 목표 | 검증 명령어                                            |
+| ----------------------- | ---------------------- | ---- | ------------------------------------------------------ |
+| **Document 자동 생성**  | E2E 테스트             | 100% | `pnpm test:e2e knowledge-extraction`                   |
+| **Vector search**       | 정확도 측정            | 85%+ | `pnpm test:e2e vector-search-accuracy`                 |
+| **효율성 향상**         | PerformanceAnalyzer    | 20%+ | `curl /performance/metrics?hollonId=...`               |
+| **토큰 절감**           | PromptOptimizer 메트릭 | 15%+ | `curl /prompt-optimizer/token-savings`                 |
+| **코드 품질**           | 테스트 커버리지        | 90%+ | `pnpm test:coverage`                                   |
+| **테스트 통과**         | CI 결과                | 100% | `pnpm test:all`                                        |
+| **Manager 분배 정확도** | 스킬 매칭 성공률       | 80%+ | `curl /tasks?projectId=...` (assignedHollon 스킬 확인) |
+
+### 자율성 지표
+
+| 지표                  | Phase 3.7 | Phase 4 목표 | 검증 방법                                    |
+| --------------------- | --------- | ------------ | -------------------------------------------- |
+| **Task 자율 완료율**  | 100%      | 100%         | `(completed / total) * 100`                  |
+| **인간 개입 빈도**    | Goal 1회  | Goal 1회     | ApprovalRequest 생성 횟수 (주 2회 이하)      |
+| **Manager 분배 성공** | N/A       | 95%+         | (성공 분배 / 전체 Team Task) \* 100          |
+| **자동 Task pull**    | 100%      | 100%         | Hollon이 스스로 다음 Task 선택 (인간 개입 0) |
+| **협업 성공률**       | 85%       | 85%+         | CollaborationService 성공률                  |
+
+### 품질 지표
+
+```bash
+# 1. 전체 테스트 실행
+pnpm --filter @hollon-ai/server test:all
+
+# 예상 결과:
+# Unit tests: 684+ passing
+# Integration tests: 120+ passing
+# E2E tests: 180+ passing
+# Total: 984+ tests
+
+# 2. TypeScript 컴파일
+pnpm --filter @hollon-ai/server build
+
+# 예상: 0 errors
+
+# 3. Lint 체크
+pnpm --filter @hollon-ai/server lint
+
+# 예상: 0 errors, 0 warnings
+
+# 4. Coverage 확인
+pnpm --filter @hollon-ai/server test:coverage
+
+# 예상:
+# Statements   : 90%+
+# Branches     : 85%+
+# Functions    : 90%+
+# Lines        : 90%+
+```
+
+### Phase 4 킥오프 전 체크리스트
+
+```bash
+# 1. Phase 3.8 완료 확인
+pnpm --filter @hollon-ai/server test:integration
+
+# 필수 통과 테스트:
+# ✅ phase3.8-team-distribution.integration-spec.ts
+# ✅ phase3.7-autonomous-execution.integration-spec.ts
+# ✅ phase3.7-infinite-loop-prevention.integration-spec.ts
+
+# 2. Manager Hollon 확인
+curl -s http://localhost:3001/organizations | jq '.[0].id' | \
+  xargs -I {} curl -s "http://localhost:3001/teams?organizationId={}" | \
+  jq '.[] | select(.name == "Phase 4 Knowledge Team") | {name, managerHollonId}'
+
+# 예상: managerHollonId가 존재해야 함
+
+# 3. Document 인프라 확인
+psql -U hollon_dev -d hollon_dev -c "\d hollon.documents" | grep embedding
+
+# 예상: embedding | vector(1536) 확인
+
+# 4. GitHub CLI 인증
+gh auth status
+
+# 예상: "Logged in to github.com"
+```
+
+### Phase 4 진행 중 체크리스트 (주간)
+
+**일일 체크 (매일 오전 9:10, 10분):**
+
+- [ ] Standup 요약 확인 (`curl /channels/standup/messages | tail`)
+- [ ] 블로커 Task 확인 (`curl /tasks?status=blocked&projectId=...`)
+- [ ] Escalation 즉시 응답 (`curl /approval-requests?status=pending`)
+
+**주간 체크 (금요일 오후 4:30, 30분):**
+
+- [ ] Retrospective 확인 (`curl /documents?type=meeting&tag=retrospective`)
+- [ ] Velocity 적절한지 (주 9-11 tasks 완료)
+- [ ] 코드 품질 spot check (PR 2-3개 리뷰)
+- [ ] 다음 Sprint 계획 검토
+
+### Phase 4 완료 시 최종 검증
+
+```bash
+# 1. 모든 테스트 통과 확인
+pnpm --filter @hollon-ai/server test:all
+# 예상: 984+ tests passing
+
+# 2. TypeScript 빌드
+pnpm --filter @hollon-ai/server build
+# 예상: Build successful
+
+# 3. Document 자동 생성 검증
+curl -s "http://localhost:3001/documents?type=knowledge&autoGenerated=true" | \
+  jq 'length'
+# 예상: 30+ (Task당 1개 이상)
+
+# 4. Vector search 정확도 검증
+pnpm --filter @hollon-ai/server test:e2e vector-search-accuracy
+# 예상: Accuracy >= 85%
+
+# 5. 효율성 향상 검증
+curl -s "http://localhost:3001/performance/hollons" | \
+  jq '.[] | {name, efficiencyImprovement}'
+# 예상: 20%+ improvement
+
+# 6. 토큰 절감 검증
+curl -s "http://localhost:3001/prompt-optimizer/savings" | \
+  jq '.tokenSavingsPercent'
+# 예상: >= 15%
+
+# 7. Manager 분배 정확도 검증
+curl -s "http://localhost:3001/tasks?projectId=$PROJECT_ID&depth=1" | \
+  jq 'map(select(.assignedHollon != null)) |
+      map({
+        task: .title,
+        hollon: .assignedHollon.name,
+        hollonSkills: .assignedHollon.role.capabilities,
+        taskRequiredSkills: .requiredSkills
+      })' | \
+  # 수동 검증: assignedHollon의 스킬이 taskRequiredSkills와 80% 이상 매칭
+```
+
+### 검증 체크리스트 요약
+
+**Phase 4 킥오프 전 (필수):**
+
+- [ ] Phase 3.8 integration tests 통과
+- [ ] Manager Hollon 생성 확인
+- [ ] Document + pgvector 인프라 확인
+- [ ] GitHub CLI 인증 완료
+
+**Phase 4 진행 중 (주간):**
+
+- [ ] 일일 Standup 확인 (10분)
+- [ ] 블로커 즉시 해결 (필요 시)
+- [ ] 주간 Retrospective 리뷰 (30분)
+- [ ] 선택적 코드 리뷰 (critical path만)
+
+**Phase 4 완료 시 (최종):**
+
+- [ ] 모든 테스트 통과 (984+ tests)
+- [ ] TypeScript 0 errors
+- [ ] Build success
+- [ ] Document 자동 생성 100%
+- [ ] Vector search 정확도 85%+
+- [ ] 효율성 20% 향상
+- [ ] 토큰 15% 절감
+- [ ] Manager 분배 정확도 80%+
+- [ ] 인간 최종 리뷰 통과
+- [ ] main 브랜치 병합
+
+---
+
+## 📚 SSOT 준수 확인
+
+### ✅ 구현된 내용이 SSOT 원칙을 준수하는지 검증
+
+#### 1. Task Hierarchy & XOR Constraints ✅
+
+- **SSOT 원칙**: Task는 재귀적 구조, Project 없이도 생성 가능
+- **Phase 3.8 구현**: Team Task (depth=0) → Hollon Task (depth=1)
+- **검증**: XOR 제약 (assignedHollon OR assignedTeam)
+
+#### 2. Single Context 원칙 ✅
+
+- **SSOT 원칙**: 하나의 컨텍스트에서 하나의 Task 완료
+- **Phase 3.7 구현**: HollonOrchestrator.runCycle()
+
+#### 3. 동시성 모델 (Concurrency) ✅
+
+- **SSOT 원칙**: 병렬성이 아닌 동시성 (DB 기반)
+- **Phase 3.7 구현**: HollonExecutionService Cron Jobs
+
+#### 4. 6계층 프롬프트 합성 ✅
+
+- **SSOT 원칙**: Organization → Team → Role → Hollon → Memory → Task
+- **구현**: PromptComposerService (Layer 1-6)
+
+#### 5. 에스컬레이션 계층 (Level 1-5) ✅
+
+- **SSOT 원칙**: 자기 해결 → 팀 협업 → 팀 리더 → 상위 조직 → 인간
+- **Phase 3.8 구현**: Manager 역할, EscalationService
+
+#### 6. 임시 Hollon (Sub-Hollon) ✅
+
+- **SSOT 원칙**: 영구 홀론이 필요 시 임시 홀론 생성/종료
+- **Phase 3.7 구현**: HollonLifecycle.TEMPORARY, depth=1 제약
+
+#### 7. 안전장치 ✅
+
+- **SSOT 6.7**: 재귀 제한, 파일 충돌 방지, 롤백 전략
+- **Phase 3.7 구현**: Exponential backoff, Stuck Task 감지, Emergency Stop
+
+### 결론: SSOT 100% 준수 ✅
+
+---
+
+**문서 버전**: 3.0
 **최종 업데이트**: 2025-12-10
-**작성자**: Claude (based on Phase 3.5 완료 현황)
-**상태**: Phase 4 준비 완료, 킥오프 대기 중
+**작성자**: Claude Code
+**상태**: Phase 4 실행 가이드 완성 (phase4-execution-guide.md 통합 완료)
+
+---
+
+## 📝 변경 이력
+
+| 날짜       | 버전 | 변경 내용                                                   |
+| ---------- | ---- | ----------------------------------------------------------- |
+| 2025-12-10 | 1.0  | 초기 Phase 4 Dogfooding 계획 작성                           |
+| 2025-12-10 | 2.0  | Phase 3.7 (완전 자율 실행) 반영                             |
+| 2025-12-10 | 3.0  | phase4-execution-guide.md 통합, 3단계 빠른 실행 가이드 추가 |
+|            |      | API 호출 가이드 명확화, Manager 기반 분배 설명 추가         |
+|            |      | 모니터링/트러블슈팅 섹션 통합, SSOT 준수 검증 추가          |
