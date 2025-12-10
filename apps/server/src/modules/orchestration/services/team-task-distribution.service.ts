@@ -47,7 +47,11 @@ export class TeamTaskDistributionService {
   async distributeToTeam(teamTaskId: string): Promise<Task[]> {
     const teamTask = await this.taskRepo.findOne({
       where: { id: teamTaskId },
-      relations: ['assignedTeam', 'assignedTeam.manager', 'assignedTeam.hollons'],
+      relations: [
+        'assignedTeam',
+        'assignedTeam.manager',
+        'assignedTeam.hollons',
+      ],
     });
 
     if (!teamTask) {
@@ -125,13 +129,16 @@ export class TeamTaskDistributionService {
     // Build prompt for Manager
     const prompt = this.buildDistributionPrompt(teamTask, memberInfo);
 
-    this.logger.debug(`Asking manager ${manager.name} to create distribution plan`);
+    this.logger.debug(
+      `Asking manager ${manager.name} to create distribution plan`,
+    );
 
     // Call Manager's Brain Provider
     const response = await this.brainProvider.executeWithTracking(
       {
         prompt,
-        systemPrompt: 'You are a team manager responsible for distributing tasks. Provide structured JSON output only.',
+        systemPrompt:
+          'You are a team manager responsible for distributing tasks. Provide structured JSON output only.',
         context: {
           hollonId: manager.id,
           taskId: teamTask.id,
@@ -171,12 +178,16 @@ Priority: ${teamTask.priority}
 ${teamTask.acceptanceCriteria ? `Acceptance Criteria:\n${teamTask.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}` : ''}
 
 **Your Team Members:**
-${memberInfo.map((m) => `
+${memberInfo
+  .map(
+    (m) => `
 - ${m.name}
   Role: ${m.role}
   Skills: ${m.capabilities.join(', ')}
   Current workload: ${m.currentWorkload} active tasks
-`).join('\n')}
+`,
+  )
+  .join('\n')}
 
 **Your Task:**
 Break down this team task into 3-7 subtasks and assign each to the most suitable team member.
@@ -249,9 +260,7 @@ Break down this team task into 3-7 subtasks and assign each to the most suitable
     plan: DistributionPlan,
     team: Team,
   ): Promise<void> {
-    const memberNames = new Set(
-      (team.hollons || []).map((h) => h.name),
-    );
+    const memberNames = new Set((team.hollons || []).map((h) => h.name));
 
     // Check all assignees are valid team members
     for (const subtask of plan.subtasks) {
@@ -278,9 +287,7 @@ Break down this team task into 3-7 subtasks and assign each to the most suitable
   /**
    * Check for circular dependencies using DFS
    */
-  private hasCircularDependency(
-    graph: Map<string, string[]>,
-  ): boolean {
+  private hasCircularDependency(graph: Map<string, string[]>): boolean {
     const visited = new Set<string>();
     const recStack = new Set<string>();
 
@@ -384,7 +391,7 @@ Break down this team task into 3-7 subtasks and assign each to the most suitable
     // Reload to get updated data
     const createdSubtasks = await this.taskRepo.find({
       where: { parentTaskId: teamTask.id },
-      relations: ['assignedHollon', 'dependencies'],
+      relations: ['assignedHollon'],
     });
 
     return createdSubtasks;
