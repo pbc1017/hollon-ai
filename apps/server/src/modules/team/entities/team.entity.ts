@@ -2,6 +2,7 @@ import { Entity, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Organization } from '../../organization/entities/organization.entity';
 import { Hollon } from '../../hollon/entities/hollon.entity';
+import { Task } from '../../task/entities/task.entity';
 
 @Entity('teams')
 export class Team extends BaseEntity {
@@ -22,6 +23,10 @@ export class Team extends BaseEntity {
   @Column({ name: 'leader_hollon_id', type: 'uuid', nullable: true })
   leaderHollonId: string | null;
 
+  // ✅ Phase 3.8: Manager hollon (hierarchical task distribution)
+  @Column({ name: 'manager_hollon_id', type: 'uuid', nullable: true })
+  managerHollonId: string | null;
+
   // Relations
   @ManyToOne(() => Organization, (org) => org.teams, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organization_id' })
@@ -40,6 +45,15 @@ export class Team extends BaseEntity {
   @JoinColumn({ name: 'leader_hollon_id' })
   leader: Hollon | null;
 
+  // ✅ Phase 3.8: Manager hollon
+  @ManyToOne(() => Hollon, { nullable: true })
+  @JoinColumn({ name: 'manager_hollon_id' })
+  manager: Hollon | null;
+
   @OneToMany(() => Hollon, (hollon) => hollon.team)
   hollons: Hollon[];
+
+  // ✅ Phase 3.8: Tasks assigned to this team (Level 0)
+  @OneToMany(() => Task, (task) => task.assignedTeam)
+  assignedTasks: Task[];
 }

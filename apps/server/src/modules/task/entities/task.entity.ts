@@ -14,6 +14,7 @@ import { Organization } from '../../organization/entities/organization.entity';
 import { Project } from '../../project/entities/project.entity';
 import { Cycle } from '../../project/entities/cycle.entity';
 import { Hollon } from '../../hollon/entities/hollon.entity';
+import { Team } from '../../team/entities/team.entity';
 
 export enum TaskStatus {
   PENDING = 'pending',
@@ -34,6 +35,7 @@ export enum TaskPriority {
 }
 
 export enum TaskType {
+  TEAM_EPIC = 'team_epic', // Phase 3.8: Team-level task (Level 0)
   PLANNING = 'planning',
   ANALYSIS = 'analysis',
   IMPLEMENTATION = 'implementation',
@@ -85,6 +87,11 @@ export class Task extends BaseEntity {
 
   @Column({ name: 'cycle_id', type: 'uuid', nullable: true })
   cycleId: string | null;
+
+  // Phase 3.8: Team-level assignment (Level 0)
+  // Mutually exclusive with assigned_hollon_id
+  @Column({ name: 'assigned_team_id', type: 'uuid', nullable: true })
+  assignedTeamId: string | null;
 
   @Column({ name: 'assigned_hollon_id', type: 'uuid', nullable: true })
   assignedHollonId: string | null;
@@ -185,6 +192,14 @@ export class Task extends BaseEntity {
   })
   @JoinColumn({ name: 'cycle_id' })
   cycle: Cycle;
+
+  // Phase 3.8: Team assignment (Level 0 tasks)
+  @ManyToOne(() => Team, (team) => team.assignedTasks, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'assigned_team_id' })
+  assignedTeam: Team;
 
   @ManyToOne(() => Hollon, (hollon) => hollon.assignedTasks, {
     nullable: true,
