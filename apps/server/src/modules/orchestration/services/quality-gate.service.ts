@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Task } from '../../task/entities/task.entity';
 import { BrainResponse } from '../../brain-provider/interfaces/brain-provider.interface';
 import { execSync } from 'child_process';
@@ -251,19 +250,20 @@ export class QualityGateService {
 
       this.logger.log('Lint check passed');
       return { passed: true, shouldRetry: false };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Parse ESLint JSON output if available
       let errorCount = 0;
       let warningCount = 0;
 
       try {
-        const results = JSON.parse(error.stdout || '[]');
-        errorCount = results.reduce(
-          (sum: number, r: any) => sum + r.errorCount,
-          0,
-        );
+        const errorWithOutput = error as { stdout?: string };
+        const results = JSON.parse(errorWithOutput.stdout || '[]') as Array<{
+          errorCount: number;
+          warningCount: number;
+        }>;
+        errorCount = results.reduce((sum: number, r) => sum + r.errorCount, 0);
         warningCount = results.reduce(
-          (sum: number, r: any) => sum + r.warningCount,
+          (sum: number, r) => sum + r.warningCount,
           0,
         );
       } catch {
@@ -328,8 +328,13 @@ export class QualityGateService {
 
       this.logger.log('TypeScript compilation check passed');
       return { passed: true, shouldRetry: false };
-    } catch (error: any) {
-      const errorOutput = error.stdout || error.stderr || '';
+    } catch (error: unknown) {
+      const errorWithOutput = error as {
+        stdout?: string;
+        stderr?: string;
+      };
+      const errorOutput =
+        errorWithOutput.stdout || errorWithOutput.stderr || '';
 
       // Count errors
       const errorLines = errorOutput

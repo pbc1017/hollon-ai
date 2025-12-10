@@ -1,10 +1,20 @@
 import { Test, TestingModule } from '@nestjs/testing';
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { TeamTaskDistributionService } from './team-task-distribution.service';
-import { Task, TaskStatus, TaskType } from '../../task/entities/task.entity';
+import {
+  Task,
+  TaskStatus,
+  TaskType,
+  TaskPriority,
+} from '../../task/entities/task.entity';
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 import { SubtaskCreationService } from './subtask-creation.service';
+import { HollonStatus } from '../../hollon/entities/hollon.entity';
+import type { Team } from '../../team/entities/team.entity';
+import type { Organization } from '../../organization/entities/organization.entity';
+import type { Project } from '../../project/entities/project.entity';
+import type { Cycle } from '../../project/entities/cycle.entity';
+import type { Hollon } from '../../hollon/entities/hollon.entity';
 import { NotFoundException } from '@nestjs/common';
 
 describe('TeamTaskDistributionService', () => {
@@ -16,7 +26,7 @@ describe('TeamTaskDistributionService', () => {
     description: 'Build knowledge extraction and learning system',
     type: TaskType.TEAM_EPIC,
     status: TaskStatus.PENDING,
-    priority: 'P1' as any,
+    priority: TaskPriority.P1_CRITICAL,
     organizationId: 'org-1',
     projectId: 'project-1',
     cycleId: null,
@@ -43,9 +53,9 @@ describe('TeamTaskDistributionService', () => {
     blockedUntil: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-    organization: undefined as any,
-    project: undefined as any,
-    cycle: undefined as any,
+    organization: undefined as unknown as Organization,
+    project: undefined as unknown as Project,
+    cycle: undefined as unknown as Cycle,
     assignedTeam: {
       id: 'team-1',
       name: 'Knowledge Team',
@@ -56,7 +66,7 @@ describe('TeamTaskDistributionService', () => {
       managerHollonId: 'manager-1',
       createdAt: new Date(),
       updatedAt: new Date(),
-      organization: undefined as any,
+      organization: undefined as unknown as Organization,
       parentTeam: null,
       childTeams: [],
       leader: null,
@@ -66,11 +76,11 @@ describe('TeamTaskDistributionService', () => {
         organizationId: 'org-1',
         teamId: 'team-1',
         roleId: 'role-manager',
-        status: 'idle' as any,
+        status: HollonStatus.IDLE,
         personality: 'Strategic thinker',
         createdAt: new Date(),
         updatedAt: new Date(),
-      } as any,
+      } as Partial<Hollon> as Hollon,
       hollons: [
         {
           id: 'dev-1',
@@ -82,8 +92,8 @@ describe('TeamTaskDistributionService', () => {
             id: 'role-dev',
             name: 'Developer',
             capabilities: ['typescript', 'ai'],
-          } as any,
-        } as any,
+          } as unknown as Hollon,
+        } as unknown as Hollon,
         {
           id: 'dev-2',
           name: 'DevBot-Data',
@@ -94,15 +104,15 @@ describe('TeamTaskDistributionService', () => {
             id: 'role-dev',
             name: 'Developer',
             capabilities: ['python', 'data'],
-          } as any,
-        } as any,
+          } as unknown as Hollon,
+        } as unknown as Hollon,
       ],
       assignedTasks: [],
     },
-    assignedHollon: undefined as any,
-    parentTask: undefined as any,
+    assignedHollon: undefined as unknown as Hollon,
+    parentTask: undefined as unknown as Task,
     subtasks: [],
-    creatorHollon: undefined as any,
+    creatorHollon: undefined as unknown as Hollon,
     dependencies: [],
     dependentTasks: [],
     ...overrides,
@@ -162,7 +172,9 @@ describe('TeamTaskDistributionService', () => {
     });
 
     it('should throw NotFoundException if task has no assigned team', async () => {
-      const task = mockTask({ assignedTeam: undefined as any });
+      const task = mockTask({
+        assignedTeam: undefined as unknown as Team,
+      });
       mockTaskRepo.findOne.mockResolvedValue(task);
 
       await expect(service.distributeToTeam('task-1')).rejects.toThrow(
@@ -271,18 +283,32 @@ describe('TeamTaskDistributionService', () => {
         reasoning: 'Test reasoning',
       });
 
-      const plan = (service as any).parseDistributionPlan(response);
+      const plan = (
+        service as unknown as {
+          parseDistributionPlan: (response: string) => {
+            subtasks: unknown[];
+            reasoning: string;
+          };
+        }
+      ).parseDistributionPlan(response);
 
       expect(plan).toBeDefined();
       expect(plan.subtasks).toHaveLength(1);
-      expect(plan.subtasks[0].title).toBe('Task 1');
+      expect((plan.subtasks[0] as { title: string }).title).toBe('Task 1');
       expect(plan.reasoning).toBe('Test reasoning');
     });
 
     it('should parse JSON wrapped in markdown code blocks', () => {
       const response = '```json\n{"subtasks": [], "reasoning": "test"}\n```';
 
-      const plan = (service as any).parseDistributionPlan(response);
+      const plan = (
+        service as unknown as {
+          parseDistributionPlan: (response: string) => {
+            subtasks: unknown[];
+            reasoning: string;
+          };
+        }
+      ).parseDistributionPlan(response);
 
       expect(plan).toBeDefined();
       expect(plan.subtasks).toHaveLength(0);
@@ -291,7 +317,13 @@ describe('TeamTaskDistributionService', () => {
     it('should throw error for invalid JSON', () => {
       const response = 'invalid json';
 
-      expect(() => (service as any).parseDistributionPlan(response)).toThrow();
+      expect(() =>
+        (
+          service as unknown as {
+            parseDistributionPlan: (response: string) => unknown;
+          }
+        ).parseDistributionPlan(response),
+      ).toThrow();
     });
   });
 
@@ -302,7 +334,11 @@ describe('TeamTaskDistributionService', () => {
       graph.set('B', ['C']);
       graph.set('C', ['A']); // Circular: A → B → C → A
 
-      const result = (service as any).hasCircularDependency(graph);
+      const result = (
+        service as unknown as {
+          hasCircularDependency: (graph: Map<string, string[]>) => boolean;
+        }
+      ).hasCircularDependency(graph);
 
       expect(result).toBe(true);
     });
@@ -313,7 +349,11 @@ describe('TeamTaskDistributionService', () => {
       graph.set('B', ['C']);
       graph.set('C', []);
 
-      const result = (service as any).hasCircularDependency(graph);
+      const result = (
+        service as unknown as {
+          hasCircularDependency: (graph: Map<string, string[]>) => boolean;
+        }
+      ).hasCircularDependency(graph);
 
       expect(result).toBe(false);
     });
@@ -321,7 +361,11 @@ describe('TeamTaskDistributionService', () => {
     it('should handle empty graph', () => {
       const graph = new Map<string, string[]>();
 
-      const result = (service as any).hasCircularDependency(graph);
+      const result = (
+        service as unknown as {
+          hasCircularDependency: (graph: Map<string, string[]>) => boolean;
+        }
+      ).hasCircularDependency(graph);
 
       expect(result).toBe(false);
     });
@@ -330,7 +374,11 @@ describe('TeamTaskDistributionService', () => {
       const graph = new Map<string, string[]>();
       graph.set('A', ['A']); // Self-reference
 
-      const result = (service as any).hasCircularDependency(graph);
+      const result = (
+        service as unknown as {
+          hasCircularDependency: (graph: Map<string, string[]>) => boolean;
+        }
+      ).hasCircularDependency(graph);
 
       expect(result).toBe(true);
     });
@@ -344,9 +392,9 @@ describe('TeamTaskDistributionService', () => {
             title: 'Task 1',
             description: 'Desc',
             assignedTo: 'NonExistentBot',
-            type: 'implementation' as any,
+            type: TaskType.IMPLEMENTATION,
             priority: 'P1',
-            estimatedComplexity: 'high' as any,
+            estimatedComplexity: 'high' as const,
             dependencies: [],
           },
         ],
@@ -357,9 +405,15 @@ describe('TeamTaskDistributionService', () => {
         id: 'team-1',
         name: 'Test Team',
         hollons: [{ name: 'DevBot-1' }, { name: 'DevBot-2' }],
-      } as any;
+      } as Partial<Team> as Team;
 
-      await expect((service as any).validatePlan(plan, team)).rejects.toThrow(
+      await expect(
+        (
+          service as unknown as {
+            validatePlan: (plan: unknown, team: Team) => Promise<void>;
+          }
+        ).validatePlan(plan, team),
+      ).rejects.toThrow(
         'Invalid assignee "NonExistentBot" - not a member of team Test Team',
       );
     });
@@ -371,18 +425,18 @@ describe('TeamTaskDistributionService', () => {
             title: 'Task A',
             description: 'Desc',
             assignedTo: 'DevBot-1',
-            type: 'implementation' as any,
+            type: TaskType.IMPLEMENTATION,
             priority: 'P1',
-            estimatedComplexity: 'high' as any,
+            estimatedComplexity: 'high' as const,
             dependencies: ['Task B'],
           },
           {
             title: 'Task B',
             description: 'Desc',
             assignedTo: 'DevBot-2',
-            type: 'implementation' as any,
+            type: TaskType.IMPLEMENTATION,
             priority: 'P1',
-            estimatedComplexity: 'high' as any,
+            estimatedComplexity: 'high' as const,
             dependencies: ['Task A'],
           },
         ],
@@ -393,11 +447,15 @@ describe('TeamTaskDistributionService', () => {
         id: 'team-1',
         name: 'Test Team',
         hollons: [{ name: 'DevBot-1' }, { name: 'DevBot-2' }],
-      } as any;
+      } as Partial<Team> as Team;
 
-      await expect((service as any).validatePlan(plan, team)).rejects.toThrow(
-        'Circular dependency detected in distribution plan',
-      );
+      await expect(
+        (
+          service as unknown as {
+            validatePlan: (plan: unknown, team: Team) => Promise<void>;
+          }
+        ).validatePlan(plan, team),
+      ).rejects.toThrow('Circular dependency detected in distribution plan');
     });
 
     it('should pass validation for valid plan', async () => {
@@ -407,18 +465,18 @@ describe('TeamTaskDistributionService', () => {
             title: 'Task A',
             description: 'Desc',
             assignedTo: 'DevBot-1',
-            type: 'implementation' as any,
+            type: TaskType.IMPLEMENTATION,
             priority: 'P1',
-            estimatedComplexity: 'high' as any,
+            estimatedComplexity: 'high' as const,
             dependencies: [],
           },
           {
             title: 'Task B',
             description: 'Desc',
             assignedTo: 'DevBot-2',
-            type: 'implementation' as any,
+            type: TaskType.IMPLEMENTATION,
             priority: 'P1',
-            estimatedComplexity: 'high' as any,
+            estimatedComplexity: 'high' as const,
             dependencies: ['Task A'],
           },
         ],
@@ -429,10 +487,14 @@ describe('TeamTaskDistributionService', () => {
         id: 'team-1',
         name: 'Test Team',
         hollons: [{ name: 'DevBot-1' }, { name: 'DevBot-2' }],
-      } as any;
+      } as Partial<Team> as Team;
 
       await expect(
-        (service as any).validatePlan(plan, team),
+        (
+          service as unknown as {
+            validatePlan: (plan: unknown, team: Team) => Promise<void>;
+          }
+        ).validatePlan(plan, team),
       ).resolves.not.toThrow();
     });
   });
