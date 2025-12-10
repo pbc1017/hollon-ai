@@ -20,9 +20,9 @@ export const databaseConfig = (
     migrations: [__dirname + '/../database/migrations/*.{ts,js}'],
 
     // All environments use migration-based schema
-    // Migrations should be run manually before tests via: pnpm db:migrate:test
+    // For tests, run migrations automatically to ensure schema is up-to-date
     synchronize: false,
-    migrationsRun: false,
+    migrationsRun: isTest, // Auto-run migrations in test mode
 
     dropSchema: false, // Keep data between restarts
     logging: !isProduction && !isTest,

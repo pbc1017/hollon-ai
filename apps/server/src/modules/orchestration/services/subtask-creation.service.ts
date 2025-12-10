@@ -234,9 +234,6 @@ export class SubtaskCreationService {
 
       // Phase 3.7: Clean up temporary Hollon if it created these subtasks
       await this.cleanupTemporaryHollon(parentTask);
-
-      // Phase 3.7: Check and unblock dependent tasks
-      await this.checkAndUnblockDependentTasks(parentTaskId);
     } else if (anyFailed) {
       newStatus = TaskStatus.BLOCKED;
       this.logger.log(
@@ -403,6 +400,78 @@ export class SubtaskCreationService {
   }
 
   /**
+   * Phase 3.7: Check and unblock BLOCKED tasks after any task status update
+   *
+   * Public method that should be called after a task's status changes to COMPLETED.
+   * Checks all BLOCKED sibling tasks and unblocks them if their dependencies are satisfied.
+   */
+  async checkAndUnblockDependencies(parentTaskId: string): Promise<void> {
+    try {
+      // Find all BLOCKED tasks under this parent
+      const blockedTasks = await this.taskRepo.find({
+        where: {
+          parentTaskId: parentTaskId,
+          status: TaskStatus.BLOCKED,
+        },
+        relations: ['dependencies'],
+      });
+
+      if (blockedTasks.length === 0) {
+        return;
+      }
+
+      this.logger.log(
+        `Checking ${blockedTasks.length} blocked tasks for unblocking under parent ${parentTaskId}`,
+      );
+
+      for (const blockedTask of blockedTasks) {
+        if (
+          !blockedTask.dependencies ||
+          blockedTask.dependencies.length === 0
+        ) {
+          // No dependencies but still BLOCKED? Unblock immediately
+          await this.taskRepo.update(
+            { id: blockedTask.id },
+            { status: TaskStatus.READY },
+          );
+          this.logger.log(
+            `Unblocked task ${blockedTask.id} "${blockedTask.title}": no dependencies`,
+          );
+          continue;
+        }
+
+        // Check if ALL dependencies are completed
+        const allDepsCompleted = blockedTask.dependencies.every(
+          (dep) => dep.status === TaskStatus.COMPLETED,
+        );
+
+        if (allDepsCompleted) {
+          // Unblock: BLOCKED → READY
+          await this.taskRepo.update(
+            { id: blockedTask.id },
+            { status: TaskStatus.READY },
+          );
+          this.logger.log(
+            `✅ Unblocked task ${blockedTask.id} "${blockedTask.title}": all ${blockedTask.dependencies.length} dependencies completed`,
+          );
+        } else {
+          const remainingDeps = blockedTask.dependencies.filter(
+            (dep) => dep.status !== TaskStatus.COMPLETED,
+          );
+          this.logger.debug(
+            `Task ${blockedTask.id} still blocked: ${remainingDeps.length}/${blockedTask.dependencies.length} dependencies pending`,
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error checking dependencies for parent ${parentTaskId}: ${error}`,
+      );
+      // Don't throw - unblocking is best-effort
+    }
+  }
+
+  /**
    * Phase 3.7: Check and unblock BLOCKED tasks when their dependencies complete
    *
    * Called when a task completes. Searches for BLOCKED tasks that depend on this task
@@ -412,6 +481,8 @@ export class SubtaskCreationService {
    * - Research (READY) → executes immediately
    * - Design (BLOCKED, depends on Research) → unblocks when Research completes
    * - Implementation 1,2,3 (BLOCKED, depend on Design) → all unblock in parallel when Design completes
+   *
+   * @deprecated Use checkAndUnblockDependencies(parentTaskId) instead
    */
   private async checkAndUnblockDependentTasks(
     completedTaskId: string,
