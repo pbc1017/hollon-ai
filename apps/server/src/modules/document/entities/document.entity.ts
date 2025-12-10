@@ -35,7 +35,7 @@ export class Document extends BaseEntity {
   @Column({ name: 'organization_id' })
   organizationId: string;
 
-  @Column({ name: 'team_id', nullable: true }) // Phase 3.5: 팀별 지식 분리
+  @Column({ name: 'team_id', type: 'uuid', nullable: true }) // Phase 3.5: 팀별 지식 분리
   teamId: string | null;
 
   @Column({ name: 'project_id', nullable: true })

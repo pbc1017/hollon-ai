@@ -155,6 +155,16 @@ export class Task extends BaseEntity {
   @Column({ name: 'needs_human_approval', default: false })
   needsHumanApproval: boolean;
 
+  // ✅ Phase 3.7: 무한 루프 방지 (Exponential backoff)
+  @Column({ name: 'consecutive_failures', default: 0 })
+  consecutiveFailures: number;
+
+  @Column({ name: 'last_failed_at', type: 'timestamp', nullable: true })
+  lastFailedAt?: Date | null;
+
+  @Column({ name: 'blocked_until', type: 'timestamp', nullable: true })
+  blockedUntil?: Date | null;
+
   // Relations
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organization_id' })
