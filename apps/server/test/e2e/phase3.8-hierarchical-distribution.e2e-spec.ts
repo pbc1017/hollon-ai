@@ -263,7 +263,6 @@ describe('Phase 3.8 Hierarchical Task Distribution (e2e)', () => {
 
     it('Step 10: Trigger Team Task Distribution (Manager)', async () => {
       // Get TeamTaskDistributionService from the app
-      const orchestrationModule = app.get('OrchestrationModule');
       const teamDistributionService = app.get('TeamTaskDistributionService');
       
       expect(teamDistributionService).toBeDefined();

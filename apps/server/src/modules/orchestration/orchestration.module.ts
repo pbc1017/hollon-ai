@@ -22,6 +22,7 @@ import { CostTrackingService } from './services/cost-tracking.service';
 import { TaskExecutionService } from './services/task-execution.service';
 import { HollonExecutionService } from './services/hollon-execution.service';
 import { TeamTaskDistributionService } from './services/team-task-distribution.service';
+import { ManagerService } from './services/manager.service';
 import { CostRecord } from '../cost-tracking/entities/cost-record.entity';
 import { GoalDecompositionService } from '../goal/services/goal-decomposition.service';
 
@@ -54,6 +55,7 @@ import { GoalDecompositionService } from '../goal/services/goal-decomposition.se
     HollonOrchestratorService,
     HollonExecutionService,
     TeamTaskDistributionService,
+    ManagerService,
     {
       provide: 'GoalDecompositionService',
       useExisting: GoalDecompositionService,
@@ -66,6 +68,7 @@ import { GoalDecompositionService } from '../goal/services/goal-decomposition.se
     HollonOrchestratorService,
     HollonExecutionService,
     TeamTaskDistributionService,
+    ManagerService,
   ],
 })
 export class OrchestrationModule {}

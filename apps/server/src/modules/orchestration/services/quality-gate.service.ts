@@ -403,7 +403,7 @@ export class QualityGateService {
    * 3. Parse test results
    */
   // @ts-expect-error - Reserved for future implementation
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   private async _checkTestsPassing(
     _workingDirectory?: string,
   ): Promise<ValidationResult> {

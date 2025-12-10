@@ -1,18 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { TeamTaskDistributionService } from './team-task-distribution.service';
 import { Task, TaskStatus, TaskType } from '../../task/entities/task.entity';
-import { Team } from '../../team/entities/team.entity';
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 import { SubtaskCreationService } from './subtask-creation.service';
 import { NotFoundException } from '@nestjs/common';
 
 describe('TeamTaskDistributionService', () => {
   let service: TeamTaskDistributionService;
-  let taskRepo: Repository<Task>;
-  let brainProvider: BrainProviderService;
-  let subtaskService: SubtaskCreationService;
 
   const mockTask = (overrides: Partial<Task> = {}): Task => ({
     id: 'task-1',
@@ -150,9 +145,6 @@ describe('TeamTaskDistributionService', () => {
     service = module.get<TeamTaskDistributionService>(
       TeamTaskDistributionService,
     );
-    taskRepo = module.get<Repository<Task>>(getRepositoryToken(Task));
-    brainProvider = module.get<BrainProviderService>(BrainProviderService);
-    subtaskService = module.get<SubtaskCreationService>(SubtaskCreationService);
   });
 
   afterEach(() => {
