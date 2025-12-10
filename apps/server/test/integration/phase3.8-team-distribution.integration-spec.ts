@@ -3,7 +3,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { GoalDecompositionService } from '../../src/modules/goal/services/goal-decomposition.service';
 import { TeamTaskDistributionService } from '../../src/modules/orchestration/services/team-task-distribution.service';
-import { HollonExecutionService } from '../../src/modules/orchestration/services/hollon-execution.service';
 import { Goal } from '../../src/modules/goal/entities/goal.entity';
 import {
   Task,
@@ -21,6 +20,8 @@ import { Project } from '../../src/modules/project/entities/project.entity';
 import { BrainProviderModule } from '../../src/modules/brain-provider/brain-provider.module';
 import { BrainProviderService } from '../../src/modules/brain-provider/brain-provider.service';
 import { SubtaskCreationService } from '../../src/modules/orchestration/services/subtask-creation.service';
+import { GoalService } from '../../src/modules/goal/goal.service';
+import { ResourcePlannerService } from '../../src/modules/task/services/resource-planner.service';
 
 /**
  * Phase 3.8: Team Distribution Integration Test
@@ -28,13 +29,13 @@ import { SubtaskCreationService } from '../../src/modules/orchestration/services
  * Tests the complete flow:
  * 1. Goal Decomposition with useTeamDistribution
  * 2. Team Task creation (Level 0)
- * 3. HollonExecutionService auto-detection
+ * 3. TeamTaskDistribution service
  * 4. Manager-driven distribution (Level 0 → Level 1)
  */
 describe('Phase 3.8 Team Distribution Integration Test', () => {
   let module: TestingModule;
   let goalDecompositionService: GoalDecompositionService;
-  let hollonExecutionService: HollonExecutionService;
+  let teamTaskDistributionService: TeamTaskDistributionService;
   let brainProvider: BrainProviderService;
   let dataSource: DataSource;
 
@@ -75,16 +76,28 @@ describe('Phase 3.8 Team Distribution Integration Test', () => {
       providers: [
         GoalDecompositionService,
         TeamTaskDistributionService,
-        HollonExecutionService,
         SubtaskCreationService,
+        // Add missing dependencies
+        {
+          provide: GoalService,
+          useValue: {
+            // Mock GoalService - not needed for this test
+          },
+        },
+        {
+          provide: ResourcePlannerService,
+          useValue: {
+            // Mock ResourcePlannerService - not needed for this test
+          },
+        },
       ],
     }).compile();
 
     goalDecompositionService = module.get<GoalDecompositionService>(
       GoalDecompositionService,
     );
-    hollonExecutionService = module.get<HollonExecutionService>(
-      HollonExecutionService,
+    teamTaskDistributionService = module.get<TeamTaskDistributionService>(
+      TeamTaskDistributionService,
     );
     brainProvider = module.get<BrainProviderService>(BrainProviderService);
     dataSource = module.get<DataSource>(DataSource);
@@ -303,12 +316,19 @@ describe('Phase 3.8 Team Distribution Integration Test', () => {
       } as any);
     });
 
-    it('Step 5: HollonExecutionService auto-distributes Team Tasks', async () => {
-      // Trigger distributeTeamTasks
-      await hollonExecutionService.distributeTeamTasks();
+    it('Step 5: TeamTaskDistributionService distributes Team Tasks', async () => {
+      // Get Team Tasks
+      const taskRepo = dataSource.getRepository(Task);
+      const teamTasks = await taskRepo.find({
+        where: { type: TaskType.TEAM_EPIC },
+      });
+
+      expect(teamTasks.length).toBeGreaterThan(0);
+
+      // Trigger distribution for the first Team Task
+      await teamTaskDistributionService.distributeToTeam(teamTasks[0].id);
 
       // Verify Hollon Tasks created
-      const taskRepo = dataSource.getRepository(Task);
       const hollonTasks = await taskRepo.find({
         where: { depth: 1 },
         relations: ['assignedHollon', 'parentTask'],
@@ -325,16 +345,16 @@ describe('Phase 3.8 Team Distribution Integration Test', () => {
       });
 
       // Verify Team Task status updated
-      const teamTasks = await taskRepo.find({
+      const updatedTeamTasks = await taskRepo.find({
         where: { type: TaskType.TEAM_EPIC },
       });
 
-      teamTasks.forEach((task) => {
+      updatedTeamTasks.forEach((task) => {
         expect(task.status).toBe(TaskStatus.IN_PROGRESS);
       });
 
       console.log('\n✅ Team Distribution Flow Complete!');
-      console.log(`   Level 0 (Team Tasks): ${teamTasks.length}`);
+      console.log(`   Level 0 (Team Tasks): ${updatedTeamTasks.length}`);
       console.log(`   Level 1 (Hollon Tasks): ${hollonTasks.length}`);
     });
 
