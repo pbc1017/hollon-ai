@@ -177,6 +177,96 @@ export class GoalAutomationListener {
   }
 
   /**
+   * Step 2.5: 자동 Manager Review Cycle (Phase 3.16)
+   * 매 2분마다 READY_FOR_REVIEW 상태의 서브태스크를 찾아서
+   * Manager Hollon이 Temporary Review Hollon을 생성하여 리뷰 시작
+   *
+   * 조건:
+   * - status가 READY_FOR_REVIEW
+   * - reviewerHollonId가 설정됨 (Manager hollon)
+   *
+   * Phase 3.16 Hierarchical Review:
+   * - Manager가 임시 리뷰 홀론 생성
+   * - 리뷰 홀론이 코드 리뷰 수행
+   * - Manager가 결과 받아서 merge/rework/add_tasks 결정
+   */
+  @Cron('*/2 * * * *') // 2분마다 (Task Execution과 동일한 간격)
+  async autoManagerReview(): Promise<void> {
+    try {
+      this.logger.debug('Checking for tasks ready for manager review...');
+
+      // READY_FOR_REVIEW 상태이고 reviewerHollonId가 설정된 Task 찾기
+      const tasksForReview = await this.taskRepo
+        .createQueryBuilder('task')
+        .where('task.status = :status', { status: TaskStatus.READY_FOR_REVIEW })
+        .andWhere('task.reviewerHollonId IS NOT NULL')
+        .leftJoinAndSelect('task.reviewerHollon', 'reviewerHollon')
+        .leftJoinAndSelect('reviewerHollon.role', 'role')
+        .take(5) // 한 번에 최대 5개 Task까지만 처리
+        .getMany();
+
+      if (tasksForReview.length === 0) {
+        this.logger.debug('No tasks ready for manager review');
+        return;
+      }
+
+      this.logger.log(
+        `Found ${tasksForReview.length} tasks ready for manager review`,
+      );
+
+      // Group tasks by manager hollon
+      const tasksByManager = new Map<string, Task[]>();
+      for (const task of tasksForReview) {
+        if (task.reviewerHollonId) {
+          if (!tasksByManager.has(task.reviewerHollonId)) {
+            tasksByManager.set(task.reviewerHollonId, []);
+          }
+          tasksByManager.get(task.reviewerHollonId)!.push(task);
+        }
+      }
+
+      // Process each manager's tasks
+      for (const [managerHollonId, tasks] of tasksByManager.entries()) {
+        try {
+          const managerHollon = tasks[0].reviewerHollon;
+          if (!managerHollon) {
+            this.logger.warn(
+              `Manager hollon ${managerHollonId} not found, skipping`,
+            );
+            continue;
+          }
+
+          this.logger.log(
+            `Manager ${managerHollon.name} processing ${tasks.length} task(s) for review`,
+          );
+
+          // Call handleManagerReviewCycle
+          await this.hollonOrchestratorService.handleManagerReviewCycle(
+            managerHollon,
+          );
+
+          this.logger.log(
+            `✅ Manager ${managerHollon.name} initiated reviews for ${tasks.length} task(s)`,
+          );
+        } catch (error) {
+          const err = error as Error;
+          this.logger.error(
+            `Failed to process manager review for ${managerHollonId}: ${err.message}`,
+            err.stack,
+          );
+          // 에러가 발생해도 다음 Manager는 계속 처리
+        }
+      }
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Manager review automation failed: ${err.message}`,
+        err.stack,
+      );
+    }
+  }
+
+  /**
    * Step 3: 자동 Task Review
    * 매 3분마다 IN_REVIEW 상태의 Task를 찾아서 자동으로 리뷰 및 완료 처리
    *
