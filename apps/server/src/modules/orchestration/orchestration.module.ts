@@ -40,7 +40,7 @@ import { ApprovalRequest } from '../approval/entities/approval-request.entity';
       ApprovalRequest,
     ]),
     BrainProviderModule,
-    CollaborationModule,
+    forwardRef(() => CollaborationModule),
     forwardRef(() => GoalModule),
     forwardRef(() => HollonModule),
   ],
