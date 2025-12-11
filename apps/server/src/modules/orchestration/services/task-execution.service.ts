@@ -100,9 +100,10 @@ export class TaskExecutionService {
       // 6. CodeReview 요청 (Phase 2 활용)
       await this.requestCodeReview(task, prUrl, hollonId, worktreePath);
 
-      // 7. Task를 IN_REVIEW로 변경
+      // 7. Task를 READY_FOR_REVIEW로 변경 (Phase 3.16: Manager review 대기)
+      // Manager hollon이 이 status를 감지하고 temporary review hollon 생성
       await this.taskRepo.update(taskId, {
-        status: TaskStatus.IN_REVIEW,
+        status: TaskStatus.READY_FOR_REVIEW,
       });
 
       return { prUrl, worktreePath };

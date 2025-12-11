@@ -124,6 +124,7 @@ export class SubtaskCreationService {
           depth: (parentTask.depth || 0) + 1, // Phase 3.8: Set depth
           status: TaskStatus.READY,
           assignedHollonId: null, // Subtasks start unassigned
+          reviewerHollonId: parentTask.assignedHollonId, // Phase 3.16: Parent's manager reviews
           retryCount: 0,
           priority:
             (definition.priority as TaskPriority) || parentTask.priority,
