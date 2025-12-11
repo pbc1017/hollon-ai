@@ -8,6 +8,8 @@ import {
 } from '../entities/task-pull-request.entity';
 import { Task, TaskStatus } from '../../task/entities/task.entity';
 import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
+import { Role } from '../../role/entities/role.entity';
+import { HollonService } from '../../hollon/hollon.service';
 import { MessageService } from '../../message/message.service';
 import {
   MessageType,
@@ -27,6 +29,9 @@ export class CodeReviewService {
     private readonly taskRepo: Repository<Task>,
     @InjectRepository(Hollon)
     private readonly hollonRepo: Repository<Hollon>,
+    @InjectRepository(Role)
+    private readonly roleRepo: Repository<Role>,
+    private readonly hollonService: HollonService,
     private readonly messageService: MessageService,
   ) {}
 
@@ -411,12 +416,13 @@ Please review the changes.
 
   /**
    * 전문 리뷰어 찾기 또는 생성
+   * Phase 3.13: Alice/Bob 같은 영구 홀론이 필요시 임시 리뷰어 서브홀론 생성
    */
   private async findOrCreateSpecializedReviewer(
     role: string,
-    _pr: TaskPullRequest,
+    pr: TaskPullRequest,
   ): Promise<{ hollonId: string; type: ReviewerType }> {
-    // 해당 역할의 가용한 홀론 찾기
+    // 1. 해당 역할의 가용한 홀론 찾기 (영구 또는 기존 임시)
     const existingReviewer = await this.hollonRepo.findOne({
       where: {
         name: role,
@@ -425,32 +431,58 @@ Please review the changes.
     });
 
     if (existingReviewer) {
+      this.logger.log(
+        `Reusing existing reviewer: ${role} (${existingReviewer.id})`,
+      );
       return {
         hollonId: existingReviewer.id,
         type: this.mapRoleToReviewerType(role),
       };
     }
 
-    // 없으면 임시 홀론 생성
-    this.logger.log(`Creating temporary reviewer hollon: ${role}`);
-    // TODO: HollonService의 createTemporary 메서드 구현 후 활성화
-    // const reviewer = await this.hollonService.createTemporary({
-    //   name: role,
-    //   organizationId: pr.task.project.organizationId,
-    //   lifecycle: 'temporary',
-    // });
+    // 2. 없으면 PR 작성자(영구 홀론)가 임시 리뷰어 서브홀론 생성
+    this.logger.log(
+      `Creating temporary reviewer sub-hollon: ${role} by ${pr.authorHollonId}`,
+    );
 
-    // 임시로 시스템 기본 리뷰어 반환 (실제 구현 시 제거)
-    const systemReviewer = await this.hollonRepo.findOne({
-      where: { status: HollonStatus.IDLE },
-    });
-
-    if (!systemReviewer) {
-      throw new Error('No available reviewer found');
+    if (!pr.authorHollonId) {
+      throw new Error('PR has no author hollon to create sub-hollon');
     }
 
+    const authorHollon = await this.hollonRepo.findOne({
+      where: { id: pr.authorHollonId },
+      relations: ['role'],
+    });
+
+    if (!authorHollon) {
+      throw new Error(`Author hollon ${pr.authorHollonId} not found`);
+    }
+
+    // 리뷰어 Role 찾기
+    const reviewerRole = await this.roleRepo.findOne({
+      where: { name: role },
+    });
+
+    if (!reviewerRole) {
+      throw new Error(`Reviewer role ${role} not found`);
+    }
+
+    // 임시 리뷰어 서브홀론 생성 (depth=1)
+    const reviewer = await this.hollonService.createTemporary({
+      name: `${role}-${pr.task.id.slice(0, 8)}`,
+      organizationId: authorHollon.organizationId,
+      teamId: authorHollon.teamId || undefined,
+      roleId: reviewerRole.id,
+      brainProviderId: authorHollon.brainProviderId || 'claude_code',
+      createdBy: pr.authorHollonId, // 부모 홀론 ID
+    });
+
+    this.logger.log(
+      `Temporary reviewer created: ${reviewer.id} (depth=${reviewer.depth})`,
+    );
+
     return {
-      hollonId: systemReviewer.id,
+      hollonId: reviewer.id,
       type: this.mapRoleToReviewerType(role),
     };
   }
