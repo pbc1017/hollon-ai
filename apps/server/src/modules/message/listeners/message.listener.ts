@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -28,7 +28,9 @@ export class MessageListener {
 
   constructor(
     private readonly messageService: MessageService,
+    @Inject(forwardRef(() => CodeReviewService))
     private readonly codeReviewService: CodeReviewService,
+    @Inject(forwardRef(() => ReviewerHollonService))
     private readonly reviewerHollonService: ReviewerHollonService,
     private readonly resourcePlanner: ResourcePlannerService,
     private readonly taskService: TaskService,
