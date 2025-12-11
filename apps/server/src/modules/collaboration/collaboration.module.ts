@@ -4,6 +4,7 @@ import { CollaborationSession } from './entities/collaboration-session.entity';
 import { TaskPullRequest } from './entities/task-pull-request.entity';
 import { Hollon } from '../hollon/entities/hollon.entity';
 import { Task } from '../task/entities/task.entity';
+import { Role } from '../role/entities/role.entity';
 import { CollaborationService } from './services/collaboration.service';
 import { CodeReviewService } from './services/code-review.service';
 import { ReviewerHollonService } from './services/reviewer-hollon.service';
@@ -21,6 +22,7 @@ import { BrainProviderModule } from '../brain-provider/brain-provider.module';
       TaskPullRequest,
       Hollon,
       Task,
+      Role,
     ]),
     forwardRef(() => MessageModule),
     forwardRef(() => HollonModule),

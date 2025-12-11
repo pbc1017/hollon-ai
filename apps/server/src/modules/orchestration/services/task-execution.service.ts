@@ -201,8 +201,19 @@ export class TaskExecutionService {
     );
 
     try {
-      // Create and checkout branch from origin/main
-      await execAsync(`git checkout -b ${branchName} origin/main`, {
+      // Check if origin/main exists, otherwise use main
+      let baseBranch = 'origin/main';
+      try {
+        await execAsync(`git rev-parse --verify origin/main`, {
+          cwd: worktreePath,
+        });
+      } catch {
+        // origin/main doesn't exist, use main instead
+        baseBranch = 'main';
+      }
+
+      // Create and checkout branch from base
+      await execAsync(`git checkout -b ${branchName} ${baseBranch}`, {
         cwd: worktreePath,
       });
 

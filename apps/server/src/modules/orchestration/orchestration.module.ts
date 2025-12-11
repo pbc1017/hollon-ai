@@ -25,6 +25,7 @@ import { TeamTaskDistributionService } from './services/team-task-distribution.s
 import { ManagerService } from './services/manager.service';
 import { CostRecord } from '../cost-tracking/entities/cost-record.entity';
 import { GoalDecompositionService } from '../goal/services/goal-decomposition.service';
+import { ApprovalRequest } from '../approval/entities/approval-request.entity';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { GoalDecompositionService } from '../goal/services/goal-decomposition.se
       Project,
       Team,
       CostRecord,
+      ApprovalRequest,
     ]),
     BrainProviderModule,
     CollaborationModule,
