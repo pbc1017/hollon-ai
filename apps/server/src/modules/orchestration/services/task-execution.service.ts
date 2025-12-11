@@ -32,11 +32,12 @@ export class TaskExecutionService {
 
   /**
    * Task 실행 전체 플로우
-   * 1. Worktree 생성
-   * 2. BrainProvider 실행 (지식 주입 포함)
-   * 3. PR 생성
-   * 4. CodeReview 요청
-   * 5. Worktree 정리
+   * Phase 3.11: Hollon별 Worktree 재사용 + Hollon 이름이 포함된 브랜치
+   * 1. Hollon별 Worktree 확보 (재사용 전략)
+   * 2. Hollon별 브랜치 생성
+   * 3. BrainProvider 실행 (지식 주입 포함)
+   * 4. PR 생성
+   * 5. CodeReview 요청
    */
   async executeTask(
     taskId: string,
@@ -66,21 +67,25 @@ export class TaskExecutionService {
       throw new Error(`Hollon ${hollonId} not found`);
     }
 
-    // 1. Worktree 생성
-    const worktreePath = await this.createWorktree(task.project, task);
-    this.logger.log(`Worktree created: ${worktreePath}`);
+    // 1. Hollon별 Worktree 확보 (재사용 전략 - Phase 3.11)
+    const worktreePath = await this.getOrCreateWorktree(task.project, hollon);
+    this.logger.log(`Worktree ready: ${worktreePath}`);
+
+    // 2. Hollon별 브랜치 생성 (Phase 3.11)
+    const branchName = await this.createBranch(hollon, task, worktreePath);
+    this.logger.log(`Branch created: ${branchName}`);
 
     try {
-      // 2. Task를 IN_PROGRESS로 변경
+      // 3. Task를 IN_PROGRESS로 변경
       await this.taskRepo.update(taskId, {
         status: TaskStatus.IN_PROGRESS,
         startedAt: new Date(),
       });
 
-      // 3. BrainProvider 실행 (worktree 경로에서)
+      // 4. BrainProvider 실행 (worktree 경로에서)
       await this.executeBrainProvider(hollon, task, worktreePath);
 
-      // 4. PR 생성
+      // 5. PR 생성
       const prUrl = await this.createPullRequest(
         task.project,
         task,
@@ -88,10 +93,10 @@ export class TaskExecutionService {
       );
       this.logger.log(`PR created: ${prUrl}`);
 
-      // 5. CodeReview 요청 (Phase 2 활용)
-      await this.requestCodeReview(task, prUrl, hollonId);
+      // 6. CodeReview 요청 (Phase 2 활용)
+      await this.requestCodeReview(task, prUrl, hollonId, worktreePath);
 
-      // 6. Task를 IN_REVIEW로 변경
+      // 7. Task를 IN_REVIEW로 변경
       await this.taskRepo.update(taskId, {
         status: TaskStatus.IN_REVIEW,
       });
@@ -116,33 +121,110 @@ export class TaskExecutionService {
   }
 
   /**
-   * Git Worktree 생성
-   * feature/task-{taskId} 브랜치로 격리된 작업 환경 생성
+   * Phase 3.11: Hollon별 Worktree 확보 (재사용 전략)
+   * - 홀론당 1개의 worktree 생성
+   * - 이미 존재하면 재사용
+   * - 경로: {projectDir}/../.git-worktrees/worktree-{hollonId}
    */
-  private async createWorktree(project: Project, task: Task): Promise<string> {
-    const branchName = `feature/task-${task.id.slice(0, 8)}`;
+  private async getOrCreateWorktree(
+    project: Project,
+    hollon: Hollon,
+  ): Promise<string> {
     const worktreePath = path.join(
       project.workingDirectory,
       '..',
-      `task-${task.id.slice(0, 8)}`,
+      '.git-worktrees',
+      `worktree-${hollon.id.slice(0, 8)}`,
     );
 
+    // Check if worktree exists
+    const exists = await this.worktreeExists(worktreePath);
+
+    if (!exists) {
+      // Create new worktree
+      this.logger.debug(`Creating new worktree for hollon ${hollon.name}`);
+
+      try {
+        // Ensure .git-worktrees directory exists
+        const worktreesDir = path.join(
+          project.workingDirectory,
+          '..',
+          '.git-worktrees',
+        );
+        await execAsync(`mkdir -p ${worktreesDir}`);
+
+        // Create worktree (checkout main branch as base)
+        await execAsync(`git worktree add ${worktreePath}`, {
+          cwd: project.workingDirectory,
+        });
+
+        this.logger.log(`Worktree created for hollon ${hollon.name}`);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(`Failed to create worktree: ${errorMessage}`);
+        throw new Error(`Worktree creation failed: ${errorMessage}`);
+      }
+    } else {
+      // Reuse existing worktree
+      this.logger.log(`Reusing worktree for hollon ${hollon.name}`);
+
+      try {
+        // Fetch latest changes
+        await execAsync(`git fetch origin`, { cwd: worktreePath });
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(`Failed to fetch in worktree: ${errorMessage}`);
+      }
+    }
+
+    return worktreePath;
+  }
+
+  /**
+   * Phase 3.11: Hollon별 브랜치 생성
+   * - 브랜치명: feature/{hollonName}/task-{taskId}
+   * - 작업자를 브랜치명으로 명확히 식별
+   */
+  private async createBranch(
+    hollon: Hollon,
+    task: Task,
+    worktreePath: string,
+  ): Promise<string> {
+    // Sanitize hollon name for branch (특수문자 제거)
+    const sanitizedName = hollon.name.replace(/[^a-zA-Z0-9-]/g, '-');
+    const branchName = `feature/${sanitizedName}/task-${task.id.slice(0, 8)}`;
+
     this.logger.debug(
-      `Creating worktree: branch=${branchName}, path=${worktreePath}`,
+      `Creating branch ${branchName} for hollon ${hollon.name}`,
     );
 
     try {
-      // Worktree 생성
-      await execAsync(`git worktree add ${worktreePath} -b ${branchName}`, {
-        cwd: project.workingDirectory,
+      // Create and checkout branch from origin/main
+      await execAsync(`git checkout -b ${branchName} origin/main`, {
+        cwd: worktreePath,
       });
 
-      return worktreePath;
+      this.logger.log(`Branch created: ${branchName}`);
+      return branchName;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to create worktree: ${errorMessage}`);
-      throw new Error(`Worktree creation failed: ${errorMessage}`);
+      this.logger.error(`Failed to create branch: ${errorMessage}`);
+      throw new Error(`Branch creation failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Phase 3.11: Worktree 존재 여부 확인
+   */
+  private async worktreeExists(worktreePath: string): Promise<boolean> {
+    try {
+      await execAsync(`test -d ${worktreePath}`);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -226,26 +308,34 @@ export class TaskExecutionService {
 
   /**
    * Pull Request 생성
+   * Phase 3.11: 현재 브랜치를 자동 감지 (feature/{hollonName}/task-{id})
    */
   private async createPullRequest(
     _project: Project,
     task: Task,
     worktreePath: string,
   ): Promise<string> {
-    const branchName = `feature/task-${task.id.slice(0, 8)}`;
-
-    this.logger.debug(`Creating PR for branch ${branchName}`);
+    this.logger.debug(`Creating PR for task ${task.id}`);
 
     try {
-      // 1. Push to remote
-      await execAsync(`git push -u origin ${branchName}`, {
+      // 1. Get current branch name
+      const { stdout: branchName } = await execAsync(
+        `git branch --show-current`,
+        { cwd: worktreePath },
+      );
+      const currentBranch = branchName.trim();
+
+      this.logger.debug(`Current branch: ${currentBranch}`);
+
+      // 2. Push to remote
+      await execAsync(`git push -u origin ${currentBranch}`, {
         cwd: worktreePath,
       });
 
-      // 2. PR body 구성
+      // 3. PR body 구성
       const prBody = this.buildPRBody(task);
 
-      // 3. Create PR using gh CLI
+      // 4. Create PR using gh CLI
       const { stdout } = await execAsync(
         `gh pr create --title "${task.title}" --body "${prBody}" --base main`,
         { cwd: worktreePath },
@@ -290,11 +380,13 @@ export class TaskExecutionService {
 
   /**
    * CodeReview 요청 (Phase 2 활용)
+   * Phase 3.11: PR URL에서 브랜치명 추출
    */
   private async requestCodeReview(
     task: Task,
     prUrl: string,
     authorHollonId: string,
+    worktreePath: string,
   ): Promise<void> {
     const prNumber = this.extractPRNumber(prUrl);
 
@@ -305,13 +397,19 @@ export class TaskExecutionService {
 
     this.logger.log(`Requesting code review for PR #${prNumber}`);
 
+    // Get current branch name
+    const { stdout } = await execAsync(`git branch --show-current`, {
+      cwd: worktreePath,
+    });
+    const branchName = stdout.trim();
+
     // TaskPullRequest 생성 (Phase 2)
     const pr = await this.codeReviewService.createPullRequest({
       taskId: task.id,
       prNumber,
       prUrl,
       repository: task.project.repositoryUrl || 'unknown',
-      branchName: `feature/task-${task.id.slice(0, 8)}`,
+      branchName, // Phase 3.11: 동적 브랜치명 (feature/{hollonName}/task-{id})
       authorHollonId,
     });
 
