@@ -18,6 +18,7 @@ import {
   Hollon,
   HollonStatus,
 } from '../../src/modules/hollon/entities/hollon.entity';
+import { BrainProviderConfig } from '../../src/modules/brain-provider/entities/brain-provider-config.entity';
 import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
@@ -105,6 +106,26 @@ describe('Phase 3.11: Project-Based Workflow (E2E)', () => {
           name: `Test Org - Calculator ${Date.now()}`,
           maxBudgetCents: 100000,
         });
+
+        // Create BrainProviderConfig for REAL mode
+        if (!USE_MOCK_LLM) {
+          const configRepo = dataSource.getRepository(BrainProviderConfig);
+          await configRepo.save({
+            organizationId: organization.id,
+            providerId: 'claude_code',
+            displayName: 'Test Claude Code Config',
+            config: {
+              model: 'claude-sonnet-4-5',
+              maxTokens: 8192,
+            },
+            costPerInputTokenCents: 0.0003, // $3 per million tokens
+            costPerOutputTokenCents: 0.0015, // $15 per million tokens
+            enabled: true,
+            timeoutSeconds: 300,
+            maxRetries: 3,
+          });
+          console.log(`✅ BrainProviderConfig created for REAL mode`);
+        }
 
         const roleRepo = dataSource.getRepository(Role);
         managerRole = await roleRepo.save({
