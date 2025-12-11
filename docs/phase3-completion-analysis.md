@@ -745,17 +745,197 @@
 
 ---
 
-### Phase 3.15: Quality Gate (계획됨)
+### Phase 3.15: Quality Gate ✅ (완료)
 
 **목표**: 자동 lint/type/test 검증
 
-**구현** (설계됨, 아직 검증 안됨):
+**구현 완료**:
 
-- Lint 체크 (ESLint)
-- Type 체크 (TypeScript)
-- Test 실행 (Jest)
-- 실패 시 재시도 (최대 3회)
-- 지속적 실패 시 escalation
+#### 1. Quality Gate Service Enhancement
+
+**파일**: `apps/server/src/modules/orchestration/services/quality-gate.service.ts`
+
+**구현된 검증 단계** (validateResult 메서드):
+
+1. **Lint 체크** (`checkLintPassing`):
+   - ESLint 실행 (`npx eslint --format json`)
+   - JSON 결과 파싱 및 에러/경고 분석
+   - 에러 발생 시 재시도 가능
+
+2. **Type 체크** (`checkTypesPassing`):
+   - TypeScript 컴파일러 실행 (`npx tsc --noEmit`)
+   - stderr 출력 파싱 및 타입 에러 분석
+   - 에러 발생 시 재시도 가능
+
+3. **Test 실행** (`checkTestsPassing`) - **Phase 3.15 핵심 추가**:
+   - 영향받은 파일에서 테스트 파일 감지 (`.spec.`, `.test.`, `__tests__`)
+   - Jest 실행 (`npx jest --passWithNoTests --bail --json`)
+   - JSON 결과 파싱 (success, numFailedTests, numPassedTests 등)
+   - 실패한 테스트가 있으면 재시도 가능
+   - 테스트 파일이 없으면 검증 통과
+
+**검증 파이프라인**:
+
+```typescript
+// 1. Commit message validation
+// 2. Affected files validation
+// 3. Branch check
+// 4. Git changes check
+// 5. Lint check (optional)
+// 6. Type check
+// 7. Test check (Phase 3.15 - optional)
+```
+
+**재시도 로직**:
+
+- ValidationResult의 `shouldRetry` 플래그로 재시도 가능 여부 결정
+- Lint/Type/Test 실패는 재시도 가능
+- Commit message, Branch 이슈는 재시도 불가
+
+#### 2. 통합
+
+Quality Gate는 이미 `HollonOrchestratorService.handleReviewMode()`에 통합되어 있으며, 리뷰 모드에서 자동으로 실행됩니다:
+
+```typescript
+// Phase 3: Quality Gate 검증
+const validation = await this.qualityGate.validateResult(/* context */);
+
+if (!validation.passed) {
+  if (validation.shouldRetry && task.retryCount < MAX_RETRY) {
+    // 재시도
+    return this.handleRetry(/* ... */);
+  } else {
+    // Escalation
+    return this.handleEscalation(/* ... */);
+  }
+}
+```
+
+**핵심 성과**:
+
+- ✅ 완전한 CI/CD 파이프라인 검증 (Lint + Type + Test)
+- ✅ 선택적 검증 (테스트 파일이 없으면 스킵)
+- ✅ 재시도 가능한 실패 vs 재시도 불가능한 실패 구분
+- ✅ 에러 발생 시 Escalation 자동 트리거
+
+---
+
+### Phase 3.16: Hierarchical Review ✅ (완료)
+
+**목표**: Manager Hollon이 임시 Review Hollon을 생성하여 계층적 코드 리뷰 수행
+
+**구현 완료**:
+
+#### 1. Manager Review Cycle
+
+**파일**: `apps/server/src/modules/orchestration/services/hollon-orchestrator.service.ts`
+
+**핵심 메서드**:
+
+1. **`handleManagerReviewCycle(managerHollon: Hollon)`**:
+   - Manager가 `READY_FOR_REVIEW` 상태의 서브태스크 감지
+   - 각 서브태스크에 대해 임시 Review Hollon 생성
+   - PR의 `reviewerHollonId` 할당
+   - Task 상태를 `IN_REVIEW`로 변경
+
+2. **`createTemporaryReviewHollon(managerHollon: Hollon, subtask: Task)`**:
+   - Code Reviewer 역할로 임시 Hollon 생성
+   - `HollonLifecycle.TEMPORARY` 사용 (Phase 3.7 패턴 재사용)
+   - Manager의 팀에 소속
+   - 이름: `Reviewer-{taskId}`
+
+3. **`handleReviewResult(managerHollon: Hollon, pr: TaskPullRequest)`**:
+   - 리뷰 결과 처리 (approved / changes_requested)
+   - **Approved**: PR 머지 → Task 완료 → 부모 Task 완료 여부 체크
+   - **Changes Requested**: Task를 READY 상태로 되돌림 (Worker가 재작업)
+   - 임시 Review Hollon 정리
+
+4. **`checkParentTaskCompletion(subtask: Task)`**:
+   - 모든 서브태스크 완료 시 부모 Task 체크
+   - LLM에게 질문: 부모 Task 완료? or 추가 작업 필요?
+   - **complete**: 부모 Task 완료 → 재귀적으로 상위 체크
+   - **add_tasks**: 추가 서브태스크 생성 트리거
+
+#### 2. Status Flow 변경
+
+**TaskExecutionService** (`task-execution.service.ts`):
+
+- Worker가 PR 생성 후 Task 상태를 `READY_FOR_REVIEW`로 설정 (기존 `IN_REVIEW` 대신)
+- Manager가 감지할 수 있도록 중간 상태 추가
+
+**SubtaskCreationService** (`subtask-creation.service.ts`):
+
+- 서브태스크 생성 시 `reviewerHollonId = parentTask.assignedHollonId` 설정
+- 부모 Task의 담당 Hollon이 서브태스크의 Reviewer가 됨
+
+#### 3. Automation Integration
+
+**파일**: `apps/server/src/modules/goal/listeners/goal-automation.listener.ts`
+
+**추가된 Cron Job**:
+
+```typescript
+@Cron('*/2 * * * *') // 2분마다
+async autoManagerReview(): Promise<void>
+```
+
+**동작**:
+
+- `READY_FOR_REVIEW` 상태의 Task 검색
+- Manager Hollon별로 그룹화
+- 각 Manager의 `handleManagerReviewCycle()` 호출
+
+#### 4. 계층적 리뷰 워크플로우
+
+```
+Worker Hollon (Subtask 실행)
+    ↓
+    코드 작성 및 PR 생성
+    ↓
+    Task 상태: READY_FOR_REVIEW
+    ↓
+Manager Hollon (매 2분마다 감지)
+    ↓
+    Temporary Review Hollon 생성
+    ↓
+    reviewerHollonId 할당
+    ↓
+    Task 상태: IN_REVIEW
+    ↓
+Review Hollon (코드 리뷰 수행)
+    ↓
+    리뷰 완료 (approved / changes_requested)
+    ↓
+Manager Hollon (결과 처리)
+    ├─ Approved → PR 머지 → Task 완료 → 부모 완료 체크
+    │                                    ├─ 모든 서브태스크 완료?
+    │                                    │   ├─ LLM 질문: 부모 완료?
+    │                                    │   ├─ complete → 부모 완료
+    │                                    │   └─ add_tasks → 추가 작업
+    │                                    └─ 미완료 → 대기
+    │
+    └─ Changes Requested → Task READY로 되돌림 → Worker 재작업
+```
+
+#### 5. 아키텍처 결정
+
+- **기존 컴포넌트 재사용**:
+  - Phase 3.13 `CodeReviewService` 활용
+  - Phase 3.7 임시 Hollon 패턴 (`HollonLifecycle.TEMPORARY`)
+  - Phase 3.5 LLM 기반 의사결정
+
+- **역할 분리**:
+  - **Manager Hollon**: 전략적 결정 (누가 리뷰할지, 결과를 어떻게 처리할지)
+  - **Review Hollon**: 기술적 리뷰 (코드 품질, 테스트, 표준 준수)
+  - **Worker Hollon**: 구현 (코드 작성, 버그 수정)
+
+**핵심 성과**:
+
+- ✅ 완전 자동화된 계층적 코드 리뷰
+- ✅ Manager의 전략적 오케스트레이션
+- ✅ 임시 Review Hollon 생성 및 정리
+- ✅ LLM 기반 부모 Task 완료 판단
+- ✅ 병렬 리뷰 지원 (여러 Manager, 여러 PR)
 
 ---
 
