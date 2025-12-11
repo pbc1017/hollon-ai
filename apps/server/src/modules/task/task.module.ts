@@ -10,9 +10,14 @@ import { PriorityRebalancerService } from './services/priority-rebalancer.servic
 import { UncertaintyDecisionService } from './services/uncertainty-decision.service';
 import { PivotResponseService } from './services/pivot-response.service';
 import { Project } from '../project/entities/project.entity';
+import { Document } from '../document/entities/document.entity';
+import { DocumentModule } from '../document/document.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Task, Hollon, Project])],
+  imports: [
+    TypeOrmModule.forFeature([Task, Hollon, Project, Document]),
+    DocumentModule,
+  ],
   controllers: [TaskController],
   providers: [
     TaskService,

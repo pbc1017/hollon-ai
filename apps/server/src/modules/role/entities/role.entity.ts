@@ -27,6 +27,13 @@ export class Role extends BaseEntity {
   @Column({ name: 'system_prompt', type: 'text', nullable: true })
   systemPrompt: string;
 
+  @Column({
+    name: 'available_for_temporary_hollon',
+    type: 'boolean',
+    default: false,
+  })
+  availableForTemporaryHollon: boolean;
+
   @Column({ name: 'organization_id' })
   organizationId: string;
 

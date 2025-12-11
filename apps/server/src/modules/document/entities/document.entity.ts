@@ -16,6 +16,8 @@ export enum DocumentType {
 @Index(['organizationId'])
 @Index(['projectId', 'type'])
 @Index(['hollonId'])
+@Index(['type', 'organizationId']) // Phase 3.5: 타입별 조직 문서 검색 최적화
+@Index(['tags'], { unique: false }) // Phase 3.5: 태그 기반 검색 최적화 (GIN 인덱스는 migration에서)
 export class Document extends BaseEntity {
   @Column({ length: 255 })
   title: string;
@@ -33,14 +35,17 @@ export class Document extends BaseEntity {
   @Column({ name: 'organization_id' })
   organizationId: string;
 
+  @Column({ name: 'team_id', type: 'uuid', nullable: true }) // Phase 3.5: 팀별 지식 분리
+  teamId: string | null;
+
   @Column({ name: 'project_id', nullable: true })
-  projectId: string;
+  projectId: string | null;
 
   @Column({ name: 'hollon_id', type: 'uuid', nullable: true })
-  hollonId: string;
+  hollonId: string | null;
 
   @Column({ name: 'task_id', type: 'uuid', nullable: true })
-  taskId: string;
+  taskId: string | null;
 
   @Column({ type: 'text', array: true, nullable: true })
   tags: string[];

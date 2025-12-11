@@ -7,14 +7,18 @@ import { ApprovalModule } from '../approval/approval.module';
 import { RoleModule } from '../role/role.module';
 import { TeamModule } from '../team/team.module';
 import { OrganizationModule } from '../organization/organization.module';
+import { OrchestrationModule } from '../orchestration/orchestration.module';
+import { Team } from '../team/entities/team.entity';
+import { Role } from '../role/entities/role.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Hollon]),
+    TypeOrmModule.forFeature([Hollon, Team, Role]),
     ApprovalModule,
     RoleModule,
     forwardRef(() => TeamModule),
     OrganizationModule,
+    forwardRef(() => OrchestrationModule),
   ],
   controllers: [HollonController],
   providers: [HollonService],

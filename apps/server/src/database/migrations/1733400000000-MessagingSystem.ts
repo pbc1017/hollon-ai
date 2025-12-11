@@ -80,6 +80,7 @@ export class MessagingSystem1733400000000 implements MigrationInterface {
         "conversation_id" uuid NOT NULL,
         "message_id" uuid NOT NULL,
         "created_at" timestamp NOT NULL DEFAULT now(),
+        "updated_at" timestamp NOT NULL DEFAULT now(),
         CONSTRAINT "FK_conversation_history_conversation" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE CASCADE,
         CONSTRAINT "FK_conversation_history_message" FOREIGN KEY ("message_id") REFERENCES "messages"("id") ON DELETE CASCADE
       )

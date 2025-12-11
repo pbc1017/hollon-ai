@@ -1,10 +1,15 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Hollon } from '../hollon/entities/hollon.entity';
 import { Task } from '../task/entities/task.entity';
 import { Document } from '../document/entities/document.entity';
 import { Organization } from '../organization/entities/organization.entity';
+import { Project } from '../project/entities/project.entity';
+import { Team } from '../team/entities/team.entity';
 import { BrainProviderModule } from '../brain-provider/brain-provider.module';
+import { CollaborationModule } from '../collaboration/collaboration.module';
+import { GoalModule } from '../goal/goal.module';
+import { HollonModule } from '../hollon/hollon.module';
 import { PromptComposerService } from './services/prompt-composer.service';
 import { TaskPoolService } from './services/task-pool.service';
 import { HollonOrchestratorService } from './services/hollon-orchestrator.service';
@@ -14,7 +19,13 @@ import { SubtaskCreationService } from './services/subtask-creation.service';
 import { TaskAnalyzerService } from './services/task-analyzer.service';
 import { DecisionLogService } from './services/decision-log.service';
 import { CostTrackingService } from './services/cost-tracking.service';
+import { TaskExecutionService } from './services/task-execution.service';
+import { HollonExecutionService } from './services/hollon-execution.service';
+import { TeamTaskDistributionService } from './services/team-task-distribution.service';
+import { ManagerService } from './services/manager.service';
 import { CostRecord } from '../cost-tracking/entities/cost-record.entity';
+import { GoalDecompositionService } from '../goal/services/goal-decomposition.service';
+import { ApprovalRequest } from '../approval/entities/approval-request.entity';
 
 @Module({
   imports: [
@@ -23,9 +34,15 @@ import { CostRecord } from '../cost-tracking/entities/cost-record.entity';
       Task,
       Document,
       Organization,
+      Project,
+      Team,
       CostRecord,
+      ApprovalRequest,
     ]),
     BrainProviderModule,
+    forwardRef(() => CollaborationModule),
+    forwardRef(() => GoalModule),
+    forwardRef(() => HollonModule),
   ],
   providers: [
     PromptComposerService,
@@ -36,8 +53,24 @@ import { CostRecord } from '../cost-tracking/entities/cost-record.entity';
     TaskAnalyzerService,
     DecisionLogService,
     CostTrackingService,
+    TaskExecutionService,
     HollonOrchestratorService,
+    HollonExecutionService,
+    TeamTaskDistributionService,
+    ManagerService,
+    {
+      provide: 'GoalDecompositionService',
+      useExisting: GoalDecompositionService,
+    },
   ],
-  exports: [PromptComposerService, TaskPoolService, HollonOrchestratorService],
+  exports: [
+    PromptComposerService,
+    TaskPoolService,
+    TaskExecutionService,
+    HollonOrchestratorService,
+    HollonExecutionService,
+    TeamTaskDistributionService,
+    ManagerService,
+  ],
 })
 export class OrchestrationModule {}

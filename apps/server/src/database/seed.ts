@@ -163,9 +163,99 @@ async function seed() {
       capabilities: ['jest', 'testing', 'debugging', 'performance-testing'],
     });
 
-    await roleRepo.save([backendRole, frontendRole, qaRole]);
+    // Phase 3.8: Manager Role
+    const managerRole = roleRepo.create({
+      organizationId: org.id,
+      name: 'Manager',
+      description: '팀 매니저 - Task 분배 및 팀 조정 전문가',
+      systemPrompt: `당신은 팀 매니저입니다.
+당신의 임무:
+- Team Task를 팀원들에게 효율적으로 분배
+- 각 팀원의 스킬과 현재 업무량 고려
+- 의존성 파악 및 병렬 실행 최적화
+- 블로커 감지 및 재분배 결정
+- 팀 협업 조정
+
+분배 원칙:
+- 스킬 매칭 우선
+- 워크로드 밸런싱
+- 의존성 순서 고려
+- 협업 기회 활용`,
+      capabilities: [
+        'task-distribution',
+        'coordination',
+        'team-management',
+        'workload-balancing',
+      ],
+    });
+
+    // Phase 4: AI Engineer Role
+    const aiEngineerRole = roleRepo.create({
+      organizationId: org.id,
+      name: 'AIEngineer',
+      description: 'NLP, Embedding, Vector 검색 전문가',
+      systemPrompt: `당신은 AI/ML 엔지니어입니다.
+당신의 임무:
+- NLP 및 Embedding 시스템 구현
+- Vector similarity search 최적화
+- OpenAI API 연동
+- Knowledge extraction 로직 구현
+- pgvector 인덱스 튜닝
+
+기술 스택:
+- OpenAI Embedding API
+- pgvector (ivfflat index)
+- TypeScript/NestJS
+- Vector similarity algorithms`,
+      capabilities: [
+        'nlp',
+        'embedding',
+        'vector',
+        'openai-api',
+        'pgvector',
+        'typescript',
+        'nestjs',
+      ],
+    });
+
+    // Phase 4: Data Engineer Role
+    const dataEngineerRole = roleRepo.create({
+      organizationId: org.id,
+      name: 'DataEngineer',
+      description: 'Graph, Database, Data Modeling 전문가',
+      systemPrompt: `당신은 데이터 엔지니어입니다.
+당신의 임무:
+- Knowledge Graph 설계 및 구현
+- Document relationships 모델링
+- PostgreSQL 데이터베이스 최적화
+- 성능 분석 및 인덱스 튜닝
+- ETL 파이프라인 구축
+
+기술 스택:
+- PostgreSQL/TypeORM
+- Graph algorithms
+- Data modeling
+- Performance optimization`,
+      capabilities: [
+        'graph',
+        'database',
+        'postgresql',
+        'data-modeling',
+        'typescript',
+        'nestjs',
+      ],
+    });
+
+    await roleRepo.save([
+      backendRole,
+      frontendRole,
+      qaRole,
+      managerRole,
+      aiEngineerRole,
+      dataEngineerRole,
+    ]);
     console.log(
-      `✅ Roles created: ${backendRole.name}, ${frontendRole.name}, ${qaRole.name}`,
+      `✅ Roles created: ${backendRole.name}, ${frontendRole.name}, ${qaRole.name}, ${managerRole.name}, ${aiEngineerRole.name}, ${dataEngineerRole.name}`,
     );
 
     // 4. Create Team
@@ -292,6 +382,35 @@ async function seed() {
     });
     await teamRepo.save(dogfoodingTeam);
     console.log(`✅ Dogfooding Team created: ${dogfoodingTeam.name}`);
+
+    // Phase 3.8: Manager Hollon for Dogfooding Team
+    const managerHollon = hollonRepo.create({
+      name: 'Manager-Dogfood',
+      organizationId: org.id,
+      teamId: dogfoodingTeam.id,
+      roleId: managerRole.id,
+      brainProviderId: 'claude_code',
+      status: HollonStatus.IDLE,
+      maxConcurrentTasks: 1,
+      systemPrompt: `당신은 Manager-Dogfood입니다. Dogfooding Team의 매니저로서 팀 Task 분배를 담당합니다.
+
+특별 지침:
+- Team Task를 받으면 팀원들의 스킬과 업무량을 고려하여 분배
+- DevBot-1, DevBot-2: 백엔드 개발 (서비스 로직, 테스트)
+- ReviewBot: 테스트 작성 및 코드 리뷰
+- 의존성을 파악하여 병렬 실행 가능한 Task 우선 배치
+- 블로커 발생 시 재분배 결정`,
+    });
+
+    await hollonRepo.save(managerHollon);
+
+    // Assign Manager to Team
+    await teamRepo.update(dogfoodingTeam.id, {
+      managerHollonId: managerHollon.id,
+    });
+    console.log(
+      `✅ Manager Hollon created and assigned: ${managerHollon.name} → ${dogfoodingTeam.name}`,
+    );
 
     // Dogfooding Hollons - 3개 (동시성 테스트용)
     const hollonDogfood1 = hollonRepo.create({
@@ -555,16 +674,165 @@ describe('CollaborationService', () => {
     console.log(`   - Task 2 (DevBot-2): ${task2CrossTeam.title}`);
     console.log(`   - Task 3 (ReviewBot): ${task3Test.title}`);
 
+    // ========================================
+    // 🚀 PHASE 4: Knowledge System Team
+    // ========================================
+    console.log('\n🚀 Creating Phase 4 Knowledge System Team...');
+
+    // Phase 4 Team
+    const phase4Team = teamRepo.create({
+      organizationId: org.id,
+      name: 'Phase 4 Knowledge Team',
+      description:
+        '지식 시스템 및 자기 개선 - Knowledge Extraction, Vector RAG, Self-Improvement',
+    });
+    await teamRepo.save(phase4Team);
+    console.log(`✅ Phase 4 Team created: ${phase4Team.name}`);
+
+    // Phase 4 Manager Hollon
+    const phase4Manager = hollonRepo.create({
+      name: 'Manager-Knowledge',
+      organizationId: org.id,
+      teamId: phase4Team.id,
+      roleId: managerRole.id,
+      brainProviderId: 'claude_code',
+      status: HollonStatus.IDLE,
+      maxConcurrentTasks: 1,
+      systemPrompt: `당신은 Manager-Knowledge입니다. Phase 4 Knowledge Team의 매니저입니다.
+
+특별 지침:
+- Team Task를 받으면 AI/ML 및 Data Engineering 팀원들에게 효율적으로 분배
+- DevBot-AI: NLP, Embedding, Vector search 관련 Task
+- DevBot-Data: Graph, Database, Data modeling 관련 Task
+- DevBot-Backend: 백엔드 통합 및 Self-Improvement Task
+- ReviewBot-QA: 테스트 및 품질 검증
+- 각 팀원의 전문성과 현재 워크로드를 고려하여 분배
+- Vector search와 Knowledge graph는 병렬 개발 가능`,
+    });
+
+    await hollonRepo.save(phase4Manager);
+
+    // Assign Manager to Phase 4 Team
+    await teamRepo.update(phase4Team.id, {
+      managerHollonId: phase4Manager.id,
+    });
+    console.log(
+      `✅ Phase 4 Manager created and assigned: ${phase4Manager.name} → ${phase4Team.name}`,
+    );
+
+    // Phase 4 Hollons
+    const devBotAI = hollonRepo.create({
+      name: 'DevBot-AI',
+      organizationId: org.id,
+      teamId: phase4Team.id,
+      roleId: aiEngineerRole.id,
+      brainProviderId: 'claude_code',
+      status: HollonStatus.IDLE,
+      maxConcurrentTasks: 1,
+      systemPrompt: `당신은 DevBot-AI입니다. AI/ML 전문 엔지니어로 Phase 4 Knowledge System을 구현합니다.
+
+전문 분야:
+- NLP 및 Text Processing
+- OpenAI Embedding API 연동
+- Vector similarity search 알고리즘
+- Knowledge extraction 로직
+- pgvector 최적화
+
+프로젝트 컨텍스트:
+- Hollon-AI 시스템의 지식 관리 모듈 구현
+- Task 완료 후 자동으로 Document 생성
+- Vector RAG를 통한 지식 검색 및 활용
+- 기존 DocumentService와 통합`,
+    });
+
+    const devBotData = hollonRepo.create({
+      name: 'DevBot-Data',
+      organizationId: org.id,
+      teamId: phase4Team.id,
+      roleId: dataEngineerRole.id,
+      brainProviderId: 'claude_code',
+      status: HollonStatus.IDLE,
+      maxConcurrentTasks: 1,
+      systemPrompt: `당신은 DevBot-Data입니다. 데이터 엔지니어로 Phase 4 Knowledge Graph를 구현합니다.
+
+전문 분야:
+- Knowledge Graph 설계 및 구현
+- Document relationships 모델링
+- Graph traversal 알고리즘
+- PostgreSQL 데이터베이스 최적화
+- 성능 분석 및 인덱스 튜닝
+
+프로젝트 컨텍스트:
+- Document 간 관계 추적 (references, depends_on, related_to)
+- Graph 기반 컨텍스트 확장
+- 기존 Document Entity와 통합`,
+    });
+
+    const devBotBackend = hollonRepo.create({
+      name: 'DevBot-Backend',
+      organizationId: org.id,
+      teamId: phase4Team.id,
+      roleId: backendRole.id,
+      brainProviderId: 'claude_code',
+      status: HollonStatus.IDLE,
+      maxConcurrentTasks: 1,
+      systemPrompt: `당신은 DevBot-Backend입니다. 백엔드 엔지니어로 Phase 4 Self-Improvement 시스템을 구현합니다.
+
+전문 분야:
+- NestJS 서비스 아키텍처
+- 성과 분석 시스템 (PerformanceAnalyzer)
+- Prompt 최적화 로직 (PromptOptimizer)
+- 베스트 프랙티스 추출 (BestPracticeService)
+- TypeORM 통합
+
+프로젝트 컨텍스트:
+- Hollon 성과 메트릭 수집 및 분석
+- Prompt 효과 분석 및 최적화 제안
+- 고성과 패턴 추출 및 문서화`,
+    });
+
+    const reviewBotQA = hollonRepo.create({
+      name: 'ReviewBot-QA',
+      organizationId: org.id,
+      teamId: phase4Team.id,
+      roleId: qaRole.id,
+      brainProviderId: 'claude_code',
+      status: HollonStatus.IDLE,
+      maxConcurrentTasks: 1,
+      systemPrompt: `당신은 ReviewBot-QA입니다. Phase 4 Knowledge System의 QA 전문가입니다.
+
+특별 지침:
+- Knowledge Extraction 테스트 (자동 Document 생성 검증)
+- Vector Search 정확도 측정 (85%+ 목표)
+- Performance Analyzer 메트릭 검증
+- Prompt Optimizer 효과 측정
+- 통합 테스트 시나리오 작성
+- Code Coverage 90%+ 유지`,
+    });
+
+    await hollonRepo.save([devBotAI, devBotData, devBotBackend, reviewBotQA]);
+    console.log(
+      `✅ Phase 4 Hollons created: ${devBotAI.name}, ${devBotData.name}, ${devBotBackend.name}, ${reviewBotQA.name}`,
+    );
+
     console.log('\n🎉 Database seeding completed successfully!');
     console.log('\n📊 Summary:');
     console.log(`   Organization: ${org.name}`);
-    console.log(`   Roles: 3 (Backend, Frontend, QA)`);
-    console.log(`   Teams: 2 (Core Development, Dogfooding Team)`);
-    console.log(`   Hollons: 5 (Alpha, Beta, DevBot-1, DevBot-2, ReviewBot)`);
+    console.log(
+      `   Roles: 6 (Backend, Frontend, QA, Manager, AIEngineer, DataEngineer)`,
+    );
+    console.log(
+      `   Teams: 3 (Core Development, Dogfooding Team, Phase 4 Knowledge Team)`,
+    );
+    console.log(
+      `   Hollons: 10 (Alpha, Beta, Manager-Dogfood, DevBot-1, DevBot-2, ReviewBot, Manager-Knowledge, DevBot-AI, DevBot-Data, DevBot-Backend, ReviewBot-QA)`,
+    );
     console.log(`   Projects: 2 (Phase 1 MVP, Phase 2 Dogfooding)`);
     console.log(`   Tasks: 6 (3 Phase 1 + 3 Concurrency Test)`);
     console.log('\n🐕 Dogfooding Phase 2 - Concurrency Test Setup:');
-    console.log(`   Team: ${dogfoodingTeam.name}`);
+    console.log(
+      `   Team: ${dogfoodingTeam.name} (Manager: ${managerHollon.name})`,
+    );
     console.log(`   Hollons:`);
     console.log(
       `     - ${hollonDogfood1.name} (BackendEngineer) → Task: CollaborationService 개선`,
@@ -576,11 +844,25 @@ describe('CollaborationService', () => {
       `     - ${hollonReviewBot.name} (QAEngineer) → Task: Unit Test 작성`,
     );
     console.log(`   Project: ${dogfoodingProject.name}`);
+    console.log('\n🚀 Phase 4 Knowledge System Setup:');
+    console.log(`   Team: ${phase4Team.name} (Manager: ${phase4Manager.name})`);
+    console.log(`   Hollons:`);
+    console.log(`     - ${devBotAI.name} (AIEngineer) → NLP, Vector Search`);
+    console.log(`     - ${devBotData.name} (DataEngineer) → Knowledge Graph`);
+    console.log(
+      `     - ${devBotBackend.name} (BackendEngineer) → Self-Improvement`,
+    );
+    console.log(`     - ${reviewBotQA.name} (QAEngineer) → Testing & QA`);
     console.log('\n💡 Next steps:');
-    console.log('   1. Start the server: npm run dev');
-    console.log('   2. Run concurrent execution: npm run dogfood:concurrent');
-    console.log('   3. Monitor execution and results');
-    console.log('   4. Analyze concurrency behavior and collaboration\n');
+    console.log('   1. Start the server: pnpm --filter @hollon-ai/server dev');
+    console.log(
+      '   2. Create Phase 4 Goal: curl -X POST http://localhost:3001/goals ...',
+    );
+    console.log(
+      '   3. Decompose Goal with useTeamDistribution: true (Manager auto-distributes)',
+    );
+    console.log('   4. Monitor autonomous execution (HollonExecutionService)');
+    console.log('   5. Managers will auto-distribute Team Tasks to members\n');
   } catch (error) {
     console.error('❌ Error seeding database:', error);
     throw error;

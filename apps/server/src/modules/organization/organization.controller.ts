@@ -11,6 +11,7 @@ import {
 import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
+import { EmergencyStopDto } from './dto/emergency-stop.dto';
 
 @Controller('organizations')
 export class OrganizationController {
@@ -42,5 +43,24 @@ export class OrganizationController {
   @Delete(':id')
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.organizationService.remove(id);
+  }
+
+  /**
+   * Phase 3.7: Emergency Stop - Kill switch for autonomous execution
+   */
+  @Post(':id/emergency-stop')
+  emergencyStop(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: EmergencyStopDto,
+  ) {
+    return this.organizationService.emergencyStop(id, dto.reason);
+  }
+
+  /**
+   * Phase 3.7: Resume Execution - Resume autonomous execution after emergency stop
+   */
+  @Post(':id/resume-execution')
+  resumeExecution(@Param('id', ParseUUIDPipe) id: string) {
+    return this.organizationService.resumeExecution(id);
   }
 }

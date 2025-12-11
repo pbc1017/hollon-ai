@@ -22,4 +22,12 @@ export class DecompositionOptionsDto {
   @IsOptional()
   @IsBoolean()
   autoAssign?: boolean;
+
+  /**
+   * Phase 3.8: Use team-level task distribution
+   * Creates TEAM_EPIC tasks assigned to teams instead of individual hollon tasks
+   */
+  @IsOptional()
+  @IsBoolean()
+  useTeamDistribution?: boolean;
 }

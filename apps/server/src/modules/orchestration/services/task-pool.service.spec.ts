@@ -78,6 +78,7 @@ describe('TaskPoolService', () => {
 
       mockHollonRepo.findOne.mockResolvedValue(mockHollon);
       mockTaskRepo.find.mockResolvedValueOnce([]); // locked files
+      mockTaskRepo.find.mockResolvedValueOnce([]); // review ready tasks
       mockTaskRepo.find.mockResolvedValueOnce([mockTask]); // direct tasks
 
       const mockQueryBuilder = {
@@ -180,9 +181,11 @@ describe('TaskPoolService', () => {
       expect(mockTaskRepo.update).toHaveBeenCalledWith(
         { id: 'task-1' },
         expect.objectContaining({
-          status: TaskStatus.FAILED,
+          status: TaskStatus.READY,
           errorMessage: 'Test error',
-          completedAt: expect.any(Date),
+          consecutiveFailures: 1,
+          lastFailedAt: expect.any(Date),
+          blockedUntil: expect.any(Date),
         }),
       );
     });

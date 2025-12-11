@@ -11,6 +11,7 @@ import { PromptComposerService } from '../../../src/modules/orchestration/servic
 import { QualityGateService } from '../../../src/modules/orchestration/services/quality-gate.service';
 import { EscalationService } from '../../../src/modules/orchestration/services/escalation.service';
 import { BrainProviderService } from '../../../src/modules/brain-provider/brain-provider.service';
+import { HollonService } from '../../../src/modules/hollon/hollon.service';
 import {
   Hollon,
   HollonStatus,
@@ -104,6 +105,13 @@ describe('Orchestration E2E', () => {
             determineEscalationLevel: jest.fn(),
             getEscalationHistory: jest.fn(),
             clearHistory: jest.fn(),
+          },
+        },
+        {
+          provide: HollonService,
+          useValue: {
+            createTemporary: jest.fn(),
+            findOne: jest.fn(),
           },
         },
       ],

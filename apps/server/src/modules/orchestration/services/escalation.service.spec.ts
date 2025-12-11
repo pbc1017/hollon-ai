@@ -11,6 +11,8 @@ import {
   TaskPriority,
 } from '../../task/entities/task.entity';
 import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
+import { ApprovalRequest } from '../../escalation/entities/approval-request.entity';
+import { GoalDecompositionService } from '../../goal/services/goal-decomposition.service';
 
 describe('EscalationService', () => {
   let service: EscalationService;
@@ -27,6 +29,13 @@ describe('EscalationService', () => {
     find: jest.fn(),
   };
 
+  const mockApprovalRequestRepo = {
+    create: jest.fn(),
+    save: jest.fn(),
+    findOne: jest.fn(),
+    update: jest.fn(),
+  };
+
   beforeEach(async () => {
     module = await Test.createTestingModule({
       providers: [
@@ -38,6 +47,17 @@ describe('EscalationService', () => {
         {
           provide: getRepositoryToken(Hollon),
           useValue: mockHollonRepo,
+        },
+        {
+          provide: getRepositoryToken(ApprovalRequest),
+          useValue: mockApprovalRequestRepo,
+        },
+        {
+          provide: GoalDecompositionService,
+          useValue: {
+            decomposeGoal: jest.fn(),
+            validateDecomposition: jest.fn(),
+          },
         },
       ],
     }).compile();
@@ -162,6 +182,7 @@ describe('EscalationService', () => {
       expect(result.message).toContain('2 team member');
       expect(mockTaskRepo.update).toHaveBeenCalledWith('task-1', {
         assignedHollonId: null,
+        assignedTeamId: 'team-1',
         status: TaskStatus.READY,
         errorMessage: expect.stringContaining('Reassigned from Alpha'),
       });
@@ -221,6 +242,22 @@ describe('EscalationService', () => {
 
   describe('Level 3: Team Leader Decision', () => {
     it('should mark task for team leader review', async () => {
+      const mockHollon: Partial<Hollon> = {
+        id: 'hollon-1',
+        name: 'Alpha',
+        teamId: 'team-1',
+        team: {
+          id: 'team-1',
+          name: 'Dev Team',
+          manager: {
+            id: 'manager-1',
+            name: 'Manager',
+            status: HollonStatus.IDLE,
+          } as any,
+        } as any,
+      };
+
+      mockHollonRepo.findOne.mockResolvedValue(mockHollon);
       mockTaskRepo.update.mockResolvedValue({ affected: 1 });
 
       const request: EscalationRequest = {
@@ -235,8 +272,10 @@ describe('EscalationService', () => {
       expect(result.success).toBe(true);
       expect(result.action).toBe('escalated_to_team_leader');
       expect(mockTaskRepo.update).toHaveBeenCalledWith('task-1', {
+        assignedHollonId: 'manager-1',
+        assignedTeamId: null,
         status: TaskStatus.IN_REVIEW,
-        errorMessage: expect.stringContaining('Escalated to team leader'),
+        errorMessage: expect.stringContaining('Escalated to'),
       });
     });
   });
@@ -265,7 +304,22 @@ describe('EscalationService', () => {
 
   describe('Level 5: Human Intervention', () => {
     it('should mark task for human intervention', async () => {
+      const mockTask: Partial<Task> = {
+        id: 'task-1',
+        status: TaskStatus.FAILED,
+        project: { id: 'project-1', organizationId: 'org-1' } as any,
+      };
+
+      const mockApprovalRequest = {
+        id: 'approval-1',
+        taskId: 'task-1',
+        level: 5,
+      };
+
+      mockTaskRepo.findOne.mockResolvedValue(mockTask);
       mockTaskRepo.update.mockResolvedValue({ affected: 1 });
+      mockApprovalRequestRepo.create.mockReturnValue(mockApprovalRequest);
+      mockApprovalRequestRepo.save.mockResolvedValue(mockApprovalRequest);
 
       const request: EscalationRequest = {
         taskId: 'task-1',
@@ -277,7 +331,7 @@ describe('EscalationService', () => {
       const result = await service.escalate(request);
 
       expect(result.success).toBe(true);
-      expect(result.action).toBe('human_approval_required');
+      expect(result.action).toBe('human_approval_requested');
       expect(mockTaskRepo.update).toHaveBeenCalledWith('task-1', {
         status: TaskStatus.BLOCKED,
         errorMessage: expect.stringContaining('Human intervention required'),

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -9,17 +10,31 @@ import { Task, TaskStatus, TaskPriority } from './entities/task.entity';
 import { Project } from '../project/entities/project.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { DocumentService } from '../document/document.service';
+import { DocumentType } from '../document/entities/document.entity';
 
 const MAX_SUBTASK_DEPTH = 3;
 const MAX_SUBTASKS_PER_TASK = 10;
 
+export interface TaskCompletionResult {
+  output?: string;
+  pullRequestUrl?: string;
+  filesChanged?: string[];
+  testsPassed?: boolean;
+  reviewComments?: string[];
+  [key: string]: unknown;
+}
+
 @Injectable()
 export class TaskService {
+  private readonly logger = new Logger(TaskService.name);
+
   constructor(
     @InjectRepository(Task)
     private readonly taskRepo: Repository<Task>,
     @InjectRepository(Project)
     private readonly projectRepo: Repository<Project>,
+    private readonly documentService: DocumentService,
   ) {}
 
   async create(dto: CreateTaskDto, creatorHollonId?: string): Promise<Task> {
@@ -161,11 +176,274 @@ export class TaskService {
     return this.taskRepo.save(task);
   }
 
-  async complete(id: string): Promise<Task> {
+  /**
+   * Phase 3.5: Task 완료 + 자동 지식 문서화
+   * SSOT 원칙: 태스크 완료 시 자동으로 조직 지식 문서 생성
+   *
+   * @param id Task ID
+   * @param hollonId 완료한 Hollon ID (지식 문서 작성자)
+   * @param result 실행 결과 (PR URL, 변경된 파일, 테스트 결과 등)
+   */
+  async complete(
+    id: string,
+    hollonId?: string,
+    result?: TaskCompletionResult,
+  ): Promise<Task> {
     const task = await this.findOne(id);
     task.status = TaskStatus.COMPLETED;
     task.completedAt = new Date();
-    return this.taskRepo.save(task);
+
+    const savedTask = await this.taskRepo.save(task);
+
+    // ✅ 자동 지식 문서화 (비동기, 에러 무시)
+    this.createKnowledgeDocument(savedTask, hollonId, result).catch((error) => {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(
+        `Failed to create knowledge document for task ${id}: ${errorMessage}`,
+      );
+    });
+
+    return savedTask;
+  }
+
+  /**
+   * Phase 3.5: 조직 지식 문서 자동 생성
+   * SSOT 원칙: projectId = null → 조직 전체가 공유하는 지식
+   */
+  private async createKnowledgeDocument(
+    task: Task,
+    hollonId?: string,
+    result?: TaskCompletionResult,
+  ): Promise<void> {
+    // 스킬이나 태그가 있는 경우에만 지식 문서화
+    const hasKnowledgeValue =
+      (task.requiredSkills && task.requiredSkills.length > 0) ||
+      (task.tags && task.tags.length > 0);
+
+    if (!hasKnowledgeValue) {
+      this.logger.debug(
+        `Task ${task.id} has no skills/tags, skipping knowledge documentation`,
+      );
+      return;
+    }
+
+    // 지식 문서 내용 생성
+    const content = this.generateKnowledgeContent(task, result);
+
+    // 문서 태그: requiredSkills + task.tags + task.type + 자동 추출 태그
+    const smartTags = this.extractSmartTags(task);
+    const tags = [
+      ...(task.requiredSkills || []),
+      ...(task.tags || []),
+      task.type,
+      ...smartTags,
+    ].filter((tag, index, self) => self.indexOf(tag) === index); // 중복 제거
+
+    try {
+      const document = await this.documentService.create({
+        title: `[지식] ${task.title} - 해결 패턴`,
+        content,
+        type: DocumentType.KNOWLEDGE,
+        organizationId: task.organizationId,
+        projectId: null, // 🔑 조직 레벨 지식 (모든 홀론이 접근 가능)
+        hollonId: hollonId ?? null,
+        taskId: task.id,
+        tags,
+        metadata: {
+          taskType: task.type,
+          priority: task.priority,
+          completedAt: task.completedAt,
+          filesChanged: result?.filesChanged || [],
+          pullRequestUrl: result?.pullRequestUrl || null,
+        },
+      });
+
+      this.logger.log(
+        `✅ Knowledge document created: ${document.id} for task ${task.id}`,
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(
+        `Failed to save knowledge document: ${errorMessage}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+  }
+
+  /**
+   * Phase 3.5: 자동 태그 추출 개선
+   *
+   * Task 제목/설명에서 기술 키워드를 자동으로 추출하여 태그 생성
+   */
+  private extractSmartTags(task: Task): string[] {
+    const text = `${task.title} ${task.description || ''}`.toLowerCase();
+
+    // 기술 스택 키워드
+    const techKeywords = [
+      'react',
+      'vue',
+      'angular',
+      'typescript',
+      'javascript',
+      'nodejs',
+      'nestjs',
+      'postgresql',
+      'mongodb',
+      'redis',
+      'docker',
+      'kubernetes',
+      'aws',
+      'gcp',
+      'azure',
+      'api',
+      'rest',
+      'graphql',
+      'grpc',
+      'auth',
+      'security',
+      'performance',
+      'optimization',
+      'refactoring',
+      'testing',
+      'e2e',
+      'unit',
+      'integration',
+      'ci/cd',
+      'git',
+      'frontend',
+      'backend',
+      'fullstack',
+      'database',
+      'migration',
+    ];
+
+    // 작업 유형 키워드
+    const actionKeywords = [
+      'bug',
+      'fix',
+      'feature',
+      'enhancement',
+      'refactor',
+      'docs',
+      'test',
+      'deploy',
+      'config',
+      'setup',
+      'upgrade',
+      'migration',
+    ];
+
+    const foundTags: string[] = [];
+
+    // 기술 키워드 추출
+    for (const keyword of techKeywords) {
+      if (text.includes(keyword)) {
+        foundTags.push(keyword);
+      }
+    }
+
+    // 작업 유형 추출
+    for (const keyword of actionKeywords) {
+      if (text.includes(keyword)) {
+        foundTags.push(keyword);
+      }
+    }
+
+    return foundTags;
+  }
+
+  /**
+   * 지식 문서 내용 생성
+   */
+  private generateKnowledgeContent(
+    task: Task,
+    result?: TaskCompletionResult,
+  ): string {
+    const sections: string[] = [];
+
+    // 1. 태스크 개요
+    sections.push(`# ${task.title}\n`);
+    sections.push(`**Type**: ${task.type}`);
+    sections.push(`**Priority**: ${task.priority}`);
+    sections.push('');
+
+    // 2. 요구 스킬
+    if (task.requiredSkills && task.requiredSkills.length > 0) {
+      sections.push('## Required Skills');
+      sections.push(task.requiredSkills.map((s) => `- ${s}`).join('\n'));
+      sections.push('');
+    }
+
+    // 3. 태스크 설명
+    if (task.description) {
+      sections.push('## Description');
+      sections.push(task.description);
+      sections.push('');
+    }
+
+    // 4. 실행 결과
+    if (result) {
+      sections.push('## Execution Result');
+
+      if (result.output) {
+        sections.push('### Output');
+        sections.push('```');
+        sections.push(result.output);
+        sections.push('```');
+        sections.push('');
+      }
+
+      if (result.filesChanged && result.filesChanged.length > 0) {
+        sections.push('### Files Changed');
+        sections.push(result.filesChanged.map((f) => `- ${f}`).join('\n'));
+        sections.push('');
+      }
+
+      if (result.pullRequestUrl) {
+        sections.push(`### Pull Request`);
+        sections.push(`[View PR](${result.pullRequestUrl})`);
+        sections.push('');
+      }
+
+      if (result.testsPassed !== undefined) {
+        sections.push(
+          `### Tests: ${result.testsPassed ? '✅ Passed' : '❌ Failed'}`,
+        );
+        sections.push('');
+      }
+
+      if (result.reviewComments && result.reviewComments.length > 0) {
+        sections.push('### Review Comments');
+        sections.push(result.reviewComments.map((c) => `- ${c}`).join('\n'));
+        sections.push('');
+      }
+    }
+
+    // 5. 의존성 정보
+    if (task.dependencies && task.dependencies.length > 0) {
+      sections.push('## Dependencies');
+      sections.push(
+        task.dependencies.map((d) => `- ${d.title} (${d.id})`).join('\n'),
+      );
+      sections.push('');
+    }
+
+    // 6. 태그
+    if (task.tags && task.tags.length > 0) {
+      sections.push('## Tags');
+      sections.push(task.tags.map((t) => `#${t}`).join(' '));
+      sections.push('');
+    }
+
+    // 7. 메타데이터
+    sections.push('---');
+    sections.push(
+      `*Generated: ${new Date().toISOString()} | Task ID: ${task.id}*`,
+    );
+
+    return sections.join('\n');
   }
 
   async fail(id: string, errorMessage: string): Promise<Task> {

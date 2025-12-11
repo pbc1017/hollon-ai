@@ -7,7 +7,9 @@ import {
   Task,
   TaskPriority,
   TaskStatus,
+  TaskType,
 } from '../../task/entities/task.entity';
+import { Team } from '../../team/entities/team.entity';
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 import { GoalService } from '../goal.service';
 import {
@@ -20,6 +22,7 @@ import {
   DecompositionOptionsDto,
   DecompositionStrategy,
 } from '../dto/decomposition-options.dto';
+import { ResourcePlannerService } from '../../task/services/resource-planner.service';
 
 @Injectable()
 export class GoalDecompositionService {
@@ -28,12 +31,15 @@ export class GoalDecompositionService {
   constructor(
     private readonly goalService: GoalService,
     private readonly brainProviderService: BrainProviderService,
+    private readonly resourcePlanner: ResourcePlannerService,
     @InjectRepository(Goal)
     private readonly goalRepo: Repository<Goal>,
     @InjectRepository(Project)
     private readonly projectRepo: Repository<Project>,
     @InjectRepository(Task)
     private readonly taskRepo: Repository<Task>,
+    @InjectRepository(Team)
+    private readonly teamRepo: Repository<Team>,
   ) {}
 
   /**
@@ -248,6 +254,7 @@ Please provide the decomposition in JSON format only, no additional text.`;
 
   /**
    * Project/Task 생성
+   * Phase 3.8: Team-level tasks (TEAM_EPIC) assigned to teams
    */
   private async createWorkItems(
     goal: Goal,
@@ -257,6 +264,12 @@ Please provide the decomposition in JSON format only, no additional text.`;
     const createdProjects: Project[] = [];
     const createdTasks: Task[] = [];
     const taskTitleToId = new Map<string, string>();
+
+    // Phase 3.8: Get all teams for team-level assignment
+    const teams = await this.teamRepo.find({
+      where: { organizationId: goal.organizationId },
+      relations: ['manager', 'hollons'],
+    });
 
     for (const projectDef of decomposition) {
       // Project 생성
@@ -271,25 +284,91 @@ Please provide the decomposition in JSON format only, no additional text.`;
       const savedProject = await this.projectRepo.save(project);
       createdProjects.push(savedProject);
 
-      // Tasks 생성 (의존성 없이 먼저 생성)
-      for (const taskDef of projectDef.tasks) {
-        const task = this.taskRepo.create({
-          organizationId: goal.organizationId,
-          projectId: savedProject.id,
-          title: taskDef.title,
-          description: this.formatTaskDescription(taskDef),
-          priority: this.mapPriority(taskDef.priority),
-          status: TaskStatus.PENDING,
-        });
+      // Phase 3.8: Create Team Tasks (Level 0) if teams exist
+      // Otherwise fall back to individual hollon tasks
+      if (teams.length > 0 && options?.useTeamDistribution) {
+        // Group tasks by team (simple round-robin for now)
+        // In production, this would use intelligent team matching
+        const tasksPerTeam = Math.ceil(projectDef.tasks.length / teams.length);
 
-        const savedTask = await this.taskRepo.save(task);
-        createdTasks.push(savedTask);
-        taskTitleToId.set(taskDef.title, savedTask.id);
+        for (let i = 0; i < teams.length; i++) {
+          const team = teams[i];
+          const teamTasks = projectDef.tasks.slice(
+            i * tasksPerTeam,
+            (i + 1) * tasksPerTeam,
+          );
+
+          if (teamTasks.length === 0) continue;
+
+          // Create Team Task (Level 0) - TEAM_EPIC
+          const teamTask = this.taskRepo.create({
+            organizationId: goal.organizationId,
+            projectId: savedProject.id,
+            title: `${team.name}: ${projectDef.name} - Batch ${i + 1}`,
+            description: this.formatTeamTaskDescription(teamTasks),
+            type: TaskType.TEAM_EPIC,
+            priority: this.mapPriority('P2'), // Team tasks default to P2
+            status: TaskStatus.PENDING,
+            assignedTeamId: team.id,
+            depth: 0, // Level 0
+          });
+
+          const savedTeamTask = await this.taskRepo.save(teamTask);
+          createdTasks.push(savedTeamTask);
+
+          this.logger.log(
+            `Created Team Task "${savedTeamTask.title}" for team "${team.name}" with ${teamTasks.length} work items`,
+          );
+        }
+      } else {
+        // Fallback: Create individual tasks (original behavior)
+        for (const taskDef of projectDef.tasks) {
+          const task = this.taskRepo.create({
+            organizationId: goal.organizationId,
+            projectId: savedProject.id,
+            title: taskDef.title,
+            description: this.formatTaskDescription(taskDef),
+            priority: this.mapPriority(taskDef.priority),
+            status: TaskStatus.PENDING,
+            depth: 0,
+          });
+
+          const savedTask = await this.taskRepo.save(task);
+          createdTasks.push(savedTask);
+          taskTitleToId.set(taskDef.title, savedTask.id);
+        }
       }
     }
 
-    // TODO: Task 의존성 설정 (DependencyAnalyzer 구현 후)
-    // 현재는 의존성 정보를 task description에 포함
+    // ✅ Phase 3 Week 15-16: autoAssign 통합
+    // Goal 분해 직후 ResourcePlannerService로 자동 할당
+    if (
+      options?.autoAssign &&
+      createdProjects.length > 0 &&
+      !options?.useTeamDistribution
+    ) {
+      this.logger.log(
+        `Auto-assigning tasks for ${createdProjects.length} projects`,
+      );
+
+      for (const project of createdProjects) {
+        try {
+          const assignResult = await this.resourcePlanner.assignProject(
+            project.id,
+          );
+          this.logger.log(
+            `Project ${project.id}: ${assignResult.assignedCount}/${assignResult.totalTasks} tasks assigned`,
+          );
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          this.logger.warn(
+            `Failed to auto-assign project ${project.id}: ${errorMessage}`,
+          );
+          // 에러가 발생해도 다른 프로젝트는 계속 처리
+        }
+      }
+    }
 
     return {
       projects: createdProjects,
@@ -317,6 +396,35 @@ Please provide the decomposition in JSON format only, no additional text.`;
     if (taskDef.acceptanceCriteria && taskDef.acceptanceCriteria.length > 0) {
       description += `\n\n**Acceptance Criteria:**\n${taskDef.acceptanceCriteria.map((c) => `- ${c}`).join('\n')}`;
     }
+
+    return description;
+  }
+
+  /**
+   * Phase 3.8: Format Team Task description
+   * Aggregates multiple task definitions into a team-level work package
+   */
+  private formatTeamTaskDescription(taskDefs: TaskDecomposition[]): string {
+    let description = `This is a Team Task containing ${taskDefs.length} work items.\n\n`;
+    description += `The team manager will distribute these items to team members as subtasks.\n\n`;
+    description += `**Work Items:**\n`;
+
+    taskDefs.forEach((taskDef, index) => {
+      description += `\n${index + 1}. **${taskDef.title}**\n`;
+      description += `   ${taskDef.description}\n`;
+      description += `   Priority: ${taskDef.priority}\n`;
+
+      if (taskDef.requiredSkills && taskDef.requiredSkills.length > 0) {
+        description += `   Required Skills: ${taskDef.requiredSkills.join(', ')}\n`;
+      }
+
+      if (taskDef.acceptanceCriteria && taskDef.acceptanceCriteria.length > 0) {
+        description += `   Acceptance Criteria:\n`;
+        taskDef.acceptanceCriteria.forEach((c) => {
+          description += `   - ${c}\n`;
+        });
+      }
+    });
 
     return description;
   }

@@ -15,6 +15,8 @@ import {
 import { RoleService } from '../role/role.service';
 import { TeamService } from '../team/team.service';
 import { OrganizationService } from '../organization/organization.service';
+import { Team } from '../team/entities/team.entity';
+import { Role } from '../role/entities/role.entity';
 import {
   NotFoundException,
   ForbiddenException,
@@ -79,6 +81,15 @@ describe('HollonService', () => {
     settings: { maxHollonsPerTeam: 10 },
   };
 
+  const mockTeamRepository = {
+    findOne: jest.fn(),
+    save: jest.fn(),
+  };
+
+  const mockRoleRepository = {
+    findOne: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -86,6 +97,14 @@ describe('HollonService', () => {
         {
           provide: getRepositoryToken(Hollon),
           useValue: mockHollonRepository,
+        },
+        {
+          provide: getRepositoryToken(Team),
+          useValue: mockTeamRepository,
+        },
+        {
+          provide: getRepositoryToken(Role),
+          useValue: mockRoleRepository,
         },
         {
           provide: ApprovalService,
@@ -353,11 +372,11 @@ describe('HollonService', () => {
         organizationId: 'org-123',
         lifecycle: HollonLifecycle.TEMPORARY,
         status: HollonStatus.WORKING,
-        depth: 3,
+        depth: 1,
       });
 
       await expect(service.createTemporary(config)).rejects.toThrow(
-        'Maximum temporary hollon depth (3) exceeded',
+        'Maximum temporary hollon depth (1) exceeded',
       );
     });
 
@@ -375,7 +394,7 @@ describe('HollonService', () => {
         ...config,
         lifecycle: HollonLifecycle.TEMPORARY,
         createdByHollonId: 'permanent-hollon',
-        depth: 0,
+        depth: 1, // Permanent (depth=0) + 1 = 1
         status: HollonStatus.IDLE,
       };
 
@@ -388,7 +407,7 @@ describe('HollonService', () => {
         organizationId: 'org-123',
         lifecycle: HollonLifecycle.PERMANENT,
         status: HollonStatus.IDLE,
-        depth: 5, // 영구 홀론의 depth는 제한 없음
+        depth: 0, // 영구 홀론은 항상 depth 0
       });
       mockHollonRepository.create.mockReturnValue(tempHollon);
       mockHollonRepository.save.mockResolvedValue({
@@ -398,7 +417,7 @@ describe('HollonService', () => {
 
       const result = await service.createTemporary(config);
 
-      expect(result.depth).toBe(0); // 영구 홀론이 만든 임시 홀론은 depth 0
+      expect(result.depth).toBe(1); // 영구 홀론(depth=0)이 만든 임시 홀론은 depth 1
       expect(result.lifecycle).toBe(HollonLifecycle.TEMPORARY);
     });
 

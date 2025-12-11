@@ -69,8 +69,11 @@ test/
 ### Run E2E Tests
 
 ```bash
-# Run all E2E tests
+# Run all E2E tests (REAL LLM calls, costs ~$0.50)
 pnpm --filter=@hollon-ai/server test:e2e
+
+# Run specific E2E test
+pnpm --filter=@hollon-ai/server test:e2e phase3.5
 
 # Run with watch mode
 pnpm --filter=@hollon-ai/server test:e2e:watch
@@ -81,6 +84,8 @@ pnpm --filter=@hollon-ai/server test:e2e:debug
 # Run all tests (unit + E2E)
 pnpm --filter=@hollon-ai/server test:all
 ```
+
+**Note**: E2E tests make REAL LLM API calls for true end-to-end validation. This incurs API costs (~$0.50 per full run) and takes 3-5 minutes. For fast, free testing during development, use Integration tests instead.
 
 ### Run Unit Tests
 

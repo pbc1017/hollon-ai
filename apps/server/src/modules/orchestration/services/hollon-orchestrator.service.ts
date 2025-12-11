@@ -1,7 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
+import {
+  Hollon,
+  HollonStatus,
+  HollonLifecycle,
+} from '../../hollon/entities/hollon.entity';
 import {
   Document,
   DocumentType,
@@ -9,10 +13,22 @@ import {
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 import { PromptComposerService } from './prompt-composer.service';
 import { TaskPoolService } from './task-pool.service';
-import { Task } from '../../task/entities/task.entity';
+import {
+  Task,
+  TaskStatus,
+  TaskType,
+  TaskPriority,
+} from '../../task/entities/task.entity';
 import { QualityGateService } from './quality-gate.service';
 import { Organization } from '../../organization/entities/organization.entity';
 import { EscalationService, EscalationLevel } from './escalation.service';
+import { HollonService } from '../../hollon/hollon.service';
+import { SubtaskCreationService } from './subtask-creation.service'; // Phase 3.10: Re-added for review cycle
+import { CodeReviewService } from '../../collaboration/services/code-review.service'; // Phase 3.16
+import { TaskPullRequest } from '../../collaboration/entities/task-pull-request.entity'; // Phase 3.16
+import { Role } from '../../role/entities/role.entity';
+import { ComposedPrompt } from '../interfaces/prompt-context.interface';
+import { TaskDecompositionResult } from '../dto/task-decomposition.dto';
 
 export interface ExecutionCycleResult {
   success: boolean;
@@ -35,6 +51,7 @@ export interface ExecutionCycleResult {
  * 5. Update task status
  * 6. Handle errors and state transitions
  */
+
 @Injectable()
 export class HollonOrchestratorService {
   private readonly logger = new Logger(HollonOrchestratorService.name);
@@ -51,6 +68,15 @@ export class HollonOrchestratorService {
     private readonly taskPool: TaskPoolService,
     private readonly qualityGate: QualityGateService,
     private readonly escalationService: EscalationService,
+    @Inject(forwardRef(() => HollonService))
+    private readonly hollonService: HollonService,
+    private readonly subtaskService: SubtaskCreationService, // Phase 3.10: Re-added
+    @InjectRepository(Task)
+    private readonly taskRepo: Repository<Task>, // Phase 3.16
+    @Inject(forwardRef(() => CodeReviewService))
+    private readonly codeReviewService: CodeReviewService, // Phase 3.16
+    @InjectRepository(Role)
+    private readonly roleRepo: Repository<Role>, // Phase 3.16
   ) {}
 
   /**
@@ -71,6 +97,7 @@ export class HollonOrchestratorService {
       // 1. Check hollon status and update to WORKING
       const hollon = await this.hollonRepo.findOne({
         where: { id: hollonId },
+        relations: ['organization', 'team', 'role'],
       });
 
       if (!hollon) {
@@ -109,6 +136,35 @@ export class HollonOrchestratorService {
       this.logger.log(
         `Hollon ${hollonId} pulled task ${task.id}: ${task.title} (${pullResult.reason})`,
       );
+
+      // 2.3. Phase 3.10: Check if task is in review mode
+      if (task.status === TaskStatus.IN_REVIEW) {
+        this.logger.log(`Task ${task.id} is IN_REVIEW - entering review mode`);
+        const reviewResult = await this.handleReviewMode(task, hollon);
+        await this.updateHollonStatus(hollonId, HollonStatus.IDLE);
+        return reviewResult;
+      }
+
+      // 2.5. Phase 3.7: Check task complexity and create Sub-Hollons if needed
+      const isComplex = await this.isTaskComplex(task, hollon);
+      if (isComplex && hollon.depth === 0) {
+        // Only permanent hollons (depth=0) can create sub-hollons
+        this.logger.log(
+          `Task ${task.id} is complex - considering Sub-Hollon delegation`,
+        );
+        const delegated = await this.handleComplexTask(task, hollon);
+        if (delegated) {
+          // Task was delegated to Sub-Hollons
+          await this.updateHollonStatus(hollonId, HollonStatus.IDLE);
+          return {
+            success: true,
+            taskId: task.id,
+            taskTitle: task.title,
+            duration: Date.now() - startTime,
+            output: 'Task delegated to Sub-Hollons',
+          };
+        }
+      }
 
       // 3. Compose prompt
       const composedPrompt = await this.promptComposer.composePrompt(
@@ -278,7 +334,7 @@ export class HollonOrchestratorService {
     task: Task,
     hollon: Hollon,
     output: string,
-    composedPrompt: any,
+    composedPrompt: ComposedPrompt,
   ): Promise<void> {
     const document = this.documentRepo.create({
       title: `Result: ${task.title}`,
@@ -375,5 +431,978 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
         : undefined,
       recentTasks: recentTasks || [],
     };
+  }
+
+  /**
+   * Phase 3.7: Check if task is complex enough to warrant Sub-Hollon delegation
+   *
+   * Complexity criteria:
+   * - estimatedComplexity === 'high'
+   * - Dependencies > 3
+   * - Required skills > 2
+   * - Story points > 8
+   */
+  private async isTaskComplex(task: Task, _hollon: Hollon): Promise<boolean> {
+    // Criteria 1: Explicit high complexity
+    if (task.estimatedComplexity === 'high') {
+      return true;
+    }
+
+    // Criteria 2: Many dependencies (load if not already loaded)
+    const taskWithDeps = await this.hollonRepo.manager.findOne(Task, {
+      where: { id: task.id },
+      relations: ['dependencies'],
+    });
+
+    if (taskWithDeps && taskWithDeps.dependencies?.length > 3) {
+      return true;
+    }
+
+    // Criteria 3: Multiple required skills
+    if (task.requiredSkills && task.requiredSkills.length > 2) {
+      return true;
+    }
+
+    // Criteria 4: High story points
+    if (task.storyPoints && task.storyPoints > 8) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Phase 3.7: Handle complex task by DYNAMIC Sub-Hollon delegation
+   *
+   * Asks Brain Provider (Claude) to decompose the task into optimal subtasks
+   * with dynamic role assignment and dependency management.
+   *
+   * Flow:
+   * 1. Query available roles for temporary hollons
+   * 2. Ask Brain Provider to decompose task → JSON response
+   * 3. Parse subtask specs (with dependencies)
+   * 4. Create temporary Sub-Hollons dynamically
+   * 5. Create subtasks with dependency relationships
+   * 6. Set BLOCKED status for dependent tasks, READY for independent tasks
+   *
+   * Returns true if task was successfully delegated to Sub-Hollons
+   */
+  private async handleComplexTask(
+    task: Task,
+    parentHollon: Hollon,
+  ): Promise<boolean> {
+    const startTime = Date.now();
+
+    try {
+      this.logger.log(
+        `[Dynamic Delegation] Handling complex task ${task.id}: ${task.title}`,
+      );
+
+      // 1. Query roles available for temporary hollon creation
+      const availableRoles = await this.hollonRepo.manager
+        .getRepository(Role)
+        .find({
+          where: {
+            organizationId: parentHollon.organizationId,
+            availableForTemporaryHollon: true,
+          },
+        });
+
+      if (availableRoles.length === 0) {
+        this.logger.warn(
+          'No roles available for temporary hollons - falling back to direct execution',
+        );
+        return false; // Fallback to parent hollon executing directly
+      }
+
+      this.logger.log(
+        `Found ${availableRoles.length} available roles: ${availableRoles.map((r) => r.name).join(', ')}`,
+      );
+
+      // 2. Ask Brain Provider to decompose task
+      const decompositionPrompt =
+        await this.promptComposer.composeTaskDecompositionPrompt(
+          task,
+          availableRoles,
+        );
+
+      const brainResult = await this.brainProvider.executeWithTracking(
+        {
+          prompt: decompositionPrompt,
+          systemPrompt:
+            'You are a task decomposition expert. Return ONLY valid JSON with no markdown formatting.',
+        },
+        {
+          organizationId: parentHollon.organizationId,
+          hollonId: parentHollon.id,
+          taskId: task.id,
+        },
+      );
+
+      if (!brainResult.success) {
+        throw new Error(
+          `Brain decomposition failed: ${brainResult.output || 'Unknown error'}`,
+        );
+      }
+
+      // 3. Parse JSON response
+      const decomposition = this.parseDecompositionResult(brainResult.output);
+
+      if (!decomposition.subtasks || decomposition.subtasks.length === 0) {
+        throw new Error('Brain returned empty subtask list');
+      }
+
+      this.logger.log(
+        `Brain decomposed into ${decomposition.subtasks.length} subtasks`,
+      );
+      if (decomposition.reasoning) {
+        this.logger.log(`Reasoning: ${decomposition.reasoning}`);
+      }
+
+      // 4. Create Sub-Hollons and subtasks dynamically
+      const subtaskMap = new Map<string, Task>(); // title → Task entity
+
+      for (const subtaskSpec of decomposition.subtasks) {
+        // 4.1 Find role
+        const role = availableRoles.find((r) => r.id === subtaskSpec.roleId);
+        if (!role) {
+          this.logger.warn(
+            `Role ${subtaskSpec.roleId} not found - skipping subtask "${subtaskSpec.title}"`,
+          );
+          continue;
+        }
+
+        // 4.2 Create temporary Sub-Hollon
+        const subHollon = await this.hollonService.createTemporary({
+          name: `${role.name}-${task.id.substring(0, 8)}`,
+          organizationId: parentHollon.organizationId,
+          teamId: parentHollon.teamId || undefined,
+          roleId: role.id,
+          brainProviderId: parentHollon.brainProviderId || 'claude_code',
+          createdBy: parentHollon.id,
+        });
+
+        // 4.3 Resolve dependencies (by title lookup)
+        const dependencyTasks = subtaskSpec.dependencies
+          .map((depTitle) => subtaskMap.get(depTitle))
+          .filter((t) => t != null) as Task[];
+
+        // 4.4 Determine initial status
+        const hasUnresolvedDeps = dependencyTasks.length > 0;
+        const initialStatus = hasUnresolvedDeps
+          ? TaskStatus.BLOCKED
+          : TaskStatus.READY;
+
+        // 4.5 Create subtask entity
+        const subtask = new Task();
+        subtask.organizationId = parentHollon.organizationId;
+        subtask.projectId = task.projectId;
+        subtask.parentTaskId = task.id;
+        subtask.assignedHollonId = subHollon.id;
+        subtask.title = subtaskSpec.title;
+        subtask.description = subtaskSpec.description;
+        subtask.type = subtaskSpec.type as TaskType;
+        subtask.priority =
+          (subtaskSpec.priority as TaskPriority) || task.priority;
+        subtask.status = initialStatus;
+        subtask.depth = (task.depth || 0) + 1;
+        subtask.creatorHollonId = parentHollon.id;
+        subtask.affectedFiles = subtaskSpec.affectedFiles || [];
+        subtask.estimatedComplexity = 'low'; // Subtasks are granular
+
+        // Save without dependencies first
+        const savedSubtask = await this.hollonRepo.manager.save(subtask);
+
+        // 4.6 Set dependencies (many-to-many)
+        if (dependencyTasks.length > 0) {
+          savedSubtask.dependencies = dependencyTasks;
+          await this.hollonRepo.manager.save(Task, savedSubtask);
+        }
+
+        // 4.7 Store in map for future dependency resolution
+        subtaskMap.set(subtaskSpec.title, savedSubtask);
+
+        this.logger.log(
+          `Created subtask "${savedSubtask.title}" → ${role.name} (${subHollon.id.substring(0, 8)}) [${initialStatus}] deps: ${dependencyTasks.length}`,
+        );
+      }
+
+      const totalCreated = subtaskMap.size;
+      this.logger.log(
+        `Successfully delegated task ${task.id} to ${totalCreated} Sub-Hollons. Duration: ${Date.now() - startTime}ms`,
+      );
+
+      // SSOT: Update parent task status to IN_PROGRESS
+      // This prevents the parent hollon from pulling the same task again
+      await this.hollonRepo.manager.getRepository(Task).update(task.id, {
+        status: TaskStatus.IN_PROGRESS,
+      });
+      this.logger.log(
+        `Parent task ${task.id} status updated: READY → IN_PROGRESS`,
+      );
+
+      // Sub-Hollons will be automatically executed by HollonExecutionService
+      // BLOCKED tasks will auto-unblock when dependencies complete
+      // Temporary Hollons will be cleaned up after all subtasks complete
+
+      return true; // Task delegated successfully
+    } catch (error) {
+      this.logger.error(
+        `Error delegating complex task ${task.id}: ${error}. Falling back to direct execution.`,
+      );
+
+      // Cleanup any created Sub-Hollons
+      try {
+        const tempHollons = await this.hollonRepo.find({
+          where: {
+            createdByHollonId: parentHollon.id,
+            lifecycle: HollonLifecycle.TEMPORARY,
+          },
+        });
+
+        for (const hollon of tempHollons) {
+          await this.hollonRepo.remove(hollon);
+        }
+      } catch (cleanupError) {
+        this.logger.error(`Failed to cleanup Sub-Hollons: ${cleanupError}`);
+      }
+
+      return false; // Fall back to direct execution
+    }
+  }
+
+  /**
+   * Parse Brain Provider's decomposition result (JSON)
+   *
+   * Extracts JSON from response (handles markdown code blocks)
+   * and validates structure.
+   */
+  private parseDecompositionResult(output: string): TaskDecompositionResult {
+    try {
+      // Remove markdown code blocks if present
+      let jsonStr = output.trim();
+
+      // Try to extract JSON from markdown
+      const jsonMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      if (jsonMatch) {
+        jsonStr = jsonMatch[1].trim();
+      }
+
+      // Also try to find standalone JSON object
+      const objectMatch = jsonStr.match(/\{[\s\S]*\}/);
+      if (objectMatch && !jsonMatch) {
+        jsonStr = objectMatch[0];
+      }
+
+      const parsed = JSON.parse(jsonStr);
+
+      // Validate structure
+      if (!parsed.subtasks || !Array.isArray(parsed.subtasks)) {
+        throw new Error('Invalid decomposition: missing subtasks array');
+      }
+
+      return parsed;
+    } catch (error) {
+      this.logger.error(`Failed to parse decomposition JSON: ${error}`);
+      this.logger.error(`Raw output: ${output.substring(0, 500)}...`);
+      throw new Error(`JSON parsing failed: ${error}`);
+    }
+  }
+
+  /**
+   * Find or create a specialized role (Planner, Analyzer, Coder)
+   *
+   * These roles are used for Sub-Hollon delegation of complex tasks
+   */
+  // @ts-expect-error - Reserved for future use
+
+  private async findOrCreateRole(
+    roleName: string,
+    organizationId: string,
+  ): Promise<Role> {
+    // Try to find existing role by name and organization
+    let role = await this.hollonRepo.manager.findOne(Role, {
+      where: { name: roleName, organizationId },
+    });
+
+    if (!role) {
+      const roleConfigs: Record<
+        string,
+        { systemPrompt: string; capabilities: string[] }
+      > = {
+        Planner: {
+          systemPrompt:
+            'You are a planning specialist. Analyze requirements and create detailed implementation plans.',
+          capabilities: [
+            'planning',
+            'requirements-analysis',
+            'architecture-design',
+          ],
+        },
+        Analyzer: {
+          systemPrompt:
+            'You are an architecture analyst. Design system architecture and identify dependencies.',
+          capabilities: [
+            'architecture',
+            'design-patterns',
+            'dependency-analysis',
+          ],
+        },
+        Coder: {
+          systemPrompt:
+            'You are an implementation specialist. Write clean, tested code following the plan.',
+          capabilities: ['typescript', 'nestjs', 'testing', 'implementation'],
+        },
+      };
+
+      const config = roleConfigs[roleName];
+      if (!config) {
+        throw new Error(`Unknown specialized role: ${roleName}`);
+      }
+
+      // Create role directly via repository
+      role = this.hollonRepo.manager.create(Role, {
+        name: roleName,
+        organizationId,
+        systemPrompt: config.systemPrompt,
+        capabilities: config.capabilities,
+      });
+
+      role = await this.hollonRepo.manager.save(Role, role);
+
+      this.logger.log(`Created specialized role: ${roleName}`);
+    }
+
+    return role;
+  }
+
+  /**
+   * Phase 3.10: Handle review mode
+   *
+   * LLM reviews subtask results and decides next action:
+   * - complete: All done, mark task as completed
+   * - rework: Send specific subtasks back for improvements
+   * - add_tasks: Create additional subtasks
+   * - redirect: Cancel and re-delegate with new approach
+   */
+  private async handleReviewMode(
+    task: Task,
+    hollon: Hollon,
+  ): Promise<ExecutionCycleResult> {
+    const startTime = Date.now();
+
+    try {
+      // 1. Compose review prompt (PromptComposer handles this automatically)
+      const composedPrompt = await this.promptComposer.composePrompt(
+        hollon.id,
+        task.id,
+      );
+
+      this.logger.log(
+        `Review mode prompt composed: ${composedPrompt.totalTokens} tokens`,
+      );
+
+      // 2. Execute LLM
+      const brainResult = await this.brainProvider.executeWithTracking(
+        {
+          prompt: composedPrompt.userPrompt,
+          systemPrompt: composedPrompt.systemPrompt,
+        },
+        {
+          organizationId: hollon.organizationId,
+          hollonId: hollon.id,
+          taskId: task.id,
+        },
+      );
+
+      if (!brainResult.success) {
+        throw new Error(
+          `Review mode brain execution failed: ${brainResult.output}`,
+        );
+      }
+
+      // 3. Parse LLM decision
+      const decision = this.parseLLMReviewDecision(brainResult.output);
+
+      this.logger.log(
+        `LLM review decision: ${decision.action} - ${decision.reasoning}`,
+      );
+
+      // 4. Execute decision
+      switch (decision.action) {
+        case 'complete':
+          await this.subtaskService.completeParentTaskByLLM(task.id);
+          return {
+            success: true,
+            taskId: task.id,
+            taskTitle: task.title,
+            duration: Date.now() - startTime,
+            output: `✅ Task completed after review: ${decision.reasoning}`,
+          };
+
+        case 'rework':
+          await this.requestRework(task, decision);
+          return {
+            success: true,
+            taskId: task.id,
+            taskTitle: task.title,
+            duration: Date.now() - startTime,
+            output: `🔄 Rework requested: ${decision.reasoning}`,
+          };
+
+        case 'add_tasks':
+          await this.addFollowUpTasks(task, decision);
+          return {
+            success: true,
+            taskId: task.id,
+            taskTitle: task.title,
+            duration: Date.now() - startTime,
+            output: `➕ Added ${decision.newSubtasks.length} follow-up tasks: ${decision.reasoning}`,
+          };
+
+        case 'redirect':
+          await this.redirectTask(task, decision);
+          return {
+            success: true,
+            taskId: task.id,
+            taskTitle: task.title,
+            duration: Date.now() - startTime,
+            output: `🔀 Task redirected: ${decision.reasoning}`,
+          };
+
+        default:
+          throw new Error(`Unknown review action: ${decision.action}`);
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Review mode failed for task ${task.id}: ${errorMessage}`,
+      );
+      return {
+        success: false,
+        taskId: task.id,
+        taskTitle: task.title,
+        duration: Date.now() - startTime,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Phase 3.10: Parse LLM review decision from JSON output
+   */
+  private parseLLMReviewDecision(output: string): any {
+    try {
+      // Extract JSON block from markdown
+      const jsonMatch = output.match(/```json\s*([\s\S]*?)\s*```/);
+      if (!jsonMatch) {
+        throw new Error('No JSON block found in LLM output');
+      }
+
+      const decision = JSON.parse(jsonMatch[1]);
+
+      if (!decision.action || !decision.reasoning) {
+        throw new Error('Missing required fields: action, reasoning');
+      }
+
+      return decision;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to parse LLM review decision: ${errorMessage}`);
+      this.logger.error(`LLM output: ${output}`);
+      throw new Error(`Invalid LLM review decision format: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Phase 3.10: Request rework for specific subtasks
+   */
+  private async requestRework(task: Task, decision: any): Promise<void> {
+    const { subtaskIds, reworkInstructions } = decision;
+
+    const taskRepo = this.hollonRepo.manager.getRepository(Task);
+
+    for (const subtaskId of subtaskIds) {
+      await taskRepo.update(subtaskId, {
+        status: TaskStatus.READY,
+        description: reworkInstructions, // Update with rework instructions
+        retryCount: () => 'retry_count + 1',
+      });
+
+      this.logger.log(
+        `Subtask ${subtaskId} marked for rework: ${reworkInstructions}`,
+      );
+    }
+
+    // Parent task stays IN_PROGRESS (waiting for reworked subtasks)
+    await taskRepo.update(task.id, {
+      status: TaskStatus.IN_PROGRESS,
+    });
+  }
+
+  /**
+   * Phase 3.10: Add follow-up subtasks
+   */
+  private async addFollowUpTasks(task: Task, decision: any): Promise<void> {
+    const { newSubtasks } = decision;
+
+    await this.subtaskService.createSubtasks(task.id, newSubtasks);
+
+    // Parent task stays IN_PROGRESS (waiting for new subtasks)
+    const taskRepo = this.hollonRepo.manager.getRepository(Task);
+    await taskRepo.update(task.id, {
+      status: TaskStatus.IN_PROGRESS,
+    });
+
+    this.logger.log(
+      `Added ${newSubtasks.length} follow-up subtasks to task ${task.id}`,
+    );
+  }
+
+  /**
+   * Phase 3.10: Redirect task with new approach
+   */
+  private async redirectTask(task: Task, decision: any): Promise<void> {
+    const { cancelSubtaskIds, newDirection } = decision;
+
+    const taskRepo = this.hollonRepo.manager.getRepository(Task);
+
+    // Cancel existing subtasks
+    for (const subtaskId of cancelSubtaskIds) {
+      await taskRepo.update(subtaskId, {
+        status: TaskStatus.CANCELLED,
+      });
+    }
+
+    // Re-delegate with new approach (using handleComplexTask)
+    const hollon = await this.hollonRepo.findOne({
+      where: { id: task.assignedHollonId! },
+      relations: ['organization', 'team', 'role'],
+    });
+
+    if (hollon) {
+      // Update task description with new direction
+      await taskRepo.update(task.id, {
+        description: `${task.description}\n\n**New Direction**: ${newDirection}`,
+        status: TaskStatus.READY, // Reset to READY for re-delegation
+      });
+
+      await this.handleComplexTask(task, hollon);
+    }
+
+    this.logger.log(
+      `Task ${task.id} redirected: cancelled ${cancelSubtaskIds.length} subtasks, new direction: ${newDirection}`,
+    );
+  }
+
+  /**
+   * Phase 3.16: Manager Review Cycle
+   * Manager hollon checks for READY_FOR_REVIEW subtasks and orchestrates review
+   * Called periodically by GoalAutomationListener
+   */
+  async handleManagerReviewCycle(managerHollon: Hollon): Promise<void> {
+    this.logger.debug(
+      `Manager ${managerHollon.name} checking for subtasks to review`,
+    );
+
+    // 1. Find subtasks with status=READY_FOR_REVIEW where reviewerHollonId=managerHollon.id
+    const subtasksToReview = await this.taskRepo
+      .createQueryBuilder('task')
+      .where('task.status = :status', { status: TaskStatus.READY_FOR_REVIEW })
+      .andWhere('task.reviewerHollonId = :reviewerId', {
+        reviewerId: managerHollon.id,
+      })
+      .leftJoinAndSelect('task.project', 'project')
+      .leftJoinAndSelect('task.project.organization', 'organization')
+      .getMany();
+
+    if (subtasksToReview.length === 0) {
+      this.logger.debug(
+        `No subtasks to review for manager ${managerHollon.name}`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `Manager ${managerHollon.name} found ${subtasksToReview.length} subtasks to review`,
+    );
+
+    // 2. For each subtask, create temporary review hollon and request review
+    for (const subtask of subtasksToReview) {
+      try {
+        // Find the PR for this task
+        const prs = await this.codeReviewService.getPullRequestsForTask(
+          subtask.id,
+        );
+        const pr = prs[0]; // Get the first (most recent) PR
+
+        if (!pr) {
+          this.logger.warn(
+            `No PR found for task ${subtask.id}, skipping review`,
+          );
+          continue;
+        }
+
+        // Create temporary review hollon (reuse Phase 3.7 pattern)
+        const reviewerHollon = await this.createTemporaryReviewHollon(
+          managerHollon,
+          subtask,
+        );
+
+        this.logger.log(
+          `Manager ${managerHollon.name} created reviewer ${reviewerHollon.name} for task ${subtask.id}`,
+        );
+
+        // Request code review (reuse Phase 3.13)
+        // Note: requestReview will automatically select a reviewer
+        // For Phase 3.16, we want the manager to directly assign the temporary reviewer
+        // So we update the PR's reviewerHollonId directly
+        await this.codeReviewService['prRepo'].update(pr.id, {
+          reviewerHollonId: reviewerHollon.id,
+        });
+
+        // Update task status to IN_REVIEW
+        await this.taskRepo.update(subtask.id, {
+          status: TaskStatus.IN_REVIEW,
+        });
+
+        this.logger.log(
+          `Review requested by ${reviewerHollon.name} for PR #${pr.prNumber}`,
+        );
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(
+          `Failed to initiate review for task ${subtask.id}: ${errorMessage}`,
+        );
+        // Continue with next subtask
+      }
+    }
+  }
+
+  /**
+   * Phase 3.16: Create temporary review hollon for code review
+   * Reuses Phase 3.7 temporary hollon creation pattern
+   */
+  private async createTemporaryReviewHollon(
+    managerHollon: Hollon,
+    subtask: Task,
+  ): Promise<Hollon> {
+    // Get Code Reviewer role
+    const reviewerRole = await this.roleRepo.findOne({
+      where: { name: 'Code Reviewer' },
+    });
+
+    if (!reviewerRole) {
+      throw new Error('Code Reviewer role not found');
+    }
+
+    // Create temporary reviewer hollon using existing DTO fields
+    const reviewerHollon = await this.hollonService.create({
+      name: `Reviewer-${subtask.id.slice(0, 8)}`,
+      organizationId: subtask.organizationId,
+      roleId: reviewerRole.id,
+      teamId: managerHollon.teamId || undefined, // Convert null to undefined
+      lifecycle: HollonLifecycle.TEMPORARY, // Use lifecycle to mark as temporary
+    });
+
+    this.logger.log(
+      `Created temporary reviewer hollon ${reviewerHollon.name} for task ${subtask.id}`,
+    );
+
+    return reviewerHollon;
+  }
+
+  /**
+   * Phase 3.16: Handle review result from temporary review hollon
+   * Called when review is completed (approved or changes requested)
+   * Manager makes strategic decision based on review outcome
+   */
+  async handleReviewResult(
+    managerHollon: Hollon,
+    pr: TaskPullRequest,
+  ): Promise<void> {
+    this.logger.log(
+      `Manager ${managerHollon.name} handling review result for PR #${pr.prNumber}`,
+    );
+
+    const task = await this.taskRepo.findOne({
+      where: { id: pr.taskId },
+      relations: ['project', 'project.organization', 'assignedHollon'],
+    });
+
+    if (!task) {
+      throw new Error(`Task ${pr.taskId} not found`);
+    }
+
+    // Check PR status (approved or changes_requested)
+    if (!pr.status) {
+      this.logger.warn(`PR #${pr.prNumber} has no status yet`);
+      return;
+    }
+
+    if (pr.status === 'approved') {
+      // Review approved: merge PR and complete task
+      this.logger.log(
+        `Review approved for task ${task.id}, proceeding to merge`,
+      );
+
+      try {
+        // Merge PR (in test env, just mark as completed)
+        if (process.env.NODE_ENV === 'test') {
+          this.logger.debug('Skipping PR merge in test environment');
+        } else {
+          // Real merge logic would go here
+          // await this.githubService.mergePR(pr.prNumber);
+        }
+
+        // Mark task as completed
+        await this.taskRepo.update(task.id, {
+          status: TaskStatus.COMPLETED,
+          completedAt: new Date(),
+        });
+
+        this.logger.log(`Task ${task.id} completed after successful review`);
+
+        // Check if all subtasks are done, then ask LLM about parent task
+        await this.checkParentTaskCompletion(task);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(`Failed to merge PR: ${errorMessage}`);
+        throw error;
+      }
+    } else if (pr.status === 'changes_requested') {
+      // Changes requested: assign back to worker hollon for rework
+      this.logger.log(
+        `Changes requested for task ${task.id}, assigning back to worker`,
+      );
+
+      if (!task.assignedHollon) {
+        this.logger.warn(
+          `Task ${task.id} has no assigned hollon, cannot rework`,
+        );
+        return;
+      }
+
+      // Update task with review feedback
+      await this.taskRepo.update(task.id, {
+        status: TaskStatus.READY, // Reset to READY for rework
+        description: `${task.description}\n\n**Review Feedback**:\n${pr.reviewComments || 'See PR comments for details'}`,
+      });
+
+      this.logger.log(
+        `Task ${task.id} reset to READY for rework by ${task.assignedHollon.name}`,
+      );
+
+      // Worker will pick up the task in next cycle
+    }
+
+    // Cleanup temporary reviewer hollon (Phase 3.16)
+    if (pr.reviewerHollonId) {
+      await this.cleanupTemporaryReviewHollon(pr.reviewerHollonId);
+    }
+  }
+
+  /**
+   * Phase 3.16: Check if all subtasks are done, then decide on parent task
+   * Uses LLM to decide: complete parent or add more tasks
+   */
+  private async checkParentTaskCompletion(subtask: Task): Promise<void> {
+    if (!subtask.parentTaskId) {
+      return; // This is a root task
+    }
+
+    const parentTask = await this.taskRepo.findOne({
+      where: { id: subtask.parentTaskId },
+      relations: [
+        'subtasks',
+        'project',
+        'project.organization',
+        'assignedHollon',
+      ],
+    });
+
+    if (!parentTask) {
+      return;
+    }
+
+    // Check if all subtasks are completed
+    const allSubtasksCompleted = parentTask.subtasks.every(
+      (st) => st.status === TaskStatus.COMPLETED,
+    );
+
+    if (!allSubtasksCompleted) {
+      this.logger.debug(
+        `Parent task ${parentTask.id} still has incomplete subtasks`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `All subtasks completed for parent task ${parentTask.id}, asking LLM for decision`,
+    );
+
+    // Ask LLM: should we complete parent or add more tasks?
+    const prompt = this.buildParentCompletionPrompt(parentTask);
+
+    try {
+      const result = await this.brainProvider.executeWithTracking(
+        {
+          prompt,
+          context: {
+            workingDirectory: parentTask.project.workingDirectory,
+            taskId: parentTask.id,
+          },
+        },
+        {
+          organizationId: parentTask.project.organizationId,
+          hollonId: parentTask.assignedHollonId || 'system',
+          taskId: parentTask.id,
+        },
+      );
+
+      const decision = this.parseParentCompletionDecision(result.output);
+
+      if (decision.action === 'complete') {
+        // Complete parent task
+        await this.taskRepo.update(parentTask.id, {
+          status: TaskStatus.COMPLETED,
+          completedAt: new Date(),
+        });
+
+        this.logger.log(`Parent task ${parentTask.id} marked as completed`);
+
+        // Recursively check grandparent
+        await this.checkParentTaskCompletion(parentTask);
+      } else if (decision.action === 'add_tasks') {
+        // Add more subtasks
+        this.logger.log(
+          `Parent task ${parentTask.id} needs more subtasks: ${decision.reason}`,
+        );
+
+        // Trigger subtask creation (Phase 3.9)
+        if (parentTask.assignedHollon) {
+          await this.handleComplexTask(parentTask, parentTask.assignedHollon);
+        }
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(
+        `Failed to get parent completion decision: ${errorMessage}`,
+      );
+      // Don't throw - parent task can be manually reviewed
+    }
+  }
+
+  /**
+   * Build prompt for parent task completion decision
+   */
+  private buildParentCompletionPrompt(parentTask: Task): string {
+    return `# Parent Task Completion Decision
+
+You are a manager reviewing whether a parent task is fully complete after all its subtasks have been completed.
+
+## Parent Task
+**Title**: ${parentTask.title}
+**Description**: ${parentTask.description || 'No description'}
+
+## Acceptance Criteria
+${parentTask.acceptanceCriteria || 'No acceptance criteria specified'}
+
+## Completed Subtasks
+${parentTask.subtasks
+  .map(
+    (st, idx) => `${idx + 1}. ${st.title}
+   Status: ${st.status}
+   ${st.description ? `Description: ${st.description}` : ''}`,
+  )
+  .join('\n\n')}
+
+## Your Decision
+Based on the parent task's acceptance criteria and the completed subtasks, decide:
+
+1. **complete**: All acceptance criteria are met, parent task is done
+2. **add_tasks**: More work is needed to meet acceptance criteria
+
+Respond in JSON format:
+\`\`\`json
+{
+  "action": "complete" | "add_tasks",
+  "reason": "Brief explanation of your decision"
+}
+\`\`\`
+
+If you choose "add_tasks", the system will generate additional subtasks.
+If you choose "complete", the parent task will be marked as done.
+`;
+  }
+
+  /**
+   * Parse LLM decision for parent task completion
+   */
+  private parseParentCompletionDecision(output: string): {
+    action: 'complete' | 'add_tasks';
+    reason: string;
+  } {
+    try {
+      // Extract JSON from output
+      const jsonMatch = output.match(/```json\s*\n?([\s\S]*?)\n?```/);
+      if (jsonMatch) {
+        const decision = JSON.parse(jsonMatch[1]);
+        return {
+          action: decision.action,
+          reason: decision.reason || 'No reason provided',
+        };
+      }
+
+      // Fallback: try to parse entire output as JSON
+      const decision = JSON.parse(output);
+      return {
+        action: decision.action,
+        reason: decision.reason || 'No reason provided',
+      };
+    } catch {
+      // Default to complete if parsing fails
+      this.logger.warn(
+        `Failed to parse parent completion decision, defaulting to complete`,
+      );
+      return {
+        action: 'complete',
+        reason: 'Decision parsing failed, assuming complete',
+      };
+    }
+  }
+
+  /**
+   * Phase 3.7: Cleanup temporary review hollon after review is done
+   */
+  private async cleanupTemporaryReviewHollon(
+    reviewerHollonId: string,
+  ): Promise<void> {
+    try {
+      const reviewerHollon = await this.hollonService.findOne(reviewerHollonId);
+
+      // Check if hollon is temporary by lifecycle or name pattern
+      if (
+        reviewerHollon?.lifecycle === HollonLifecycle.TEMPORARY ||
+        reviewerHollon?.name.startsWith('Reviewer-')
+      ) {
+        await this.hollonService.remove(reviewerHollonId);
+        this.logger.log(
+          `Cleaned up temporary reviewer hollon ${reviewerHollonId}`,
+        );
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(
+        `Failed to cleanup temporary reviewer hollon: ${errorMessage}`,
+      );
+      // Don't throw - cleanup failures shouldn't block the flow
+    }
   }
 }

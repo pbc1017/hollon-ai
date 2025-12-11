@@ -54,27 +54,38 @@ export class TaskPoolService {
 
     // Get currently locked files (files being worked on by other hollons)
     const lockedFiles = await this.getLockedFiles(hollonId);
+    const now = new Date();
+
+    // Priority 0: Review tasks (highest priority - Phase 3.10)
+    let task = await this.findReviewReadyTask(hollonId);
+    if (task) {
+      return this.claimTask(
+        task,
+        hollon,
+        'Review subtasks - all subtasks completed, needs parent review',
+      );
+    }
 
     // Priority 1: Directly assigned tasks
-    let task = await this.findDirectlyAssignedTask(hollonId, lockedFiles);
+    task = await this.findDirectlyAssignedTask(hollonId, lockedFiles, now);
     if (task) {
       return this.claimTask(task, hollon, 'Directly assigned');
     }
 
     // Priority 2: Same-file tasks (continuation of work)
-    task = await this.findSameFileTask(hollon, lockedFiles);
+    task = await this.findSameFileTask(hollon, lockedFiles, now);
     if (task) {
       return this.claimTask(task, hollon, 'Same-file continuation');
     }
 
     // Priority 3: Team unassigned tasks
-    task = await this.findTeamUnassignedTask(hollon, lockedFiles);
+    task = await this.findTeamUnassignedTask(hollon, lockedFiles, now);
     if (task) {
       return this.claimTask(task, hollon, 'Team unassigned');
     }
 
     // Priority 4: Role matching tasks across organization
-    task = await this.findRoleMatchingTask(hollon, lockedFiles);
+    task = await this.findRoleMatchingTask(hollon, lockedFiles, now);
     if (task) {
       return this.claimTask(task, hollon, 'Role matching');
     }
@@ -129,11 +140,72 @@ export class TaskPoolService {
   }
 
   /**
+   * Check if task is currently blocked by exponential backoff
+   */
+  private isTaskBlocked(task: Task, now: Date): boolean {
+    if (!task.blockedUntil) {
+      return false;
+    }
+    return task.blockedUntil.getTime() > now.getTime();
+  }
+
+  /**
+   * Priority 0: Find parent tasks ready for review (Phase 3.10)
+   *
+   * Conditions:
+   * - status = READY_FOR_REVIEW
+   * - assignedHollonId = this hollon
+   * - All subtasks are COMPLETED
+   * - reviewCount < 3 (prevent infinite loop)
+   */
+  private async findReviewReadyTask(hollonId: string): Promise<Task | null> {
+    const tasks = await this.taskRepo.find({
+      where: {
+        assignedHollonId: hollonId,
+        status: TaskStatus.READY_FOR_REVIEW,
+      },
+      relations: ['subtasks'],
+      order: {
+        priority: 'ASC',
+        lastReviewedAt: 'ASC', // 오래된 것 우선
+      },
+    });
+
+    for (const task of tasks) {
+      // 무한루프 방지
+      if (task.reviewCount >= 3) {
+        this.logger.warn(
+          `Task ${task.id} exceeded max review count (3), skipping`,
+        );
+        continue;
+      }
+
+      // 모든 서브태스크 완료 확인
+      const allSubtasksCompleted =
+        task.subtasks && task.subtasks.length > 0
+          ? task.subtasks.every((st) => st.status === TaskStatus.COMPLETED)
+          : false;
+
+      if (!allSubtasksCompleted) {
+        this.logger.warn(
+          `Task ${task.id} marked READY_FOR_REVIEW but not all subtasks completed`,
+        );
+        continue;
+      }
+
+      return task;
+    }
+
+    return null;
+  }
+
+  /**
    * Priority 1: Find directly assigned task
    */
   private async findDirectlyAssignedTask(
     hollonId: string,
     lockedFiles: string[],
+    now: Date,
   ): Promise<Task | null> {
     const tasks = await this.taskRepo.find({
       where: {
@@ -147,6 +219,9 @@ export class TaskPoolService {
     });
 
     for (const task of tasks) {
+      if (this.isTaskBlocked(task, now)) {
+        continue;
+      }
       if (this.hasFileConflict(task, lockedFiles)) {
         continue;
       }
@@ -165,6 +240,7 @@ export class TaskPoolService {
   private async findSameFileTask(
     hollon: Hollon,
     lockedFiles: string[],
+    now: Date,
   ): Promise<Task | null> {
     // Get files this hollon has worked on recently
     const recentTasks = await this.taskRepo.find({
@@ -205,6 +281,9 @@ export class TaskPoolService {
       .getMany();
 
     for (const task of candidateTasks) {
+      if (this.isTaskBlocked(task, now)) {
+        continue;
+      }
       if (this.hasFileConflict(task, lockedFiles)) {
         continue;
       }
@@ -223,6 +302,7 @@ export class TaskPoolService {
   private async findTeamUnassignedTask(
     hollon: Hollon,
     lockedFiles: string[],
+    now: Date,
   ): Promise<Task | null> {
     if (!hollon.teamId) {
       return null;
@@ -260,6 +340,9 @@ export class TaskPoolService {
     });
 
     for (const task of tasks) {
+      if (this.isTaskBlocked(task, now)) {
+        continue;
+      }
       if (this.hasFileConflict(task, lockedFiles)) {
         continue;
       }
@@ -278,6 +361,7 @@ export class TaskPoolService {
   private async findRoleMatchingTask(
     _hollon: Hollon,
     lockedFiles: string[],
+    now: Date,
   ): Promise<Task | null> {
     // Find tasks that match this hollon's role
     // For now, just find any unassigned task in the organization
@@ -294,6 +378,9 @@ export class TaskPoolService {
     });
 
     for (const task of tasks) {
+      if (this.isTaskBlocked(task, now)) {
+        continue;
+      }
       if (this.hasFileConflict(task, lockedFiles)) {
         continue;
       }
@@ -308,24 +395,46 @@ export class TaskPoolService {
 
   /**
    * Atomically claim a task for the hollon
+   * Phase 3.10: Handle READY_FOR_REVIEW → IN_REVIEW transition
    */
   private async claimTask(
     task: Task,
     hollon: Hollon,
     reason: string,
   ): Promise<TaskPullResult> {
+    // Determine target status based on current status
+    const isReviewTask = task.status === TaskStatus.READY_FOR_REVIEW;
+    const newStatus = isReviewTask
+      ? TaskStatus.IN_REVIEW
+      : TaskStatus.IN_PROGRESS;
+
+    // Prepare update data
+    const updateData: any = {
+      assignedHollonId: hollon.id,
+      status: newStatus,
+    };
+
+    // Add review tracking for review tasks
+    if (isReviewTask) {
+      updateData.lastReviewedAt = new Date();
+      updateData.reviewCount = () => 'review_count + 1'; // Increment reviewCount
+    } else {
+      updateData.startedAt = new Date();
+    }
+
+    // Build dynamic WHERE clause based on task type
+    const allowedStatuses = isReviewTask
+      ? [TaskStatus.READY_FOR_REVIEW]
+      : [TaskStatus.READY, TaskStatus.PENDING];
+
     // Use transaction for atomic update
     const result = await this.taskRepo
       .createQueryBuilder()
       .update(Task)
-      .set({
-        assignedHollonId: hollon.id,
-        status: TaskStatus.IN_PROGRESS,
-        startedAt: new Date(),
-      })
+      .set(updateData)
       .where('id = :id', { id: task.id })
       .andWhere('status IN (:...statuses)', {
-        statuses: [TaskStatus.READY, TaskStatus.PENDING],
+        statuses: allowedStatuses,
       })
       .andWhere(
         '(assigned_hollon_id IS NULL OR assigned_hollon_id = :hollonId)',
@@ -350,7 +459,7 @@ export class TaskPoolService {
     });
 
     this.logger.log(
-      `Task claimed: ${task.id} by ${hollon.name} (reason: ${reason})`,
+      `Task claimed: ${task.id} by ${hollon.name} (reason: ${reason}, status: ${task.status} → ${newStatus})`,
     );
 
     return {
@@ -390,7 +499,7 @@ export class TaskPoolService {
   }
 
   /**
-   * Complete task
+   * Complete task (reset backoff counters on success)
    */
   async completeTask(taskId: string): Promise<void> {
     await this.taskRepo.update(
@@ -398,6 +507,9 @@ export class TaskPoolService {
       {
         status: TaskStatus.COMPLETED,
         completedAt: new Date(),
+        consecutiveFailures: 0, // Reset on success
+        blockedUntil: null,
+        lastFailedAt: null,
       },
     );
 
@@ -405,18 +517,50 @@ export class TaskPoolService {
   }
 
   /**
-   * Mark task as failed
+   * Mark task as failed with exponential backoff
+   *
+   * Phase 3.7: Exponential backoff to prevent infinite loops
+   * - 1st failure: 5 minutes
+   * - 2nd failure: 15 minutes
+   * - 3rd+ failure: 1 hour
    */
   async failTask(taskId: string, errorMessage: string): Promise<void> {
+    const task = await this.taskRepo.findOne({ where: { id: taskId } });
+    if (!task) {
+      this.logger.error(`Task not found: ${taskId}`);
+      return;
+    }
+
+    const now = new Date();
+    const consecutiveFailures = (task.consecutiveFailures || 0) + 1;
+
+    // Calculate backoff duration
+    let backoffMinutes: number;
+    if (consecutiveFailures === 1) {
+      backoffMinutes = 5; // 5 minutes
+    } else if (consecutiveFailures === 2) {
+      backoffMinutes = 15; // 15 minutes
+    } else {
+      backoffMinutes = 60; // 1 hour
+    }
+
+    const blockedUntil = new Date(now.getTime() + backoffMinutes * 60 * 1000);
+
     await this.taskRepo.update(
       { id: taskId },
       {
-        status: TaskStatus.FAILED,
+        status: TaskStatus.READY, // Set to READY instead of FAILED (for retry)
         errorMessage,
-        completedAt: new Date(),
+        consecutiveFailures,
+        lastFailedAt: now,
+        blockedUntil,
       },
     );
 
-    this.logger.log(`Task failed: ${taskId} - ${errorMessage}`);
+    this.logger.warn(
+      `Task ${taskId} failed (attempt ${consecutiveFailures}). ` +
+        `Blocked until ${blockedUntil.toISOString()} (${backoffMinutes} min). ` +
+        `Error: ${errorMessage}`,
+    );
   }
 }

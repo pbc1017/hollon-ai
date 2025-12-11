@@ -1,13 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, ArrayOverlap } from 'typeorm';
 import { Task, TaskStatus } from '../entities/task.entity';
-import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
+import {
+  Hollon,
+  HollonStatus,
+  HollonLifecycle,
+  ExperienceLevel,
+} from '../../hollon/entities/hollon.entity';
 import {
   ResourcePlanningResult,
   HollonWorkload,
   TaskAssignmentRecommendation,
 } from '../interfaces/resource-planning.interface';
+import {
+  Document,
+  DocumentType,
+} from '../../document/entities/document.entity';
 
 @Injectable()
 export class ResourcePlannerService {
@@ -18,6 +27,8 @@ export class ResourcePlannerService {
     private readonly taskRepo: Repository<Task>,
     @InjectRepository(Hollon)
     private readonly hollonRepo: Repository<Hollon>,
+    @InjectRepository(Document)
+    private readonly documentRepo: Repository<Document>,
   ) {}
 
   /**
@@ -39,13 +50,15 @@ export class ResourcePlannerService {
       return this.createEmptyResult();
     }
 
-    // 2. 조직의 available hollons 조회
+    // 2. 조직의 available hollons 조회 (Phase 3.5: Role 포함)
     const firstTask = tasks[0];
     const availableHollons = await this.hollonRepo.find({
       where: {
         organizationId: firstTask.organizationId,
         status: In([HollonStatus.IDLE, HollonStatus.WORKING]),
+        lifecycle: HollonLifecycle.PERMANENT, // 영구 홀론만 (임시는 제외)
       },
+      relations: ['role'], // ✅ Phase 3.5: Role.capabilities 사용
     });
 
     if (availableHollons.length === 0) {
@@ -112,6 +125,8 @@ export class ResourcePlannerService {
       assignments,
       workloads,
       assignedTasks: assignments.length,
+      assignedCount: assignments.length, // Phase 3 Week 15-16
+      totalTasks: tasks.length, // Phase 3 Week 15-16
       unassignedTasks: tasks.length - assignments.length,
       averageMatchScore,
       warnings,
@@ -119,7 +134,7 @@ export class ResourcePlannerService {
   }
 
   /**
-   * 단일 Task에 대한 Hollon 추천
+   * 단일 Task에 대한 Hollon 추천 (Phase 3.5: Role.capabilities 기반)
    */
   async recommendHollon(
     task: Task,
@@ -131,7 +146,9 @@ export class ResourcePlannerService {
         where: {
           organizationId: task.organizationId,
           status: In([HollonStatus.IDLE, HollonStatus.WORKING]),
+          lifecycle: HollonLifecycle.PERMANENT,
         },
+        relations: ['role'], // ✅ Phase 3.5: Role.capabilities
       });
     }
 
@@ -173,43 +190,222 @@ export class ResourcePlannerService {
   }
 
   /**
-   * Task-Hollon 매칭 점수 계산 (0-100)
+   * Phase 3 Week 15-16: 특정 Hollon에게 최적의 Task 추천 (IDLE 자동 할당용)
+   *
+   * MessageListener.autoAssignIdleHollons()에서 사용
+   * Hollon을 기준으로 가장 적합한 unassigned Task를 찾습니다.
+   */
+  async recommendTaskForHollon(
+    hollonId: string,
+  ): Promise<TaskAssignmentRecommendation> {
+    this.logger.log(`Finding best task for hollon: ${hollonId}`);
+
+    // 1. Hollon 조회
+    const hollon = await this.hollonRepo.findOne({
+      where: { id: hollonId },
+      relations: ['role', 'team', 'organization'],
+    });
+
+    if (!hollon) {
+      return {
+        task: null as any,
+        recommendedHollon: null,
+        matchScore: 0,
+        reasoning: `Hollon not found: ${hollonId}`,
+        alternatives: [],
+      };
+    }
+
+    // 2. 조직의 unassigned & ready tasks 조회
+    const unassignedTasks = await this.taskRepo.find({
+      where: {
+        organizationId: hollon.organizationId,
+        assignedHollonId: In([null]) as any,
+        status: In([TaskStatus.PENDING, TaskStatus.READY]),
+      },
+      relations: ['project'],
+      take: 50, // 최대 50개까지만 검색
+      order: {
+        priority: 'ASC',
+        createdAt: 'ASC',
+      },
+    });
+
+    if (unassignedTasks.length === 0) {
+      return {
+        task: null as any,
+        recommendedHollon: null,
+        matchScore: 0,
+        reasoning: 'No unassigned tasks available',
+        alternatives: [],
+      };
+    }
+
+    // 3. 각 Task에 대한 매칭 점수 계산
+    const scores = await Promise.all(
+      unassignedTasks.map(async (task) => ({
+        task,
+        score: await this.calculateMatchScore(task, hollon),
+      })),
+    );
+
+    // 4. 점수 순 정렬
+    scores.sort((a, b) => b.score - a.score);
+
+    const best = scores[0];
+
+    // 최소 매칭 점수 체크 (40점 미만이면 할당하지 않음)
+    if (best.score < 40) {
+      this.logger.debug(
+        `Best task score (${best.score}) below threshold for hollon ${hollonId}`,
+      );
+      return {
+        task: null as any,
+        recommendedHollon: null,
+        matchScore: best.score,
+        reasoning: `No suitable task (best match score: ${best.score})`,
+        alternatives: [],
+      };
+    }
+
+    return {
+      task: best.task,
+      recommendedTask: best.task,
+      recommendedHollon: hollon,
+      matchScore: best.score,
+      reasoning: this.getMatchReason(best.score),
+      alternatives: [],
+    };
+  }
+
+  /**
+   * Phase 3.5: Task-Hollon 매칭 점수 계산 (0-100)
+   * SSOT 원칙: Role.capabilities > 조직 지식 > 경험 레벨
    */
   private async calculateMatchScore(
     task: Task,
     hollon: Hollon,
   ): Promise<number> {
-    let score = 50; // Base score
+    let score = 0;
 
-    // 1. Skill 매칭 (최대 30점)
-    const skillScore = this.calculateSkillScore(task, hollon);
-    score += skillScore * 0.3;
+    // ✅ 1. Role.capabilities 매칭 (최우선 - 50점)
+    const skillScore = await this.calculateSkillScore(task, hollon);
+    score += skillScore;
 
-    // 2. Workload 밸런싱 (최대 20점)
+    // ✅ 2. 조직 지식 존재 (20점)
+    const knowledgeScore = await this.calculateKnowledgeScore(task);
+    score += knowledgeScore;
+
+    // ✅ 3. 경험 레벨 (통계적 성과만 - 10점)
+    const experienceScore = this.calculateExperienceScore(hollon);
+    score += experienceScore;
+
+    // 4. Workload 밸런싱 (10점)
     const workloadScore = await this.calculateWorkloadScore(hollon);
-    score += workloadScore * 0.2;
+    score += workloadScore * 0.1;
 
-    // 3. Status 점수 (최대 10점)
+    // 5. Status 점수 (10점)
     const statusScore = this.calculateStatusScore(hollon);
     score += statusScore * 0.1;
-
-    // 4. 같은 프로젝트 경험 (최대 10점)
-    const projectExperienceScore = await this.calculateProjectExperienceScore(
-      task,
-      hollon,
-    );
-    score += projectExperienceScore * 0.1;
 
     return Math.min(100, Math.max(0, score));
   }
 
   /**
-   * Skill 매칭 점수 (0-100)
+   * Phase 3.5: Role.capabilities 기반 스킬 매칭 (0-50점)
+   * SSOT 원칙: 스킬은 Role에 속함, Hollon.skills 없음!
    */
-  private calculateSkillScore(_task: Task, _hollon: Hollon): number {
-    // TODO: Task의 requiredSkills와 Hollon의 skills 비교
-    // 현재는 기본 점수 반환
-    return 70;
+  private async calculateSkillScore(
+    task: Task,
+    hollon: Hollon,
+  ): Promise<number> {
+    if (!hollon.role) {
+      this.logger.warn(`Hollon ${hollon.id} has no role loaded`);
+      return 0;
+    }
+
+    const roleCapabilities = hollon.role.capabilities || [];
+    const taskSkills = task.requiredSkills || [];
+
+    if (taskSkills.length === 0) {
+      // 스킬 요구사항 없음 → 기본 점수
+      return 25;
+    }
+
+    // 매칭 개수 계산
+    const matchCount = taskSkills.filter((skill) =>
+      roleCapabilities.some((cap) =>
+        cap.toLowerCase().includes(skill.toLowerCase()),
+      ),
+    ).length;
+
+    // 매칭률 계산 (0-50점)
+    const matchRatio = matchCount / taskSkills.length;
+    const score = matchRatio * 50;
+
+    this.logger.debug(
+      `Skill match for ${hollon.name}: ${matchCount}/${taskSkills.length} skills matched (${score.toFixed(1)} points)`,
+    );
+
+    return score;
+  }
+
+  /**
+   * Phase 3.5: 조직 지식 기반 점수 (0-20점)
+   * Document (organizationId, projectId: null)에 관련 지식이 있으면 누구나 수행 가능
+   */
+  private async calculateKnowledgeScore(task: Task): Promise<number> {
+    try {
+      const skillsAndTags = [
+        ...(task.requiredSkills || []),
+        ...(task.tags || []),
+      ];
+
+      if (skillsAndTags.length === 0) {
+        return 0;
+      }
+
+      const relatedDocs = await this.documentRepo.find({
+        where: {
+          organizationId: task.organizationId,
+          projectId: In([null]) as any, // 조직 레벨 지식 (프로젝트에 속하지 않음)
+          type: DocumentType.KNOWLEDGE,
+          tags: ArrayOverlap(skillsAndTags),
+        },
+        take: 5,
+      });
+
+      if (relatedDocs.length > 0) {
+        // 지식 있으면 20점 (누구나 수행 가능)
+        this.logger.debug(
+          `Found ${relatedDocs.length} knowledge docs for task ${task.id}`,
+        );
+        return 20;
+      }
+
+      return 0;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(`Failed to fetch knowledge docs: ${errorMessage}`);
+      return 0;
+    }
+  }
+
+  /**
+   * Phase 3.5: 경험 레벨 점수 (통계적 성과 지표 - 0-10점)
+   * SSOT 원칙: 개별 성장 아님, 할당 우선순위만
+   */
+  private calculateExperienceScore(hollon: Hollon): number {
+    const scores = {
+      [ExperienceLevel.JUNIOR]: 2,
+      [ExperienceLevel.MID]: 4,
+      [ExperienceLevel.SENIOR]: 6,
+      [ExperienceLevel.LEAD]: 8,
+      [ExperienceLevel.PRINCIPAL]: 10,
+    };
+
+    return scores[hollon.experienceLevel] || 4; // default: MID
   }
 
   /**
@@ -245,25 +441,6 @@ export class ResourcePlannerService {
       default:
         return 0;
     }
-  }
-
-  /**
-   * 프로젝트 경험 점수
-   */
-  private async calculateProjectExperienceScore(
-    task: Task,
-    hollon: Hollon,
-  ): Promise<number> {
-    const previousTasks = await this.taskRepo.count({
-      where: {
-        projectId: task.projectId,
-        assignedHollonId: hollon.id,
-        status: TaskStatus.COMPLETED,
-      },
-    });
-
-    // 0개 = 50점, 5개 이상 = 100점
-    return Math.min(100, 50 + previousTasks * 10);
   }
 
   /**

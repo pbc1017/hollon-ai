@@ -14,11 +14,13 @@ import { Organization } from '../../organization/entities/organization.entity';
 import { Project } from '../../project/entities/project.entity';
 import { Cycle } from '../../project/entities/cycle.entity';
 import { Hollon } from '../../hollon/entities/hollon.entity';
+import { Team } from '../../team/entities/team.entity';
 
 export enum TaskStatus {
   PENDING = 'pending',
   READY = 'ready',
   IN_PROGRESS = 'in_progress',
+  READY_FOR_REVIEW = 'ready_for_review', // Phase 3.10: Subtasks completed, awaiting parent review
   IN_REVIEW = 'in_review',
   BLOCKED = 'blocked',
   COMPLETED = 'completed',
@@ -34,6 +36,9 @@ export enum TaskPriority {
 }
 
 export enum TaskType {
+  TEAM_EPIC = 'team_epic', // Phase 3.8: Team-level task (Level 0)
+  PLANNING = 'planning',
+  ANALYSIS = 'analysis',
   IMPLEMENTATION = 'implementation',
   REVIEW = 'review',
   RESEARCH = 'research',
@@ -84,6 +89,11 @@ export class Task extends BaseEntity {
   @Column({ name: 'cycle_id', type: 'uuid', nullable: true })
   cycleId: string | null;
 
+  // Phase 3.8: Team-level assignment (Level 0)
+  // Mutually exclusive with assigned_hollon_id
+  @Column({ name: 'assigned_team_id', type: 'uuid', nullable: true })
+  assignedTeamId: string | null;
+
   @Column({ name: 'assigned_hollon_id', type: 'uuid', nullable: true })
   assignedHollonId: string | null;
 
@@ -92,6 +102,12 @@ export class Task extends BaseEntity {
 
   @Column({ name: 'creator_hollon_id', type: 'uuid', nullable: true })
   creatorHollonId: string | null;
+
+  // Phase 3.16: Hierarchical Review - who reviews this task
+  // For subtasks: set to parent task's assigned_hollon_id (manager)
+  // Manager creates temporary review hollon, which becomes the reviewer
+  @Column({ name: 'reviewer_hollon_id', type: 'uuid', nullable: true })
+  reviewerHollonId: string | null;
 
   // 안전장치: 서브태스크 재귀 제한
   @Column({ default: 0 })
@@ -147,6 +163,31 @@ export class Task extends BaseEntity {
   @Column({ name: 'due_date', type: 'timestamp', nullable: true })
   dueDate?: Date | null;
 
+  // ✅ Phase 3.5: 필요 스킬 (Role.capabilities와 매칭)
+  @Column({ name: 'required_skills', type: 'text', array: true, default: '{}' })
+  requiredSkills: string[];
+
+  // ✅ Phase 3.5: 인간 승인 플래그 (Level 5 에스컬레이션)
+  @Column({ name: 'needs_human_approval', default: false })
+  needsHumanApproval: boolean;
+
+  // ✅ Phase 3.7: 무한 루프 방지 (Exponential backoff)
+  @Column({ name: 'consecutive_failures', default: 0 })
+  consecutiveFailures: number;
+
+  @Column({ name: 'last_failed_at', type: 'timestamp', nullable: true })
+  lastFailedAt?: Date | null;
+
+  @Column({ name: 'blocked_until', type: 'timestamp', nullable: true })
+  blockedUntil?: Date | null;
+
+  // ✅ Phase 3.10: LLM Review Cycle
+  @Column({ name: 'review_count', default: 0 })
+  reviewCount: number;
+
+  @Column({ name: 'last_reviewed_at', type: 'timestamp', nullable: true })
+  lastReviewedAt?: Date | null;
+
   // Relations
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organization_id' })
@@ -165,6 +206,14 @@ export class Task extends BaseEntity {
   })
   @JoinColumn({ name: 'cycle_id' })
   cycle: Cycle;
+
+  // Phase 3.8: Team assignment (Level 0 tasks)
+  @ManyToOne(() => Team, (team) => team.assignedTasks, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'assigned_team_id' })
+  assignedTeam: Team;
 
   @ManyToOne(() => Hollon, (hollon) => hollon.assignedTasks, {
     nullable: true,
@@ -189,6 +238,14 @@ export class Task extends BaseEntity {
   })
   @JoinColumn({ name: 'creator_hollon_id' })
   creatorHollon: Hollon;
+
+  // Phase 3.16: Reviewer hollon (temporary review hollon created by manager)
+  @ManyToOne(() => Hollon, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'reviewer_hollon_id' })
+  reviewerHollon: Hollon;
 
   // Task Dependencies (DAG 구조)
   // 이 태스크가 의존하는 태스크들 (선행 조건)

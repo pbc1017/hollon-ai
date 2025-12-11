@@ -6,10 +6,14 @@ import { Document } from '../../document/entities/document.entity';
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 import { PromptComposerService } from './prompt-composer.service';
 import { TaskPoolService } from './task-pool.service';
-import { TaskStatus } from '../../task/entities/task.entity';
+import { Task, TaskStatus } from '../../task/entities/task.entity';
 import { Organization } from '../../organization/entities/organization.entity';
 import { QualityGateService } from './quality-gate.service';
 import { EscalationService } from './escalation.service';
+import { HollonService } from '../../hollon/hollon.service';
+import { SubtaskCreationService } from './subtask-creation.service';
+import { CodeReviewService } from '../../collaboration/services/code-review.service';
+import { Role } from '../../role/entities/role.entity';
 
 describe('HollonOrchestratorService', () => {
   let service: HollonOrchestratorService;
@@ -18,6 +22,14 @@ describe('HollonOrchestratorService', () => {
   const mockHollonRepo = {
     findOne: jest.fn(),
     update: jest.fn(),
+    manager: {
+      findOne: jest.fn(),
+      save: jest.fn(),
+      create: jest.fn(),
+      getRepository: jest.fn(),
+      find: jest.fn(),
+      remove: jest.fn(),
+    },
   };
 
   const mockDocumentRepo = {
@@ -89,6 +101,55 @@ describe('HollonOrchestratorService', () => {
         {
           provide: EscalationService,
           useValue: mockEscalationService,
+        },
+        {
+          provide: HollonService,
+          useValue: {
+            createTemporary: jest.fn(),
+            findOne: jest.fn(),
+            create: jest.fn(),
+            remove: jest.fn(),
+          },
+        },
+        {
+          provide: SubtaskCreationService,
+          useValue: {
+            createSubtasks: jest.fn(),
+            updateParentTaskStatus: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(Task),
+          useValue: {
+            findOne: jest.fn(),
+            find: jest.fn(),
+            save: jest.fn(),
+            update: jest.fn(),
+            createQueryBuilder: jest.fn(() => ({
+              where: jest.fn().mockReturnThis(),
+              andWhere: jest.fn().mockReturnThis(),
+              leftJoinAndSelect: jest.fn().mockReturnThis(),
+              getMany: jest.fn().mockResolvedValue([]),
+              getOne: jest.fn().mockResolvedValue(null),
+            })),
+          },
+        },
+        {
+          provide: CodeReviewService,
+          useValue: {
+            createPullRequest: jest.fn(),
+            requestReview: jest.fn(),
+            getPullRequestsForTask: jest.fn().mockResolvedValue([]),
+            assignReviewer: jest.fn(),
+            getReviewsForPR: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: getRepositoryToken(Role),
+          useValue: {
+            findOne: jest.fn(),
+            find: jest.fn(),
+          },
         },
       ],
     }).compile();
@@ -197,6 +258,7 @@ describe('HollonOrchestratorService', () => {
 
       mockHollonRepo.findOne.mockResolvedValue(mockHollon);
       mockHollonRepo.update.mockResolvedValue({ affected: 1 });
+      mockHollonRepo.manager.findOne.mockResolvedValue(null); // Task not complex
       mockTaskPool.pullNextTask.mockResolvedValue({
         task: mockTask,
         reason: 'Directly assigned',
@@ -272,6 +334,7 @@ describe('HollonOrchestratorService', () => {
 
       mockHollonRepo.findOne.mockResolvedValue(mockHollon);
       mockHollonRepo.update.mockResolvedValue({ affected: 1 });
+      mockHollonRepo.manager.findOne.mockResolvedValue(null); // Task not complex
       mockTaskPool.pullNextTask.mockResolvedValue({
         task: mockTask,
         reason: 'Directly assigned',

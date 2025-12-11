@@ -9,6 +9,7 @@ import {
 } from './entities/task.entity';
 import { Project } from '../project/entities/project.entity';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { DocumentService } from '../document/document.service';
 
 describe('TaskService', () => {
   let service: TaskService;
@@ -25,6 +26,13 @@ describe('TaskService', () => {
 
   const mockProjectRepository = {
     findOne: jest.fn(),
+  };
+
+  const mockDocumentService = {
+    create: jest.fn(),
+    findOne: jest.fn(),
+    findOrganizationKnowledge: jest.fn(),
+    searchByTags: jest.fn(),
   };
 
   const mockTask: Partial<Task> = {
@@ -51,6 +59,10 @@ describe('TaskService', () => {
         {
           provide: getRepositoryToken(Project),
           useValue: mockProjectRepository,
+        },
+        {
+          provide: DocumentService,
+          useValue: mockDocumentService,
         },
       ],
     }).compile();
