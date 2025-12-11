@@ -59,7 +59,7 @@ describe('Phase 3.11: Project-Based Workflow (E2E)', () => {
 
   // Environment
   const USE_MOCK_LLM = process.env.HOLLON_E2E_MOCK_LLM === 'true';
-  const TEST_TIMEOUT = USE_MOCK_LLM ? 30000 : 180000; // Mock: 30s, Real: 3min
+  const TEST_TIMEOUT = USE_MOCK_LLM ? 30000 : 300000; // Mock: 30s, Real: 5min
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -333,11 +333,8 @@ describe('Phase 3.11: Project-Based Workflow (E2E)', () => {
 
         console.log(`✅ Alice Task 1 completed: ${result1.prUrl}`);
 
-        // Verify Alice's worktree
-        const aliceWorktree = GitRepositoryHelper.getWorktreePath(
-          testRepoPath,
-          devHollonAlice.id,
-        );
+        // Verify Alice's worktree (use actual worktree path from result)
+        const aliceWorktree = result1.worktreePath;
         const aliceWorktreeExists =
           await GitRepositoryHelper.worktreeExists(aliceWorktree);
         expect(aliceWorktreeExists).toBe(true);
@@ -397,11 +394,8 @@ describe('Phase 3.11: Project-Based Workflow (E2E)', () => {
 
         console.log(`✅ Bob Task 2 completed: ${result2.prUrl}`);
 
-        // Verify Bob's worktree
-        const bobWorktree = GitRepositoryHelper.getWorktreePath(
-          testRepoPath,
-          devHollonBob.id,
-        );
+        // Verify Bob's worktree (use actual worktree path from result)
+        const bobWorktree = result2.worktreePath;
         const bobWorktreeExists =
           await GitRepositoryHelper.worktreeExists(bobWorktree);
         expect(bobWorktreeExists).toBe(true);
@@ -452,17 +446,22 @@ describe('Phase 3.11: Project-Based Workflow (E2E)', () => {
 
         console.log(`✅ Alice Task 3 completed: ${result3.prUrl}`);
 
-        // Verify Alice's worktree was REUSED
-        expect(result3.worktreePath).toBe(aliceWorktree);
+        // Phase 3.12: Task별 worktree (재사용 없음)
+        const aliceWorktree3 = result3.worktreePath;
+        expect(aliceWorktree3).not.toBe(aliceWorktree); // Different worktree!
 
-        // Verify Alice's NEW branch
+        // Verify Alice's NEW worktree and branch
+        const aliceWorktree3Exists =
+          await GitRepositoryHelper.worktreeExists(aliceWorktree3);
+        expect(aliceWorktree3Exists).toBe(true);
+
         const aliceInfo3 =
-          await GitRepositoryHelper.getWorktreeInfo(aliceWorktree);
+          await GitRepositoryHelper.getWorktreeInfo(aliceWorktree3);
         expect(aliceInfo3.branch).toContain('Alice-Dev');
         expect(aliceInfo3.branch).toContain('task-');
         expect(aliceInfo3.branch).not.toBe(aliceInfo1.branch); // Different branch
 
-        console.log(`   - Worktree: REUSED ${aliceWorktree} ✅`);
+        console.log(`   - Worktree: NEW ${aliceWorktree3} ✅`);
         console.log(`   - Branch: ${aliceInfo3.branch} (NEW)`);
 
         // ==========================================
@@ -482,26 +481,27 @@ describe('Phase 3.11: Project-Based Workflow (E2E)', () => {
         console.log(`   - Alice branches: ${aliceBranches.length}`);
         console.log(`   - Bob branches: ${bobBranches.length}`);
 
-        // Verify worktrees
+        // Verify worktrees (Phase 3.12: Task별 worktree)
         const worktrees = await GitRepositoryHelper.listWorktrees(testRepoPath);
         const hollonWorktrees = worktrees.filter((w) =>
           w.includes('.git-worktrees'),
         );
 
-        expect(hollonWorktrees.length).toBe(2); // Alice + Bob = 2 worktrees
+        // Phase 3.12: 3 tasks = 3 worktrees (Alice Task1, Bob Task2, Alice Task3)
+        expect(hollonWorktrees.length).toBe(3);
 
         console.log(`✅ Worktrees verified:`);
         console.log(`   - Total worktrees: ${hollonWorktrees.length}`);
-        console.log(`   - Alice reused worktree: YES ✅`);
+        console.log(`   - Task-based isolation: YES ✅`);
 
         // ==========================================
-        // 7. Verify Phase 3.11 Key Features
+        // 7. Verify Phase 3.12 Key Features
         // ==========================================
-        console.log(`\n✅ Phase 3.11 Key Features Verified:`);
-        console.log(`   ✓ Hollon-specific worktrees (재사용 전략)`);
+        console.log(`\n✅ Phase 3.12 Key Features Verified:`);
+        console.log(`   ✓ Task-based worktrees (완전 격리 전략)`);
         console.log(`   ✓ Branch naming: feature/{hollonName}/task-{id}`);
-        console.log(`   ✓ Worktree reuse for same hollon`);
-        console.log(`   ✓ Multiple hollons with separate worktrees`);
+        console.log(`   ✓ Each task gets its own worktree`);
+        console.log(`   ✓ Parallel task execution possible`);
         console.log(`   ✓ LLM Mode: ${USE_MOCK_LLM ? 'MOCK' : 'REAL'}`);
       },
       TEST_TIMEOUT,

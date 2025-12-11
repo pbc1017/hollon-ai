@@ -41,7 +41,7 @@ import { ApprovalRequest } from '../approval/entities/approval-request.entity';
     ]),
     BrainProviderModule,
     CollaborationModule,
-    GoalModule,
+    forwardRef(() => GoalModule),
     forwardRef(() => HollonModule),
   ],
   providers: [

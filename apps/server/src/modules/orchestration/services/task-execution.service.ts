@@ -164,19 +164,29 @@ export class TaskExecutionService {
       );
       await execAsync(`mkdir -p ${hollonDir}`);
 
-      // Create worktree (checkout main branch as base)
-      await execAsync(`git worktree add ${worktreePath}`, {
-        cwd: project.workingDirectory,
-      });
+      // Create unique temporary branch name for worktree
+      const tempBranch = `wt-hollon-${hollon.id.slice(0, 8)}-task-${task.id.slice(0, 8)}`;
+
+      // Create worktree with explicit branch from main
+      await execAsync(
+        `git worktree add -b ${tempBranch} ${worktreePath} main`,
+        {
+          cwd: project.workingDirectory,
+        },
+      );
 
       this.logger.log(
         `Task worktree created: hollon-${hollon.id.slice(0, 8)}/task-${task.id.slice(0, 8)}`,
       );
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to create task worktree: ${errorMessage}`);
-      throw new Error(`Task worktree creation failed: ${errorMessage}`);
+    } catch (error: unknown) {
+      const err = error as Error & { stderr?: string };
+      const errorMessage = err?.message || 'Unknown error';
+      const stderr = err?.stderr || '';
+      const fullError = stderr
+        ? `${errorMessage}\nstderr: ${stderr}`
+        : errorMessage;
+      this.logger.error(`Failed to create task worktree: ${fullError}`);
+      throw new Error(`Task worktree creation failed: ${fullError}`);
     }
 
     return worktreePath;
@@ -201,29 +211,22 @@ export class TaskExecutionService {
     );
 
     try {
-      // Check if origin/main exists, otherwise use main
-      let baseBranch = 'origin/main';
-      try {
-        await execAsync(`git rev-parse --verify origin/main`, {
-          cwd: worktreePath,
-        });
-      } catch {
-        // origin/main doesn't exist, use main instead
-        baseBranch = 'main';
-      }
-
-      // Create and checkout branch from base
-      await execAsync(`git checkout -b ${branchName} ${baseBranch}`, {
+      // The worktree was created with a temporary branch, now rename it to the feature branch
+      await execAsync(`git branch -m ${branchName}`, {
         cwd: worktreePath,
       });
 
       this.logger.log(`Branch created: ${branchName}`);
       return branchName;
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to create branch: ${errorMessage}`);
-      throw new Error(`Branch creation failed: ${errorMessage}`);
+    } catch (error: unknown) {
+      const err = error as Error & { stderr?: string };
+      const errorMessage = err?.message || 'Unknown error';
+      const stderr = err?.stderr || '';
+      const fullError = stderr
+        ? `${errorMessage}\nstderr: ${stderr}`
+        : errorMessage;
+      this.logger.error(`Failed to create branch: ${fullError}`);
+      throw new Error(`Branch creation failed: ${fullError}`);
     }
   }
 
