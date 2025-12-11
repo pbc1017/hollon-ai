@@ -783,6 +783,18 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
         `PR #${prNumber} successfully merged and task ${pr.taskId} marked as DONE`,
       );
 
+      // Phase 3.12: Task worktree 정리
+      if (pr.authorHollonId) {
+        await this.cleanupTaskWorktree(pr.taskId, pr.authorHollonId).catch(
+          (cleanupError) => {
+            this.logger.warn(
+              `Failed to cleanup task worktree: ${cleanupError.message}`,
+            );
+            // Don't fail the merge if cleanup fails
+          },
+        );
+      }
+
       // 작성자에게 알림
       if (pr.authorHollonId) {
         await this.messageService.send({
@@ -836,5 +848,57 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
     }
 
     return pr;
+  }
+
+  /**
+   * Phase 3.12: Task worktree 정리
+   * Task 완료 후 워크트리 삭제
+   */
+  private async cleanupTaskWorktree(
+    taskId: string,
+    hollonId: string,
+  ): Promise<void> {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    const path = await import('path');
+
+    // Task의 project 정보 가져오기
+    const task = await this.taskRepo.findOne({
+      where: { id: taskId },
+      relations: ['project'],
+    });
+
+    if (!task || !task.project) {
+      this.logger.warn(
+        `Cannot cleanup worktree: task ${taskId} or project not found`,
+      );
+      return;
+    }
+
+    // Worktree path 구성 (Phase 3.12 규칙)
+    const worktreePath = path.join(
+      task.project.workingDirectory,
+      '..',
+      '.git-worktrees',
+      `hollon-${hollonId.slice(0, 8)}`,
+      `task-${taskId.slice(0, 8)}`,
+    );
+
+    try {
+      this.logger.log(`Cleaning up task worktree: ${worktreePath}`);
+      await execAsync(`git worktree remove ${worktreePath} --force`, {
+        cwd: task.project.workingDirectory,
+      });
+      this.logger.log(`Task worktree cleaned up: ${worktreePath}`);
+    } catch (error) {
+      const err = error as Error;
+      // Worktree가 이미 삭제되었거나 없을 수 있음 (정상)
+      if (err.message.includes('not a working tree')) {
+        this.logger.debug(`Worktree already removed: ${worktreePath}`);
+      } else {
+        this.logger.warn(`Failed to cleanup worktree: ${err.message}`);
+      }
+    }
   }
 }

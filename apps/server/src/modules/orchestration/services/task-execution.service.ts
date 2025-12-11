@@ -67,9 +67,13 @@ export class TaskExecutionService {
       throw new Error(`Hollon ${hollonId} not found`);
     }
 
-    // 1. Hollon별 Worktree 확보 (재사용 전략 - Phase 3.11)
-    const worktreePath = await this.getOrCreateWorktree(task.project, hollon);
-    this.logger.log(`Worktree ready: ${worktreePath}`);
+    // 1. Task별 Worktree 생성 (완전 격리 - Phase 3.12)
+    const worktreePath = await this.getOrCreateWorktree(
+      task.project,
+      hollon,
+      task,
+    );
+    this.logger.log(`Task worktree ready: ${worktreePath}`);
 
     // 2. Hollon별 브랜치 생성 (Phase 3.11)
     const branchName = await this.createBranch(hollon, task, worktreePath);
@@ -107,13 +111,9 @@ export class TaskExecutionService {
         `Task execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
 
-      // Worktree 정리 (에러 발생 시)
-      await this.cleanupWorktree(worktreePath).catch((cleanupError) => {
-        const cleanupErrorMessage =
-          cleanupError instanceof Error
-            ? cleanupError.message
-            : 'Unknown error';
-        this.logger.warn(`Worktree cleanup failed: ${cleanupErrorMessage}`);
+      // Phase 3.12: Task worktree 정리 (에러 발생 시)
+      await this.cleanupTaskWorktree(worktreePath).catch(() => {
+        // Already logged in cleanupTaskWorktree
       });
 
       throw error;
@@ -121,69 +121,69 @@ export class TaskExecutionService {
   }
 
   /**
-   * Phase 3.11: Hollon별 Worktree 확보 (재사용 전략)
-   * - 홀론당 1개의 worktree 생성
-   * - 이미 존재하면 재사용
-   * - 경로: {projectDir}/../.git-worktrees/worktree-{hollonId}
+   * Phase 3.12: Task별 Worktree 생성 (완전 격리 전략)
+   * - Task당 1개의 독립적인 worktree 생성
+   * - 경로: {projectDir}/../.git-worktrees/hollon-{hollonId}/task-{taskId}
+   * - 장점: 완전 격리, Git 충돌 없음, 병렬 처리 가능
    */
   private async getOrCreateWorktree(
     project: Project,
     hollon: Hollon,
+    task: Task,
   ): Promise<string> {
     const worktreePath = path.join(
       project.workingDirectory,
       '..',
       '.git-worktrees',
-      `worktree-${hollon.id.slice(0, 8)}`,
+      `hollon-${hollon.id.slice(0, 8)}`,
+      `task-${task.id.slice(0, 8)}`,
     );
 
-    // Check if worktree exists
+    // Check if worktree already exists (should not happen)
     const exists = await this.worktreeExists(worktreePath);
 
-    if (!exists) {
-      // Create new worktree
-      this.logger.debug(`Creating new worktree for hollon ${hollon.name}`);
+    if (exists) {
+      this.logger.warn(
+        `Worktree already exists: ${worktreePath}, this should not happen`,
+      );
+      throw new Error(`Worktree already exists: ${worktreePath}`);
+    }
 
-      try {
-        // Ensure .git-worktrees directory exists
-        const worktreesDir = path.join(
-          project.workingDirectory,
-          '..',
-          '.git-worktrees',
-        );
-        await execAsync(`mkdir -p ${worktreesDir}`);
+    // Create new worktree for this task
+    this.logger.log(
+      `Creating task worktree for ${hollon.name} / task ${task.id.slice(0, 8)}`,
+    );
 
-        // Create worktree (checkout main branch as base)
-        await execAsync(`git worktree add ${worktreePath}`, {
-          cwd: project.workingDirectory,
-        });
+    try {
+      // Ensure parent directory exists
+      const hollonDir = path.join(
+        project.workingDirectory,
+        '..',
+        '.git-worktrees',
+        `hollon-${hollon.id.slice(0, 8)}`,
+      );
+      await execAsync(`mkdir -p ${hollonDir}`);
 
-        this.logger.log(`Worktree created for hollon ${hollon.name}`);
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : 'Unknown error';
-        this.logger.error(`Failed to create worktree: ${errorMessage}`);
-        throw new Error(`Worktree creation failed: ${errorMessage}`);
-      }
-    } else {
-      // Reuse existing worktree
-      this.logger.log(`Reusing worktree for hollon ${hollon.name}`);
+      // Create worktree (checkout main branch as base)
+      await execAsync(`git worktree add ${worktreePath}`, {
+        cwd: project.workingDirectory,
+      });
 
-      try {
-        // Fetch latest changes
-        await execAsync(`git fetch origin`, { cwd: worktreePath });
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : 'Unknown error';
-        this.logger.warn(`Failed to fetch in worktree: ${errorMessage}`);
-      }
+      this.logger.log(
+        `Task worktree created: hollon-${hollon.id.slice(0, 8)}/task-${task.id.slice(0, 8)}`,
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to create task worktree: ${errorMessage}`);
+      throw new Error(`Task worktree creation failed: ${errorMessage}`);
     }
 
     return worktreePath;
   }
 
   /**
-   * Phase 3.11: Hollon별 브랜치 생성
+   * Phase 3.12: Hollon별 브랜치 생성 (Task worktree 내)
    * - 브랜치명: feature/{hollonName}/task-{taskId}
    * - 작업자를 브랜치명으로 명확히 식별
    */
@@ -217,7 +217,7 @@ export class TaskExecutionService {
   }
 
   /**
-   * Phase 3.11: Worktree 존재 여부 확인
+   * Phase 3.12: Worktree 존재 여부 확인
    */
   private async worktreeExists(worktreePath: string): Promise<boolean> {
     try {
@@ -225,6 +225,24 @@ export class TaskExecutionService {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * Phase 3.12: Task worktree 정리 (Task 완료 후 호출)
+   * PR merge 후 자동으로 호출되어 worktree 삭제
+   */
+  async cleanupTaskWorktree(worktreePath: string): Promise<void> {
+    this.logger.debug(`Cleaning up task worktree: ${worktreePath}`);
+
+    try {
+      await execAsync(`git worktree remove ${worktreePath} --force`);
+      this.logger.log(`Task worktree removed: ${worktreePath}`);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(`Failed to remove task worktree: ${errorMessage}`);
+      // Don't throw - cleanup failures shouldn't block task completion
     }
   }
 
@@ -427,19 +445,10 @@ export class TaskExecutionService {
   }
 
   /**
-   * Worktree 정리
+   * Phase 3.12: Legacy method - kept for backward compatibility
+   * Use cleanupTaskWorktree() for new code
    */
   async cleanupWorktree(worktreePath: string): Promise<void> {
-    this.logger.debug(`Cleaning up worktree: ${worktreePath}`);
-
-    try {
-      await execAsync(`git worktree remove ${worktreePath} --force`);
-      this.logger.log(`Worktree removed: ${worktreePath}`);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to remove worktree: ${errorMessage}`);
-      throw new Error(`Worktree cleanup failed: ${errorMessage}`);
-    }
+    await this.cleanupTaskWorktree(worktreePath);
   }
 }
