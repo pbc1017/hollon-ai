@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { MessageService } from '../message.service';
 import { MessageType, ParticipantType } from '../entities/message.entity';
 import { CodeReviewService } from '../../collaboration/services/code-review.service';
+import { ReviewerHollonService } from '../../collaboration/services/reviewer-hollon.service';
 import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
 import { ResourcePlannerService } from '../../task/services/resource-planner.service';
 import { TaskService } from '../../task/task.service';
@@ -28,6 +29,7 @@ export class MessageListener {
   constructor(
     private readonly messageService: MessageService,
     private readonly codeReviewService: CodeReviewService,
+    private readonly reviewerHollonService: ReviewerHollonService,
     private readonly resourcePlanner: ResourcePlannerService,
     private readonly taskService: TaskService,
     @InjectRepository(Hollon)
@@ -180,6 +182,7 @@ export class MessageListener {
 
   /**
    * REVIEW_REQUEST 메시지 처리: 자동으로 코드 리뷰 실행
+   * Phase 3.13: AI-powered review via ReviewerHollonService
    */
   private async handleReviewRequest(message: any): Promise<void> {
     const { prId, taskId } = message.metadata || {};
@@ -206,8 +209,7 @@ export class MessageListener {
         return;
       }
 
-      // CodeReviewService를 통해 자동 리뷰 실행
-      // Phase 3.5에서는 자동으로 승인하지 않고, 리뷰 코멘트만 생성
+      // CodeReviewService를 통해 PR 존재 확인
       const pr = await this.codeReviewService.findPullRequest(prId);
 
       if (!pr) {
@@ -215,11 +217,25 @@ export class MessageListener {
         return;
       }
 
-      // 리뷰 자동 실행 (BrainProvider를 통해)
-      await this.codeReviewService.performAutomatedReview(
-        prId,
-        reviewerHollonId,
-      );
+      // Phase 3.13: AI-powered review 활성화 여부 확인
+      const enableAIReview = process.env.ENABLE_AI_CODE_REVIEW === 'true';
+
+      if (enableAIReview) {
+        // AI-powered review (BrainProvider 사용)
+        this.logger.log(
+          `Executing AI-powered review for PR ${prId} by hollon ${reviewerHollonId}`,
+        );
+        await this.reviewerHollonService.performReview(prId, reviewerHollonId);
+      } else {
+        // Fallback: Simple heuristic review
+        this.logger.log(
+          `Executing heuristic review for PR ${prId} (AI review disabled)`,
+        );
+        await this.codeReviewService.performAutomatedReview(
+          prId,
+          reviewerHollonId,
+        );
+      }
 
       this.logger.log(`Automated review completed for PR ${prId}`);
     } catch (error) {
