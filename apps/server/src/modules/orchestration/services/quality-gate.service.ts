@@ -77,6 +77,12 @@ export class QualityGateService {
       return tsCheck;
     }
 
+    // 7. Run tests (Phase 3.15 - optional, only if test files exist)
+    const testCheck = await this.checkTestsPassing(context.task);
+    if (!testCheck.passed) {
+      return testCheck;
+    }
+
     this.logger.log(
       `Quality gate passed for task ${context.task.id}: all checks successful`,
     );
@@ -408,13 +414,146 @@ export class QualityGateService {
    * 2. Run test suite in working directory
    * 3. Parse test results
    */
-  // @ts-expect-error - Reserved for future implementation
+  /**
+   * Check 5: Verify tests are passing (if test files exist)
+   * Phase 3.15: Complete implementation
+   *
+   * Runs Jest tests and validates results
+   */
+  private async checkTestsPassing(task: Task): Promise<ValidationResult> {
+    // Skip if no affected files or not in a project with working directory
+    if (!task.affectedFiles || task.affectedFiles.length === 0) {
+      return { passed: true, shouldRetry: false };
+    }
 
-  private async _checkTestsPassing(
-    _workingDirectory?: string,
-  ): Promise<ValidationResult> {
-    // TODO: Implement test execution and validation
-    // For now, always pass
-    return { passed: true, shouldRetry: false };
+    if (!task.project?.workingDirectory) {
+      this.logger.debug('No working directory specified, skipping test check');
+      return { passed: true, shouldRetry: false };
+    }
+
+    try {
+      // Check if test files exist
+      const testFiles = task.affectedFiles.filter(
+        (file) =>
+          file.includes('.spec.') ||
+          file.includes('.test.') ||
+          file.includes('__tests__'),
+      );
+
+      if (testFiles.length === 0) {
+        this.logger.debug(
+          'No test files in affected files, skipping test check',
+        );
+        return { passed: true, shouldRetry: false };
+      }
+
+      this.logger.log(`Running tests for ${testFiles.length} test file(s)`);
+
+      // Run Jest tests with JSON output
+      // --passWithNoTests: Don't fail if no tests found
+      // --bail: Stop at first failure for faster feedback
+      // --json: Output results as JSON
+      const testCommand = `npx jest ${testFiles.join(' ')} --passWithNoTests --bail --json`;
+
+      const result = execSync(testCommand, {
+        cwd: task.project.workingDirectory,
+        stdio: 'pipe',
+        encoding: 'utf-8',
+        timeout: 300000, // 5 minutes timeout
+      });
+
+      // Parse Jest JSON output
+      const testResult = JSON.parse(result) as {
+        success: boolean;
+        numTotalTests: number;
+        numPassedTests: number;
+        numFailedTests: number;
+        numPendingTests: number;
+        testResults: Array<{
+          assertionResults: Array<{
+            status: string;
+            title: string;
+            failureMessages: string[];
+          }>;
+        }>;
+      };
+
+      if (!testResult.success) {
+        const failedTests = testResult.testResults.flatMap((tr) =>
+          tr.assertionResults
+            .filter((ar) => ar.status === 'failed')
+            .map((ar) => ar.title),
+        );
+
+        this.logger.warn(
+          `Tests failed: ${testResult.numFailedTests}/${testResult.numTotalTests} failed`,
+        );
+
+        return {
+          passed: false,
+          shouldRetry: true, // Retry - tests might pass after code fixes
+          reason: `${testResult.numFailedTests} test(s) failed`,
+          details: {
+            checkType: 'tests',
+            totalTests: testResult.numTotalTests,
+            passedTests: testResult.numPassedTests,
+            failedTests: testResult.numFailedTests,
+            pendingTests: testResult.numPendingTests,
+            failedTestNames: failedTests.slice(0, 10), // First 10 failed tests
+          },
+        };
+      }
+
+      this.logger.log(
+        `All tests passed: ${testResult.numPassedTests}/${testResult.numTotalTests}`,
+      );
+      return { passed: true, shouldRetry: false };
+    } catch (error: unknown) {
+      // Jest returns non-zero exit code on test failure
+      const err = error as {
+        stdout?: string;
+        stderr?: string;
+        status?: number;
+      };
+
+      // Try to parse JSON output even from failed execution
+      try {
+        const output = err.stdout || '';
+        if (output) {
+          const testResult = JSON.parse(output) as {
+            success: boolean;
+            numFailedTests: number;
+            numTotalTests: number;
+          };
+          this.logger.warn(
+            `Tests failed: ${testResult.numFailedTests}/${testResult.numTotalTests}`,
+          );
+          return {
+            passed: false,
+            shouldRetry: true,
+            reason: `${testResult.numFailedTests} test(s) failed`,
+            details: {
+              checkType: 'tests',
+              errorOutput: output.substring(0, 500),
+            },
+          };
+        }
+      } catch {
+        // Parsing failed, treat as generic error
+      }
+
+      const errorMessage = err.stderr || err.stdout || 'Test execution failed';
+      this.logger.error(`Test execution error: ${errorMessage}`);
+
+      return {
+        passed: false,
+        shouldRetry: true, // Retry - might be transient error
+        reason: 'Test execution failed',
+        details: {
+          checkType: 'tests',
+          error: errorMessage.substring(0, 500),
+        },
+      };
+    }
   }
 }

@@ -103,6 +103,12 @@ export class Task extends BaseEntity {
   @Column({ name: 'creator_hollon_id', type: 'uuid', nullable: true })
   creatorHollonId: string | null;
 
+  // Phase 3.16: Hierarchical Review - who reviews this task
+  // For subtasks: set to parent task's assigned_hollon_id (manager)
+  // Manager creates temporary review hollon, which becomes the reviewer
+  @Column({ name: 'reviewer_hollon_id', type: 'uuid', nullable: true })
+  reviewerHollonId: string | null;
+
   // 안전장치: 서브태스크 재귀 제한
   @Column({ default: 0 })
   depth: number;
@@ -232,6 +238,14 @@ export class Task extends BaseEntity {
   })
   @JoinColumn({ name: 'creator_hollon_id' })
   creatorHollon: Hollon;
+
+  // Phase 3.16: Reviewer hollon (temporary review hollon created by manager)
+  @ManyToOne(() => Hollon, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'reviewer_hollon_id' })
+  reviewerHollon: Hollon;
 
   // Task Dependencies (DAG 구조)
   // 이 태스크가 의존하는 태스크들 (선행 조건)
