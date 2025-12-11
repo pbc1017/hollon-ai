@@ -11,6 +11,8 @@ import {
   TaskPriority,
 } from '../../task/entities/task.entity';
 import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
+import { ApprovalRequest } from '../../escalation/entities/approval-request.entity';
+import { GoalDecompositionService } from '../../goal/services/goal-decomposition.service';
 
 describe('EscalationService', () => {
   let service: EscalationService;
@@ -27,6 +29,13 @@ describe('EscalationService', () => {
     find: jest.fn(),
   };
 
+  const mockApprovalRequestRepo = {
+    create: jest.fn(),
+    save: jest.fn(),
+    findOne: jest.fn(),
+    update: jest.fn(),
+  };
+
   beforeEach(async () => {
     module = await Test.createTestingModule({
       providers: [
@@ -38,6 +47,17 @@ describe('EscalationService', () => {
         {
           provide: getRepositoryToken(Hollon),
           useValue: mockHollonRepo,
+        },
+        {
+          provide: getRepositoryToken(ApprovalRequest),
+          useValue: mockApprovalRequestRepo,
+        },
+        {
+          provide: GoalDecompositionService,
+          useValue: {
+            decomposeGoal: jest.fn(),
+            validateDecomposition: jest.fn(),
+          },
         },
       ],
     }).compile();
@@ -284,7 +304,22 @@ describe('EscalationService', () => {
 
   describe('Level 5: Human Intervention', () => {
     it('should mark task for human intervention', async () => {
+      const mockTask: Partial<Task> = {
+        id: 'task-1',
+        status: TaskStatus.FAILED,
+        project: { id: 'project-1', organizationId: 'org-1' } as any,
+      };
+
+      const mockApprovalRequest = {
+        id: 'approval-1',
+        taskId: 'task-1',
+        level: 5,
+      };
+
+      mockTaskRepo.findOne.mockResolvedValue(mockTask);
       mockTaskRepo.update.mockResolvedValue({ affected: 1 });
+      mockApprovalRequestRepo.create.mockReturnValue(mockApprovalRequest);
+      mockApprovalRequestRepo.save.mockResolvedValue(mockApprovalRequest);
 
       const request: EscalationRequest = {
         taskId: 'task-1',
@@ -296,7 +331,7 @@ describe('EscalationService', () => {
       const result = await service.escalate(request);
 
       expect(result.success).toBe(true);
-      expect(result.action).toBe('human_approval_required');
+      expect(result.action).toBe('human_approval_requested');
       expect(mockTaskRepo.update).toHaveBeenCalledWith('task-1', {
         status: TaskStatus.BLOCKED,
         errorMessage: expect.stringContaining('Human intervention required'),

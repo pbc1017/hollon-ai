@@ -9,6 +9,8 @@ import {
 } from '../entities/task-pull-request.entity';
 import { Task, TaskStatus } from '../../task/entities/task.entity';
 import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
+import { Role } from '../../role/entities/role.entity';
+import { HollonService } from '../../hollon/hollon.service';
 import { MessageService } from '../../message/message.service';
 import { MessageType } from '../../message/entities/message.entity';
 import { CreatePullRequestDto } from '../dto/create-pull-request.dto';
@@ -90,6 +92,21 @@ describe('CodeReviewService', () => {
         {
           provide: getRepositoryToken(Hollon),
           useValue: mockHollonRepository,
+        },
+        {
+          provide: getRepositoryToken(Role),
+          useValue: {
+            findOne: jest.fn(),
+            find: jest.fn(),
+          },
+        },
+        {
+          provide: HollonService,
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            remove: jest.fn(),
+          },
         },
         {
           provide: MessageService,

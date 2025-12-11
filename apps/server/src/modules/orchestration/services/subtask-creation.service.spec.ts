@@ -301,7 +301,7 @@ describe('SubtaskCreationService', () => {
       await service.updateParentTaskStatus('parent-1');
 
       expect(mockTaskRepo.update).toHaveBeenCalledWith('parent-1', {
-        status: TaskStatus.COMPLETED,
+        status: TaskStatus.READY_FOR_REVIEW, // Phase 3.16: Changed from COMPLETED
       });
     });
 

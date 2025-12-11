@@ -78,6 +78,7 @@ describe('TaskPoolService', () => {
 
       mockHollonRepo.findOne.mockResolvedValue(mockHollon);
       mockTaskRepo.find.mockResolvedValueOnce([]); // locked files
+      mockTaskRepo.find.mockResolvedValueOnce([]); // review ready tasks
       mockTaskRepo.find.mockResolvedValueOnce([mockTask]); // direct tasks
 
       const mockQueryBuilder = {
