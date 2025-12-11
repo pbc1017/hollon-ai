@@ -4,6 +4,11 @@ import { Repository } from 'typeorm';
 import { Task, TaskStatus } from '../../task/entities/task.entity';
 import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
 import { Goal } from '../../goal/entities/goal.entity';
+import {
+  ApprovalRequest,
+  ApprovalType,
+  ApprovalStatus,
+} from '../../escalation/entities/approval-request.entity';
 
 export enum EscalationLevel {
   SELF_RESOLVE = 1, // 재시도
@@ -63,6 +68,8 @@ export class EscalationService {
     private readonly taskRepo: Repository<Task>,
     @InjectRepository(Hollon)
     private readonly hollonRepo: Repository<Hollon>,
+    @InjectRepository(ApprovalRequest)
+    private readonly approvalRequestRepo: Repository<ApprovalRequest>,
     @Optional()
     @Inject('GoalDecompositionService')
     private readonly goalDecompositionService?: any,
@@ -346,6 +353,10 @@ export class EscalationService {
    * Level 5: Human intervention required
    * Critical issues that require human decision
    */
+  /**
+   * Phase 3.14: Level 5 - Human Intervention with ApprovalRequest
+   * Creates ApprovalRequest for Web UI review
+   */
   private async humanIntervention(
     request: EscalationRequest,
   ): Promise<EscalationResult> {
@@ -353,26 +364,57 @@ export class EscalationService {
       `Level 5 - Human intervention: Task ${request.taskId} requires human approval`,
     );
 
-    // Mark task as blocked and requiring human approval
+    // Get task with project/organization info
+    const task = await this.taskRepo.findOne({
+      where: { id: request.taskId },
+      relations: ['project', 'project.organization'],
+    });
+
+    if (!task) {
+      throw new Error(`Task ${request.taskId} not found`);
+    }
+
+    if (!task.project) {
+      throw new Error(`Task ${request.taskId} has no associated project`);
+    }
+
+    // Mark task as blocked
     await this.taskRepo.update(request.taskId, {
       status: TaskStatus.BLOCKED,
       errorMessage: `Human intervention required: ${request.reason}`,
     });
 
-    // TODO: Send notification to human administrators
-    // - Email notification
-    // - Dashboard alert
-    // - Slack/Discord webhook
+    // Phase 3.14: Create ApprovalRequest for Web UI
+    const approvalRequest = this.approvalRequestRepo.create({
+      organizationId: task.project.organizationId,
+      hollonId: request.hollonId,
+      taskId: request.taskId,
+      type: ApprovalType.ESCALATION_L5,
+      status: ApprovalStatus.PENDING,
+      title: `Escalation: ${task.title || 'Task requires approval'}`,
+      description: `Level 5 escalation - Human intervention required\n\nReason: ${request.reason}\n\nTask: ${task.title}\nDescription: ${task.description || 'N/A'}`,
+      context: {
+        escalationLevel: EscalationLevel.HUMAN_INTERVENTION,
+        taskTitle: task.title,
+        taskDescription: task.description,
+        hollonId: request.hollonId,
+        reason: request.reason,
+        ...request.metadata,
+      },
+      escalationLevel: EscalationLevel.HUMAN_INTERVENTION,
+      requestedByHollonId: request.hollonId,
+    });
 
-    this.logger.warn(
-      `Task ${request.taskId} marked for human intervention - notifications sent`,
+    await this.approvalRequestRepo.save(approvalRequest);
+
+    this.logger.log(
+      `ApprovalRequest created: ${approvalRequest.id} for task ${request.taskId}`,
     );
 
     return {
       success: true,
-      action: 'human_approval_required',
-      message:
-        'Task marked for human intervention - notifications sent to administrators',
+      action: 'human_approval_requested',
+      message: `ApprovalRequest ${approvalRequest.id} created - awaiting human review in Web UI`,
     };
   }
 
