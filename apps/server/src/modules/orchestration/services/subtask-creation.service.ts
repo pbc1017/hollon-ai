@@ -227,13 +227,14 @@ export class SubtaskCreationService {
     let newStatus: TaskStatus | null = null;
 
     if (allCompleted) {
-      newStatus = TaskStatus.COMPLETED;
+      // Phase 3.10: Change COMPLETED → READY_FOR_REVIEW (LLM 검토 필요)
+      newStatus = TaskStatus.READY_FOR_REVIEW;
       this.logger.log(
-        `Parent task ${parentTaskId}: All subtasks completed → COMPLETED`,
+        `Parent task ${parentTaskId}: All subtasks completed → READY_FOR_REVIEW (awaiting LLM review)`,
       );
 
-      // Phase 3.7: Clean up temporary Hollon if it created these subtasks
-      await this.cleanupTemporaryHollon(parentTask);
+      // Phase 3.10: Temporary hollon cleanup moved to completeParentTaskByLLM()
+      // LLM will explicitly complete the task after review
     } else if (anyFailed) {
       newStatus = TaskStatus.BLOCKED;
       this.logger.log(
@@ -314,6 +315,38 @@ export class SubtaskCreationService {
         );
       }
     }
+  }
+
+  /**
+   * Phase 3.10: LLM explicitly completes parent task after review
+   *
+   * This method is called only when the LLM decides to complete the task
+   * after reviewing all subtask results. It:
+   * 1. Sets task status to COMPLETED
+   * 2. Cleans up temporary hollons if applicable
+   */
+  async completeParentTaskByLLM(parentTaskId: string): Promise<void> {
+    const parentTask = await this.taskRepo.findOne({
+      where: { id: parentTaskId },
+    });
+
+    if (!parentTask) {
+      this.logger.error(`Parent task ${parentTaskId} not found`);
+      return;
+    }
+
+    // Update status to COMPLETED
+    await this.taskRepo.update(parentTaskId, {
+      status: TaskStatus.COMPLETED,
+      completedAt: new Date(),
+    });
+
+    this.logger.log(
+      `✅ Parent task ${parentTaskId} explicitly completed by LLM review`,
+    );
+
+    // Clean up temporary hollon if it created these subtasks
+    await this.cleanupTemporaryHollon(parentTask);
   }
 
   /**

@@ -56,8 +56,18 @@ export class TaskPoolService {
     const lockedFiles = await this.getLockedFiles(hollonId);
     const now = new Date();
 
+    // Priority 0: Review tasks (highest priority - Phase 3.10)
+    let task = await this.findReviewReadyTask(hollonId);
+    if (task) {
+      return this.claimTask(
+        task,
+        hollon,
+        'Review subtasks - all subtasks completed, needs parent review',
+      );
+    }
+
     // Priority 1: Directly assigned tasks
-    let task = await this.findDirectlyAssignedTask(hollonId, lockedFiles, now);
+    task = await this.findDirectlyAssignedTask(hollonId, lockedFiles, now);
     if (task) {
       return this.claimTask(task, hollon, 'Directly assigned');
     }
@@ -137,6 +147,56 @@ export class TaskPoolService {
       return false;
     }
     return task.blockedUntil.getTime() > now.getTime();
+  }
+
+  /**
+   * Priority 0: Find parent tasks ready for review (Phase 3.10)
+   *
+   * Conditions:
+   * - status = READY_FOR_REVIEW
+   * - assignedHollonId = this hollon
+   * - All subtasks are COMPLETED
+   * - reviewCount < 3 (prevent infinite loop)
+   */
+  private async findReviewReadyTask(hollonId: string): Promise<Task | null> {
+    const tasks = await this.taskRepo.find({
+      where: {
+        assignedHollonId: hollonId,
+        status: TaskStatus.READY_FOR_REVIEW,
+      },
+      relations: ['subtasks'],
+      order: {
+        priority: 'ASC',
+        lastReviewedAt: 'ASC', // 오래된 것 우선
+      },
+    });
+
+    for (const task of tasks) {
+      // 무한루프 방지
+      if (task.reviewCount >= 3) {
+        this.logger.warn(
+          `Task ${task.id} exceeded max review count (3), skipping`,
+        );
+        continue;
+      }
+
+      // 모든 서브태스크 완료 확인
+      const allSubtasksCompleted =
+        task.subtasks && task.subtasks.length > 0
+          ? task.subtasks.every((st) => st.status === TaskStatus.COMPLETED)
+          : false;
+
+      if (!allSubtasksCompleted) {
+        this.logger.warn(
+          `Task ${task.id} marked READY_FOR_REVIEW but not all subtasks completed`,
+        );
+        continue;
+      }
+
+      return task;
+    }
+
+    return null;
   }
 
   /**
@@ -335,24 +395,46 @@ export class TaskPoolService {
 
   /**
    * Atomically claim a task for the hollon
+   * Phase 3.10: Handle READY_FOR_REVIEW → IN_REVIEW transition
    */
   private async claimTask(
     task: Task,
     hollon: Hollon,
     reason: string,
   ): Promise<TaskPullResult> {
+    // Determine target status based on current status
+    const isReviewTask = task.status === TaskStatus.READY_FOR_REVIEW;
+    const newStatus = isReviewTask
+      ? TaskStatus.IN_REVIEW
+      : TaskStatus.IN_PROGRESS;
+
+    // Prepare update data
+    const updateData: any = {
+      assignedHollonId: hollon.id,
+      status: newStatus,
+    };
+
+    // Add review tracking for review tasks
+    if (isReviewTask) {
+      updateData.lastReviewedAt = new Date();
+      updateData.reviewCount = () => 'review_count + 1'; // Increment reviewCount
+    } else {
+      updateData.startedAt = new Date();
+    }
+
+    // Build dynamic WHERE clause based on task type
+    const allowedStatuses = isReviewTask
+      ? [TaskStatus.READY_FOR_REVIEW]
+      : [TaskStatus.READY, TaskStatus.PENDING];
+
     // Use transaction for atomic update
     const result = await this.taskRepo
       .createQueryBuilder()
       .update(Task)
-      .set({
-        assignedHollonId: hollon.id,
-        status: TaskStatus.IN_PROGRESS,
-        startedAt: new Date(),
-      })
+      .set(updateData)
       .where('id = :id', { id: task.id })
       .andWhere('status IN (:...statuses)', {
-        statuses: [TaskStatus.READY, TaskStatus.PENDING],
+        statuses: allowedStatuses,
       })
       .andWhere(
         '(assigned_hollon_id IS NULL OR assigned_hollon_id = :hollonId)',
@@ -377,7 +459,7 @@ export class TaskPoolService {
     });
 
     this.logger.log(
-      `Task claimed: ${task.id} by ${hollon.name} (reason: ${reason})`,
+      `Task claimed: ${task.id} by ${hollon.name} (reason: ${reason}, status: ${task.status} → ${newStatus})`,
     );
 
     return {

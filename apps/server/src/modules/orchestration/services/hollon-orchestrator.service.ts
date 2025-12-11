@@ -23,7 +23,7 @@ import { QualityGateService } from './quality-gate.service';
 import { Organization } from '../../organization/entities/organization.entity';
 import { EscalationService, EscalationLevel } from './escalation.service';
 import { HollonService } from '../../hollon/hollon.service';
-// Removed unused import: SubtaskCreationService
+import { SubtaskCreationService } from './subtask-creation.service'; // Phase 3.10: Re-added for review cycle
 import { Role } from '../../role/entities/role.entity';
 import { ComposedPrompt } from '../interfaces/prompt-context.interface';
 import { TaskDecompositionResult } from '../dto/task-decomposition.dto';
@@ -67,7 +67,7 @@ export class HollonOrchestratorService {
     private readonly escalationService: EscalationService,
     @Inject(forwardRef(() => HollonService))
     private readonly hollonService: HollonService,
-    // Removed unused subtaskService injection
+    private readonly subtaskService: SubtaskCreationService, // Phase 3.10: Re-added
   ) {}
 
   /**
@@ -88,6 +88,7 @@ export class HollonOrchestratorService {
       // 1. Check hollon status and update to WORKING
       const hollon = await this.hollonRepo.findOne({
         where: { id: hollonId },
+        relations: ['organization', 'team', 'role'],
       });
 
       if (!hollon) {
@@ -126,6 +127,14 @@ export class HollonOrchestratorService {
       this.logger.log(
         `Hollon ${hollonId} pulled task ${task.id}: ${task.title} (${pullResult.reason})`,
       );
+
+      // 2.3. Phase 3.10: Check if task is in review mode
+      if (task.status === TaskStatus.IN_REVIEW) {
+        this.logger.log(`Task ${task.id} is IN_REVIEW - entering review mode`);
+        const reviewResult = await this.handleReviewMode(task, hollon);
+        await this.updateHollonStatus(hollonId, HollonStatus.IDLE);
+        return reviewResult;
+      }
 
       // 2.5. Phase 3.7: Check task complexity and create Sub-Hollons if needed
       const isComplex = await this.isTaskComplex(task, hollon);
@@ -756,5 +765,226 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
     }
 
     return role;
+  }
+
+  /**
+   * Phase 3.10: Handle review mode
+   *
+   * LLM reviews subtask results and decides next action:
+   * - complete: All done, mark task as completed
+   * - rework: Send specific subtasks back for improvements
+   * - add_tasks: Create additional subtasks
+   * - redirect: Cancel and re-delegate with new approach
+   */
+  private async handleReviewMode(
+    task: Task,
+    hollon: Hollon,
+  ): Promise<ExecutionCycleResult> {
+    const startTime = Date.now();
+
+    try {
+      // 1. Compose review prompt (PromptComposer handles this automatically)
+      const composedPrompt = await this.promptComposer.composePrompt(
+        hollon.id,
+        task.id,
+      );
+
+      this.logger.log(
+        `Review mode prompt composed: ${composedPrompt.totalTokens} tokens`,
+      );
+
+      // 2. Execute LLM
+      const brainResult = await this.brainProvider.executeWithTracking(
+        {
+          prompt: composedPrompt.userPrompt,
+          systemPrompt: composedPrompt.systemPrompt,
+        },
+        {
+          organizationId: hollon.organizationId,
+          hollonId: hollon.id,
+          taskId: task.id,
+        },
+      );
+
+      if (!brainResult.success) {
+        throw new Error(
+          `Review mode brain execution failed: ${brainResult.output}`,
+        );
+      }
+
+      // 3. Parse LLM decision
+      const decision = this.parseLLMReviewDecision(brainResult.output);
+
+      this.logger.log(
+        `LLM review decision: ${decision.action} - ${decision.reasoning}`,
+      );
+
+      // 4. Execute decision
+      switch (decision.action) {
+        case 'complete':
+          await this.subtaskService.completeParentTaskByLLM(task.id);
+          return {
+            success: true,
+            taskId: task.id,
+            taskTitle: task.title,
+            duration: Date.now() - startTime,
+            output: `✅ Task completed after review: ${decision.reasoning}`,
+          };
+
+        case 'rework':
+          await this.requestRework(task, decision);
+          return {
+            success: true,
+            taskId: task.id,
+            taskTitle: task.title,
+            duration: Date.now() - startTime,
+            output: `🔄 Rework requested: ${decision.reasoning}`,
+          };
+
+        case 'add_tasks':
+          await this.addFollowUpTasks(task, decision);
+          return {
+            success: true,
+            taskId: task.id,
+            taskTitle: task.title,
+            duration: Date.now() - startTime,
+            output: `➕ Added ${decision.newSubtasks.length} follow-up tasks: ${decision.reasoning}`,
+          };
+
+        case 'redirect':
+          await this.redirectTask(task, decision);
+          return {
+            success: true,
+            taskId: task.id,
+            taskTitle: task.title,
+            duration: Date.now() - startTime,
+            output: `🔀 Task redirected: ${decision.reasoning}`,
+          };
+
+        default:
+          throw new Error(`Unknown review action: ${decision.action}`);
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Review mode failed for task ${task.id}: ${errorMessage}`,
+      );
+      return {
+        success: false,
+        taskId: task.id,
+        taskTitle: task.title,
+        duration: Date.now() - startTime,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Phase 3.10: Parse LLM review decision from JSON output
+   */
+  private parseLLMReviewDecision(output: string): any {
+    try {
+      // Extract JSON block from markdown
+      const jsonMatch = output.match(/```json\s*([\s\S]*?)\s*```/);
+      if (!jsonMatch) {
+        throw new Error('No JSON block found in LLM output');
+      }
+
+      const decision = JSON.parse(jsonMatch[1]);
+
+      if (!decision.action || !decision.reasoning) {
+        throw new Error('Missing required fields: action, reasoning');
+      }
+
+      return decision;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to parse LLM review decision: ${errorMessage}`);
+      this.logger.error(`LLM output: ${output}`);
+      throw new Error(`Invalid LLM review decision format: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Phase 3.10: Request rework for specific subtasks
+   */
+  private async requestRework(task: Task, decision: any): Promise<void> {
+    const { subtaskIds, reworkInstructions } = decision;
+
+    const taskRepo = this.hollonRepo.manager.getRepository(Task);
+
+    for (const subtaskId of subtaskIds) {
+      await taskRepo.update(subtaskId, {
+        status: TaskStatus.READY,
+        description: reworkInstructions, // Update with rework instructions
+        retryCount: () => 'retry_count + 1',
+      });
+
+      this.logger.log(
+        `Subtask ${subtaskId} marked for rework: ${reworkInstructions}`,
+      );
+    }
+
+    // Parent task stays IN_PROGRESS (waiting for reworked subtasks)
+    await taskRepo.update(task.id, {
+      status: TaskStatus.IN_PROGRESS,
+    });
+  }
+
+  /**
+   * Phase 3.10: Add follow-up subtasks
+   */
+  private async addFollowUpTasks(task: Task, decision: any): Promise<void> {
+    const { newSubtasks } = decision;
+
+    await this.subtaskService.createSubtasks(task.id, newSubtasks);
+
+    // Parent task stays IN_PROGRESS (waiting for new subtasks)
+    const taskRepo = this.hollonRepo.manager.getRepository(Task);
+    await taskRepo.update(task.id, {
+      status: TaskStatus.IN_PROGRESS,
+    });
+
+    this.logger.log(
+      `Added ${newSubtasks.length} follow-up subtasks to task ${task.id}`,
+    );
+  }
+
+  /**
+   * Phase 3.10: Redirect task with new approach
+   */
+  private async redirectTask(task: Task, decision: any): Promise<void> {
+    const { cancelSubtaskIds, newDirection } = decision;
+
+    const taskRepo = this.hollonRepo.manager.getRepository(Task);
+
+    // Cancel existing subtasks
+    for (const subtaskId of cancelSubtaskIds) {
+      await taskRepo.update(subtaskId, {
+        status: TaskStatus.CANCELLED,
+      });
+    }
+
+    // Re-delegate with new approach (using handleComplexTask)
+    const hollon = await this.hollonRepo.findOne({
+      where: { id: task.assignedHollonId! },
+      relations: ['organization', 'team', 'role'],
+    });
+
+    if (hollon) {
+      // Update task description with new direction
+      await taskRepo.update(task.id, {
+        description: `${task.description}\n\n**New Direction**: ${newDirection}`,
+        status: TaskStatus.READY, // Reset to READY for re-delegation
+      });
+
+      await this.handleComplexTask(task, hollon);
+    }
+
+    this.logger.log(
+      `Task ${task.id} redirected: cancelled ${cancelSubtaskIds.length} subtasks, new direction: ${newDirection}`,
+    );
   }
 }

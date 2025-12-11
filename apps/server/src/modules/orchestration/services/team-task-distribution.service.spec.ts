@@ -51,6 +51,8 @@ describe('TeamTaskDistributionService', () => {
     consecutiveFailures: 0,
     lastFailedAt: null,
     blockedUntil: null,
+    reviewCount: 0, // Phase 3.10
+    lastReviewedAt: null, // Phase 3.10
     createdAt: new Date(),
     updatedAt: new Date(),
     organization: undefined as unknown as Organization,

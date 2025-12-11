@@ -45,6 +45,8 @@ describe('TaskAnalyzerService', () => {
     consecutiveFailures: 0,
     lastFailedAt: null,
     blockedUntil: null,
+    reviewCount: 0, // Phase 3.10
+    lastReviewedAt: null, // Phase 3.10
     storyPoints: 0,
     blockedReason: null,
     createdAt: new Date(),

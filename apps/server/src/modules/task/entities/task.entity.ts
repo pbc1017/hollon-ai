@@ -20,6 +20,7 @@ export enum TaskStatus {
   PENDING = 'pending',
   READY = 'ready',
   IN_PROGRESS = 'in_progress',
+  READY_FOR_REVIEW = 'ready_for_review', // Phase 3.10: Subtasks completed, awaiting parent review
   IN_REVIEW = 'in_review',
   BLOCKED = 'blocked',
   COMPLETED = 'completed',
@@ -173,6 +174,13 @@ export class Task extends BaseEntity {
 
   @Column({ name: 'blocked_until', type: 'timestamp', nullable: true })
   blockedUntil?: Date | null;
+
+  // ✅ Phase 3.10: LLM Review Cycle
+  @Column({ name: 'review_count', default: 0 })
+  reviewCount: number;
+
+  @Column({ name: 'last_reviewed_at', type: 'timestamp', nullable: true })
+  lastReviewedAt?: Date | null;
 
   // Relations
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
