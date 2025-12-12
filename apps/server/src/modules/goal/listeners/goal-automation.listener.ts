@@ -76,7 +76,7 @@ export class GoalAutomationListener {
             goal.id,
             {
               autoAssign: true, // 자동으로 Hollon에게 할당
-              useTeamDistribution: false,
+              useTeamDistribution: true, // Team Epic 생성 (계층적 분배)
               strategy: DecompositionStrategy.TASK_BASED,
             },
           );

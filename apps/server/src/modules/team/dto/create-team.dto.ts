@@ -15,4 +15,8 @@ export class CreateTeamDto {
   @IsOptional()
   @IsUUID()
   leaderHollonId?: string; // Phase 3.5: 팀 리더
+
+  @IsOptional()
+  @IsUUID()
+  managerHollonId?: string; // Phase 3.8: Manager hollon (hierarchical task distribution)
 }
