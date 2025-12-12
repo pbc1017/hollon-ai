@@ -13,7 +13,7 @@ export interface ExtractedKnowledge {
     taskId?: string;
     taskType?: string;
     taskPriority?: string;
-    complexity?: number;
+    complexity?: 'low' | 'medium' | 'high';
     filesChanged?: string[];
     pullRequestUrl?: string;
     testsPassed?: boolean;
@@ -147,9 +147,9 @@ export class KnowledgeExtractionService {
     }
 
     // Acceptance criteria
-    if (task.acceptanceCriteria) {
+    if (task.acceptanceCriteria && task.acceptanceCriteria.length > 0) {
       sections.push('## Acceptance Criteria');
-      sections.push(task.acceptanceCriteria);
+      sections.push(task.acceptanceCriteria.join('\n'));
       sections.push('');
     }
 
@@ -291,7 +291,7 @@ export class KnowledgeExtractionService {
       taskPriority: task.priority,
     };
 
-    if (task.estimatedComplexity !== undefined) {
+    if (task.estimatedComplexity && task.estimatedComplexity !== null) {
       metadata.complexity = task.estimatedComplexity;
     }
 

@@ -106,8 +106,10 @@ describe('KnowledgeExtractionService', () => {
     it('should handle task with acceptance criteria', () => {
       const task = createMockTask({
         title: 'Add search feature',
-        acceptanceCriteria:
-          '- Search returns results in < 1s\n- Supports fuzzy matching',
+        acceptanceCriteria: [
+          '- Search returns results in < 1s',
+          '- Supports fuzzy matching',
+        ],
       });
 
       const data: TaskCompletionData = { task };
@@ -154,13 +156,13 @@ describe('KnowledgeExtractionService', () => {
     it('should include complexity in metadata', () => {
       const task = createMockTask({
         title: 'Complex task',
-        estimatedComplexity: 8,
+        estimatedComplexity: 'high',
       });
 
       const data: TaskCompletionData = { task };
       const result = service.extractKnowledge(data);
 
-      expect(result.metadata.complexity).toBe(8);
+      expect(result.metadata.complexity).toBe('high');
     });
 
     it('should handle additional metadata fields', () => {
@@ -306,7 +308,9 @@ describe('KnowledgeExtractionService', () => {
     });
 
     it('should return false for missing task', () => {
-      const result = service.canExtractKnowledge({ task: null as any });
+      const result = service.canExtractKnowledge({
+        task: null as unknown as Task,
+      });
       expect(result).toBe(false);
     });
 
@@ -493,14 +497,14 @@ function createMockTask(overrides: Partial<Task> = {}): Task {
   const task = new Task();
   task.id = overrides.id || 'test-task-id';
   task.title = overrides.title || 'Test Task';
-  task.description = overrides.description || null;
+  task.description = overrides.description || '';
   task.type = overrides.type || TaskType.IMPLEMENTATION;
   task.status = overrides.status || TaskStatus.COMPLETED;
   task.priority = overrides.priority || TaskPriority.P3_MEDIUM;
-  task.tags = overrides.tags || null;
-  task.requiredSkills = overrides.requiredSkills || null;
-  task.acceptanceCriteria = overrides.acceptanceCriteria || null;
-  task.estimatedComplexity = overrides.estimatedComplexity || null;
+  task.tags = overrides.tags;
+  task.requiredSkills = overrides.requiredSkills || [];
+  task.acceptanceCriteria = overrides.acceptanceCriteria;
+  task.estimatedComplexity = overrides.estimatedComplexity ?? null;
   task.organizationId = overrides.organizationId || 'test-org-id';
   task.projectId = overrides.projectId || 'test-project-id';
   task.depth = overrides.depth || 0;
