@@ -223,12 +223,21 @@ export class TaskExecutionService {
    * - 경로: {projectDir}/../.git-worktrees/hollon-{hollonId}/task-{taskId}
    * - 장점: 완전 격리, Git 충돌 없음, 병렬 처리 가능
    * - Organization settings의 baseBranch를 기준으로 생성 (기본값: main)
+   * - 서브태스크는 부모의 worktree를 재사용 (임시 Hollon의 경우)
    */
   private async getOrCreateWorktree(
     project: Project,
     hollon: Hollon,
     task: Task,
   ): Promise<string> {
+    // Phase 3.12: Reuse existing worktree if already set (subtasks from temporary hollon)
+    if (task.workingDirectory) {
+      this.logger.log(
+        `Reusing inherited worktree for subtask ${task.id.slice(0, 8)}: ${task.workingDirectory}`,
+      );
+      return task.workingDirectory;
+    }
+
     const worktreePath = path.join(
       project.workingDirectory,
       '..',

@@ -129,6 +129,8 @@ export class SubtaskCreationService {
           priority:
             (definition.priority as TaskPriority) || parentTask.priority,
           type: (definition.type as TaskType) || TaskType.IMPLEMENTATION,
+          // Phase 3.12: Inherit workingDirectory from parent (for temporary hollon's subtasks)
+          workingDirectory: parentTask.workingDirectory,
         });
 
         const savedSubtask = await this.taskRepo.save(subtask);
