@@ -445,6 +445,11 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
    * - Story points > 8
    */
   private async isTaskComplex(task: Task, _hollon: Hollon): Promise<boolean> {
+    // Criteria 0: Team Epic tasks always require decomposition (Phase 3.8+)
+    if (task.type === 'team_epic') {
+      return true;
+    }
+
     // Criteria 1: Explicit high complexity
     if (task.estimatedComplexity === 'high') {
       return true;
