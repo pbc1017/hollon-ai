@@ -58,6 +58,28 @@ export class Document extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   embedding: string;
 
+  // Quality scoring fields
+  @Column({
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
+    default: 0,
+    name: 'quality_score',
+  })
+  qualityScore: number;
+
+  @Column({ type: 'integer', default: 0, name: 'view_count' })
+  viewCount: number;
+
+  @Column({ type: 'integer', default: 0, name: 'rating_sum' })
+  ratingSum: number;
+
+  @Column({ type: 'integer', default: 0, name: 'rating_count' })
+  ratingCount: number;
+
+  @Column({ type: 'timestamp', nullable: true, name: 'last_accessed_at' })
+  lastAccessedAt: Date | null;
+
   // Relations
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organization_id' })

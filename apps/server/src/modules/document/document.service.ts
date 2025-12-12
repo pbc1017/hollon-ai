@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Document, DocumentType } from './entities/document.entity';
+import { DocumentQualityService } from './services/document-quality.service';
 
 export interface CreateDocumentDto {
   title: string;
@@ -21,6 +22,7 @@ export class DocumentService {
   constructor(
     @InjectRepository(Document)
     private readonly documentRepo: Repository<Document>,
+    private readonly qualityService: DocumentQualityService,
   ) {}
 
   /**
@@ -40,13 +42,18 @@ export class DocumentService {
       metadata: dto.metadata || {},
     });
 
-    return this.documentRepo.save(document);
+    const saved = await this.documentRepo.save(document);
+
+    // Calculate initial quality score
+    await this.qualityService.updateDocumentScore(saved.id);
+
+    return this.documentRepo.findOne({ where: { id: saved.id } });
   }
 
   /**
    * 문서 조회
    */
-  async findOne(id: string): Promise<Document> {
+  async findOne(id: string, recordView = false): Promise<Document> {
     const document = await this.documentRepo.findOne({
       where: { id },
       relations: ['organization', 'project', 'hollon'],
@@ -54,6 +61,13 @@ export class DocumentService {
 
     if (!document) {
       throw new NotFoundException(`Document #${id} not found`);
+    }
+
+    // Record view and update quality score
+    if (recordView) {
+      await this.qualityService.recordDocumentView(id);
+      // Refresh document to get updated scores
+      return this.documentRepo.findOne({ where: { id } });
     }
 
     return document;
@@ -88,7 +102,10 @@ export class DocumentService {
       query.limit(filters.limit);
     }
 
-    return query.orderBy('doc.created_at', 'DESC').getMany();
+    return query
+      .orderBy('doc.quality_score', 'DESC')
+      .addOrderBy('doc.created_at', 'DESC')
+      .getMany();
   }
 
   /**
@@ -113,7 +130,10 @@ export class DocumentService {
       query.limit(filters.limit);
     }
 
-    return query.orderBy('doc.created_at', 'DESC').getMany();
+    return query
+      .orderBy('doc.quality_score', 'DESC')
+      .addOrderBy('doc.created_at', 'DESC')
+      .getMany();
   }
 
   /**
@@ -151,7 +171,10 @@ export class DocumentService {
       query.limit(options.limit);
     }
 
-    return query.orderBy('doc.created_at', 'DESC').getMany();
+    return query
+      .orderBy('doc.quality_score', 'DESC')
+      .addOrderBy('doc.created_at', 'DESC')
+      .getMany();
   }
 
   /**
@@ -160,7 +183,7 @@ export class DocumentService {
   async findByHollon(hollonId: string): Promise<Document[]> {
     return this.documentRepo.find({
       where: { hollonId },
-      order: { createdAt: 'DESC' },
+      order: { qualityScore: 'DESC', createdAt: 'DESC' },
     });
   }
 
@@ -170,7 +193,7 @@ export class DocumentService {
   async findByTask(taskId: string): Promise<Document[]> {
     return this.documentRepo.find({
       where: { taskId },
-      order: { createdAt: 'DESC' },
+      order: { qualityScore: 'DESC', createdAt: 'DESC' },
     });
   }
 
@@ -183,7 +206,12 @@ export class DocumentService {
   ): Promise<Document> {
     const document = await this.findOne(id);
     Object.assign(document, updates);
-    return this.documentRepo.save(document);
+    const saved = await this.documentRepo.save(document);
+
+    // Recalculate quality score after update
+    await this.qualityService.updateDocumentScore(saved.id);
+
+    return this.documentRepo.findOne({ where: { id: saved.id } });
   }
 
   /**
@@ -192,5 +220,21 @@ export class DocumentService {
   async remove(id: string): Promise<void> {
     const document = await this.findOne(id);
     await this.documentRepo.remove(document);
+  }
+
+  /**
+   * 문서에 평점 추가
+   * @param id - 문서 ID
+   * @param rating - 평점 (1-5)
+   */
+  async rateDocument(id: string, rating: number): Promise<Document> {
+    return this.qualityService.rateDocument(id, rating);
+  }
+
+  /**
+   * 문서의 품질 점수 세부 정보 조회
+   */
+  async getQualityScoreBreakdown(id: string) {
+    return this.qualityService.getScoreBreakdown(id);
   }
 }
