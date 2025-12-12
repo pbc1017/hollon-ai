@@ -11,6 +11,7 @@ import { Organization } from '../../organization/entities/organization.entity';
 import { QualityGateService } from './quality-gate.service';
 import { EscalationService } from './escalation.service';
 import { SubtaskCreationService } from './subtask-creation.service';
+import { TaskExecutionService } from './task-execution.service';
 import { Role } from '../../role/entities/role.entity';
 
 describe('HollonOrchestratorService', () => {
@@ -115,6 +116,17 @@ describe('HollonOrchestratorService', () => {
           useValue: {
             createSubtasks: jest.fn(),
             updateParentTaskStatus: jest.fn(),
+          },
+        },
+        {
+          provide: TaskExecutionService,
+          useValue: {
+            executeTask: jest.fn().mockResolvedValue({
+              prUrl: 'https://github.com/test/repo/pull/1',
+              worktreePath: '/tmp/test-worktree',
+            }),
+            setupTaskWorktree: jest.fn(),
+            cleanupTaskWorktree: jest.fn(),
           },
         },
         {
