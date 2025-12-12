@@ -30,6 +30,7 @@ import { Team } from '../team/entities/team.entity';
 import { Role } from '../role/entities/role.entity';
 import { Organization } from '../organization/entities/organization.entity';
 import { Task, TaskStatus } from '../task/entities/task.entity';
+import { ProcessManagerService } from '../brain-provider/services/process-manager.service';
 
 @Injectable()
 export class HollonService implements IHollonService {
@@ -50,6 +51,7 @@ export class HollonService implements IHollonService {
     private readonly roleService: RoleService,
     private readonly teamService: TeamService,
     private readonly organizationService: OrganizationService,
+    private readonly processManager: ProcessManagerService,
   ) {}
 
   async create(dto: CreateHollonDto): Promise<Hollon> {
@@ -516,15 +518,22 @@ export class HollonService implements IHollonService {
       });
     }
 
+    // 4. Kill all running Claude Code processes
+    const killResult = this.processManager.killAll();
     this.logger.warn(
-      `EMERGENCY STOP COMPLETE: ${stoppedHollons || 0} hollons paused, ${pausedTasks || 0} tasks reset`,
+      `EMERGENCY STOP: Killed ${killResult.killed} running processes (PIDs: ${killResult.pids.join(', ') || 'none'})`,
+    );
+
+    this.logger.warn(
+      `EMERGENCY STOP COMPLETE: ${stoppedHollons || 0} hollons paused, ${pausedTasks || 0} tasks reset, ${killResult.killed} processes killed`,
     );
 
     return {
       message: 'Emergency stop executed successfully',
       stoppedHollons: stoppedHollons || 0,
       pausedTasks: pausedTasks || 0,
-    };
+      killedProcesses: killResult.killed,
+    } as any;
   }
 
   /**

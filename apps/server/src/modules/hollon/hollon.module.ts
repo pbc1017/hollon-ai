@@ -8,6 +8,7 @@ import { RoleModule } from '../role/role.module';
 import { TeamModule } from '../team/team.module';
 import { OrganizationModule } from '../organization/organization.module';
 import { OrchestrationModule } from '../orchestration/orchestration.module';
+import { BrainProviderModule } from '../brain-provider/brain-provider.module';
 import { Team } from '../team/entities/team.entity';
 import { Role } from '../role/entities/role.entity';
 
@@ -19,6 +20,7 @@ import { Role } from '../role/entities/role.entity';
     forwardRef(() => TeamModule),
     OrganizationModule,
     forwardRef(() => OrchestrationModule),
+    BrainProviderModule,
   ],
   controllers: [HollonController],
   providers: [HollonService],

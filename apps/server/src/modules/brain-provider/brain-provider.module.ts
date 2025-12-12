@@ -34,6 +34,6 @@ import { DocumentModule } from '../document/document.module';
     // Main service
     BrainProviderService,
   ],
-  exports: [BrainProviderService, ClaudeCodeProvider],
+  exports: [BrainProviderService, ClaudeCodeProvider, ProcessManagerService],
 })
 export class BrainProviderModule {}
