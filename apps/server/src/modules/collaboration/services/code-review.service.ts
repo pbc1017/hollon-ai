@@ -634,7 +634,7 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
   async performAutomatedReview(
     prId: string,
     reviewerHollonId: string,
-  ): Promise<void> {
+  ): Promise<TaskPullRequest> {
     this.logger.log(
       `Performing automated review for PR ${prId} by Hollon ${reviewerHollonId}`,
     );
@@ -652,7 +652,7 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
       this.logger.warn(
         `PR ${prId} is not in 'ready_for_review' status. Current: ${pr.status}`,
       );
-      return;
+      return pr;
     }
 
     // Phase 3.5: 간단한 자동 승인 로직
@@ -675,6 +675,8 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
     this.logger.log(
       `Automated review completed for PR ${prId}: ${shouldApprove ? 'APPROVED' : 'CHANGES_REQUESTED'}`,
     );
+
+    return pr;
   }
 
   /**
