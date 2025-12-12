@@ -25,7 +25,6 @@ import { IncidentModule } from './modules/incident/incident.module';
 import { ConflictResolutionModule } from './modules/conflict-resolution/conflict-resolution.module';
 import { GoalModule } from './modules/goal/goal.module';
 import { DddProvidersModule } from './modules/ddd-providers/ddd-providers.module';
-import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
   imports: [
@@ -49,9 +48,6 @@ import { AuthModule } from './modules/auth/auth.module';
       ? [ScheduleModule.forRoot()]
       : []),
     PostgresListenerModule,
-
-    // Authentication
-    AuthModule,
 
     // Feature modules
     HealthModule,
