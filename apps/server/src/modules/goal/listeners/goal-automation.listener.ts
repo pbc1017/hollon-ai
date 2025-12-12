@@ -12,16 +12,16 @@ import { DecompositionStrategy } from '../dto/decomposition-options.dto';
 /**
  * GoalAutomationListener: Goal-to-PR 워크플로우 자동화
  *
- * Phase 3.12 완전 자동화:
+ * Phase 3.12+ 완전 자동화 (모든 Cron 1분 간격):
  * 1. 새로 생성된 Goal 감지 → 자동 Decomposition (매 1분)
- * 2. 할당된 PENDING Task 감지 → 자동 Execution (매 2분)
- * 3. IN_REVIEW Task 감지 → 자동 Review 및 Complete (매 3분)
+ * 2. Team Epic → Implementation Tasks 분해 (매 1분)
+ * 3. 할당된 PENDING Task 감지 → 자동 Execution (매 1분)
+ * 4. READY_FOR_REVIEW Task → Manager Review (매 1분)
+ * 5. IN_REVIEW Task 감지 → 자동 Review 및 Complete (매 1분)
  *
- * 차등 간격 설계:
- * - Goal 분해: 1분 (빠른 피드백)
- * - Task 실행: 2분 (적절한 간격)
- * - Task 리뷰: 3분 (충분한 처리 시간)
- * - 총 소요 시간: 최대 6분 (1분 + 2분 + 3분)
+ * 통일된 1분 간격 설계:
+ * - 모든 단계가 1분 간격으로 실행되어 최대 처리 속도 달성
+ * - Goal 생성 후 약 5분 내에 전체 워크플로우 완료 가능
  *
  * 프로덕션 환경에서 Goal API만 호출하면 전체 워크플로우가 자동으로 처리됨
  */
@@ -203,7 +203,7 @@ export class GoalAutomationListener {
    *
    * 적절한 간격: Task 생성 후 신속한 PR 생성
    */
-  @Cron('*/2 * * * *') // 2분마다
+  @Cron('*/1 * * * *') // 1분마다
   async autoExecuteTasks(): Promise<void> {
     try {
       this.logger.debug('Checking for tasks ready for execution...');
@@ -280,7 +280,7 @@ export class GoalAutomationListener {
    * - 리뷰 홀론이 코드 리뷰 수행
    * - Manager가 결과 받아서 merge/rework/add_tasks 결정
    */
-  @Cron('*/2 * * * *') // 2분마다 (Task Execution과 동일한 간격)
+  @Cron('*/1 * * * *') // 1분마다
   async autoManagerReview(): Promise<void> {
     try {
       this.logger.debug('Checking for tasks ready for manager review...');
@@ -370,7 +370,7 @@ export class GoalAutomationListener {
    *
    * 충분한 간격: PR 생성 후 리뷰 및 완료 처리
    */
-  @Cron('*/3 * * * *') // 3분마다
+  @Cron('*/1 * * * *') // 1분마다
   async autoReviewTasks(): Promise<void> {
     try {
       this.logger.debug('Checking for tasks in review...');
