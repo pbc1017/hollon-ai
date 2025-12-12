@@ -19,11 +19,10 @@ import {
   TaskType,
   TaskPriority,
 } from '../../task/entities/task.entity';
-import { QualityGateService } from './quality-gate.service';
-import { Organization } from '../../organization/entities/organization.entity';
 import { EscalationService, EscalationLevel } from './escalation.service';
 import { IHollonService } from '../../hollon/domain/hollon-service.interface';
 import { SubtaskCreationService } from './subtask-creation.service'; // Phase 3.10: Re-added for review cycle
+import { TaskExecutionService } from './task-execution.service'; // Phase 3.12/4: Worktree isolation
 import { ICodeReviewPort } from '../domain/ports/code-review.port'; // ✅ DDD: Port 사용
 import { TaskPullRequest } from '../../collaboration/entities/task-pull-request.entity'; // Phase 3.16
 import { Role } from '../../role/entities/role.entity';
@@ -63,16 +62,14 @@ export class HollonOrchestratorService {
     private readonly hollonRepo: Repository<Hollon>,
     @InjectRepository(Document)
     private readonly documentRepo: Repository<Document>,
-    @InjectRepository(Organization)
-    private readonly organizationRepo: Repository<Organization>,
     private readonly brainProvider: BrainProviderService,
     private readonly promptComposer: PromptComposerService,
     private readonly taskPool: TaskPoolService,
-    private readonly qualityGate: QualityGateService,
     private readonly escalationService: EscalationService,
     @Inject('IHollonService')
     private readonly hollonService: IHollonService,
     private readonly subtaskService: SubtaskCreationService, // Phase 3.10: Re-added
+    private readonly taskExecutionService: TaskExecutionService, // Phase 3.12/4: Worktree isolation
     @InjectRepository(Task)
     private readonly taskRepo: Repository<Task>, // Phase 3.16
     @Inject('ICodeReviewPort')
@@ -168,93 +165,30 @@ export class HollonOrchestratorService {
         }
       }
 
-      // 3. Compose prompt
-      const composedPrompt = await this.promptComposer.composePrompt(
-        hollonId,
+      // 3. Phase 3.12/4: Execute task with worktree isolation, CI checks, and PR creation
+      this.logger.log(
+        `Executing task ${task.id} with worktree isolation and CI checks`,
+      );
+
+      const executionResult = await this.taskExecutionService.executeTask(
         task.id,
+        hollonId,
       );
-
-      this.logger.log(`Prompt composed: ${composedPrompt.totalTokens} tokens`);
-
-      // 4. Execute brain provider
-      const brainResult = await this.brainProvider.executeWithTracking(
-        {
-          prompt: composedPrompt.userPrompt,
-          systemPrompt: composedPrompt.systemPrompt,
-          context: {
-            workingDirectory: task.project?.workingDirectory,
-          },
-        },
-        {
-          organizationId: hollon.organizationId,
-          hollonId: hollon.id,
-          taskId: task.id,
-        },
-      );
-
-      if (!brainResult.success) {
-        throw new Error(
-          `Brain execution failed: ${brainResult.output || 'Unknown error'}`,
-        );
-      }
 
       this.logger.log(
-        `Brain execution completed: ${brainResult.duration}ms, ` +
-          `cost=$${brainResult.cost.totalCostCents.toFixed(4)}`,
+        `Task execution completed: PR created at ${executionResult.prUrl}`,
       );
 
-      // 4.5. Run quality gate validation
-      const organization = await this.organizationRepo.findOne({
-        where: { id: hollon.organizationId },
-      });
-
-      const costLimitDailyCents = organization?.settings
-        ?.costLimitDailyCents as number | undefined;
-
-      const validationResult = await this.qualityGate.validateResult({
-        task,
-        brainResult,
-        organizationId: hollon.organizationId,
-        costLimitDailyCents,
-      });
-
-      if (!validationResult.passed) {
-        this.logger.warn(
-          `Quality gate failed for task ${task.id}: ${validationResult.reason}`,
-        );
-
-        // If quality gate suggests retry, throw error to trigger retry logic
-        if (validationResult.shouldRetry) {
-          throw new Error(
-            `Quality gate validation failed: ${validationResult.reason}`,
-          );
-        } else {
-          // If no retry suggested, mark task as failed
-          await this.taskPool.failTask(
-            task.id,
-            `Quality gate failed: ${validationResult.reason}`,
-          );
-
-          return {
-            success: false,
-            duration: Date.now() - startTime,
-            error: `Quality gate failed: ${validationResult.reason}`,
-          };
-        }
-      }
-
-      this.logger.log(`Quality gate passed for task ${task.id}`);
-
-      // 5. Save result as document
-      await this.saveResultDocument(
-        task,
-        hollon,
-        brainResult.output,
-        composedPrompt,
-      );
-
-      // 6. Complete task
-      await this.taskPool.completeTask(task.id);
+      // Note: TaskExecutionService already:
+      // - Creates worktree for complete isolation
+      // - Creates branch for the hollon
+      // - Executes brain provider in the worktree
+      // - Creates PR with changes
+      // - Waits for CI checks to pass
+      // - Requests code review
+      // - Sets task to READY_FOR_REVIEW
+      //
+      // The task will be picked up by a reviewer hollon later
 
       // 7. Update hollon status back to IDLE
       await this.updateHollonStatus(hollonId, HollonStatus.IDLE);
@@ -262,7 +196,7 @@ export class HollonOrchestratorService {
       const duration = Date.now() - startTime;
       this.logger.log(
         `Execution cycle completed for ${hollonId}: ` +
-          `task=${task.id}, duration=${duration}ms`,
+          `task=${task.id}, duration=${duration}ms, PR=${executionResult.prUrl}`,
       );
 
       return {
@@ -270,7 +204,7 @@ export class HollonOrchestratorService {
         taskId: task.id,
         taskTitle: task.title,
         duration,
-        output: brainResult.output,
+        output: `Task executed with worktree isolation. PR: ${executionResult.prUrl}`,
       };
     } catch (error) {
       const duration = Date.now() - startTime;
@@ -331,7 +265,9 @@ export class HollonOrchestratorService {
 
   /**
    * Save execution result as document for future reference
+   * @deprecated No longer used - TaskExecutionService handles result storage via PR and code review
    */
+  // @ts-expect-error - Kept for reference, not used in new flow
   private async saveResultDocument(
     task: Task,
     hollon: Hollon,
