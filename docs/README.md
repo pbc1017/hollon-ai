@@ -12,6 +12,9 @@
 | Category             | Document                                                                 | Description                                      |
 | -------------------- | ------------------------------------------------------------------------ | ------------------------------------------------ |
 | **Principles**       | [`principles/ssot.md`](./principles/ssot.md)                             | Single Source of Truth - 시스템 원칙 및 요구사항 |
+| **Testing**          | [`TESTING_STRATEGY.md`](./TESTING_STRATEGY.md)                           | 테스트 전략 및 커버리지 보고서                   |
+| **Testing**          | [`TEST_MAINTENANCE.md`](./TEST_MAINTENANCE.md)                           | 테스트 유지보수 가이드라인                       |
+| **Testing**          | [`KNOWN_ISSUES.md`](./KNOWN_ISSUES.md)                                   | 알려진 이슈 및 기술 부채                         |
 | **Current Phase**    | [`phases/phase4-revised-plan.md`](./phases/phase4-revised-plan.md)       | Phase 4 상세 계획 (6주, 3 스프린트)              |
 | **Next Phase**       | [`phases/phase5-plan.md`](./phases/phase5-plan.md)                       | Phase 5 상세 계획 (CLI + UI + 완성)              |
 | **Redesign Summary** | [`phases/phase-redesign-summary.md`](./phases/phase-redesign-summary.md) | Phase 4/5 재설계 최종안                          |
@@ -23,6 +26,10 @@
 ```
 docs/
 ├── README.md (이 문서)
+│
+├── TESTING_STRATEGY.md     # ⭐ 테스트 전략 및 커버리지 보고서
+├── TEST_MAINTENANCE.md     # ⭐ 테스트 유지보수 가이드라인
+├── KNOWN_ISSUES.md         # ⭐ 알려진 이슈 및 기술 부채
 │
 ├── principles/              # 시스템 원칙
 │   └── ssot.md             # Single Source of Truth
@@ -194,6 +201,9 @@ hollon-cli next-task
 - 🎯 [SSOT (원칙)](./principles/ssot.md)
 - 📋 [Phase 4 계획](./phases/phase4-revised-plan.md)
 - 🏗️ [DDD Refactoring](./projects/ddd-refactoring/ddd-refactoring-plan.md)
+- 🧪 [Testing Strategy](./TESTING_STRATEGY.md)
+- 📝 [Test Maintenance](./TEST_MAINTENANCE.md)
+- ⚠️ [Known Issues](./KNOWN_ISSUES.md)
 
 ### For Planning
 
