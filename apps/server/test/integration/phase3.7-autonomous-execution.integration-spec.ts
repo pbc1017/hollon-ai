@@ -28,7 +28,6 @@ import { BrainResponse } from '../../src/modules/brain-provider/interfaces/brain
 describe('Phase 3.7 Autonomous Execution (integration)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
-  let accessToken: string;
 
   // Services
   let hollonExecutionService: HollonExecutionService;
@@ -46,8 +45,6 @@ describe('Phase 3.7 Autonomous Execution (integration)', () => {
   let taskId: string;
 
   const testRunId = Date.now();
-  const testEmail = `test-${testRunId}@hollon.test`;
-  const testPassword = 'TestPassword123!';
 
   beforeAll(async () => {
     // Mock ClaudeCodeProvider
@@ -87,19 +84,6 @@ describe('Phase 3.7 Autonomous Execution (integration)', () => {
     taskPoolService = moduleFixture.get<TaskPoolService>(TaskPoolService);
     organizationService =
       moduleFixture.get<OrganizationService>(OrganizationService);
-
-    // Register test user and get access token
-    const registerResponse = await request(app.getHttpServer())
-      .post('/api/auth/register')
-      .send({
-        email: testEmail,
-        password: testPassword,
-        firstName: 'Test',
-        lastName: 'User',
-      })
-      .expect(201);
-
-    accessToken = registerResponse.body.accessToken;
   });
 
   afterAll(async () => {
@@ -236,7 +220,6 @@ describe('Phase 3.7 Autonomous Execution (integration)', () => {
     it('should stop autonomous execution via API', async () => {
       const response = await request(app.getHttpServer())
         .post(`/api/organizations/${organizationId}/emergency-stop`)
-        .set('Authorization', `Bearer ${accessToken}`)
         .send({ reason: 'Test emergency stop' })
         .expect(201);
 
@@ -256,7 +239,6 @@ describe('Phase 3.7 Autonomous Execution (integration)', () => {
       // Then resume
       const response = await request(app.getHttpServer())
         .post(`/api/organizations/${organizationId}/resume-execution`)
-        .set('Authorization', `Bearer ${accessToken}`)
         .expect(201);
 
       expect(response.body.message).toContain('resumed');

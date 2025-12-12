@@ -1,6 +1,6 @@
 # Advanced Authentication System
 
-A production-ready, comprehensive authentication system for NestJS with JWT, OAuth (Google/GitHub), Two-Factor Authentication (2FA), device fingerprinting, rate limiting, and advanced session management.
+A comprehensive authentication system for NestJS with JWT, OAuth (Google/GitHub), Two-Factor Authentication (2FA), and session management.
 
 ## Features
 
@@ -28,10 +28,8 @@ A production-ready, comprehensive authentication system for NestJS with JWT, OAu
 ### 📊 Session Management
 
 - **Multiple Active Sessions** support
-- **Device Fingerprinting** for session tracking and anomaly detection
-- **Detailed Device Information** - Platform, browser, OS, IP address
 - **Session Tracking** with IP address and user agent
-- **Device Information** storage in JSONB format
+- **Device Information** storage
 - **Session Revocation** (individual or all sessions)
 - **Automatic Session Expiration**
 
@@ -39,13 +37,9 @@ A production-ready, comprehensive authentication system for NestJS with JWT, OAu
 
 - **Password Hashing** with bcrypt (12 salt rounds)
 - **Account Lockout** after 5 failed login attempts (15-minute lockout)
-- **Rate Limiting** on authentication endpoints (5 attempts per 15 minutes)
-- **IP-based Rate Limiting** with automatic cleanup
 - **Token Expiration** management
 - **Refresh Token Rotation**
 - **Session Validation**
-- **Production-grade TOTP** using speakeasy library
-- **QR Code Generation** using qrcode library for 2FA setup
 
 ## Architecture
 
@@ -121,33 +115,18 @@ Core authentication logic including:
 
 - User registration and login
 - Password hashing and validation
-- JWT token generation using @nestjs/jwt
+- JWT token generation and validation
 - OAuth user creation/linking
-- Production-grade 2FA with speakeasy and QRCode
-- Session management with device fingerprinting
+- 2FA setup, verification, and management
+- Session management
 - Account security (lockout, failed attempts)
-
-#### DeviceFingerprintService
-
-Device identification and tracking:
-
-- Generate unique device fingerprints from request headers
-- Extract and parse user agent information
-- Detect platform, browser, OS, and device type
-- Handle IP extraction behind proxies/load balancers
-- Support for Cloudflare and other reverse proxies
 
 ### Guards & Decorators
 
 #### Guards
 
-- **JwtAuthGuard** - Global authentication guard for protected routes
-- **GoogleAuthGuard** - Google OAuth flow guard
-- **GitHubAuthGuard** - GitHub OAuth flow guard
-- **RateLimitGuard** - IP-based rate limiting with configurable windows
-  - `AuthRateLimitGuard()` - 5 attempts per 15 minutes
-  - `StrictRateLimitGuard()` - 3 attempts per 5 minutes
-  - `StandardRateLimitGuard()` - 10 attempts per 15 minutes
+- **JwtAuthGuard** - Protects routes requiring authentication
+- **TwoFactorGuard** - Ensures 2FA verification when enabled
 
 #### Decorators
 
@@ -159,14 +138,6 @@ Device identification and tracking:
 #### JwtStrategy
 
 Passport strategy for validating JWT tokens and loading user data.
-
-#### GoogleStrategy
-
-Passport OAuth strategy for Google authentication using passport-google-oauth20.
-
-#### GitHubStrategy
-
-Passport OAuth strategy for GitHub authentication using passport-github2.
 
 ## API Usage
 
@@ -366,10 +337,8 @@ npm install
 - `@nestjs/passport` - Passport integration
 - `passport` - Authentication middleware
 - `passport-jwt` - JWT strategy for Passport
-- `passport-google-oauth20` - Google OAuth strategy
-- `passport-github2` - GitHub OAuth strategy
-- `bcrypt` - Password hashing (12 rounds)
-- `speakeasy` - Production-grade TOTP generation for 2FA
+- `bcrypt` - Password hashing
+- `speakeasy` - TOTP generation for 2FA
 - `qrcode` - QR code generation for 2FA setup
 
 ## Security Best Practices

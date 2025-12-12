@@ -22,7 +22,6 @@ import {
   TwoFactorChallengeDto,
 } from './dto/auth-response.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { AuthRateLimitGuard } from './guards/rate-limit.guard';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { User } from './entities/user.entity';
@@ -37,7 +36,6 @@ export class AuthController {
    */
   @Public()
   @Post('register')
-  @UseGuards(AuthRateLimitGuard())
   @HttpCode(HttpStatus.CREATED)
   async register(@Body() registerDto: RegisterDto): Promise<AuthResponseDto> {
     return this.authService.register(registerDto);
@@ -48,13 +46,13 @@ export class AuthController {
    */
   @Public()
   @Post('login')
-  @UseGuards(AuthRateLimitGuard())
   @HttpCode(HttpStatus.OK)
   async login(
     @Body() loginDto: LoginDto,
     @Req() req: Request,
   ): Promise<AuthResponseDto | TwoFactorChallengeDto> {
-    return this.authService.login(loginDto, req);
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    return this.authService.login(loginDto, ipAddress);
   }
 
   /**
