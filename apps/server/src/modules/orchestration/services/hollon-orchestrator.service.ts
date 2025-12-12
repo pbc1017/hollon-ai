@@ -1,6 +1,10 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { promisify } from 'util';
+import { exec } from 'child_process';
+
+const execAsync = promisify(exec);
 import {
   Hollon,
   HollonStatus,
@@ -1156,12 +1160,37 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
       );
 
       try {
-        // Merge PR (in test env, just mark as completed)
+        // Phase 4: Merge PR using gh CLI
         if (process.env.NODE_ENV === 'test') {
           this.logger.debug('Skipping PR merge in test environment');
         } else {
-          // Real merge logic would go here
-          // await this.githubService.mergePR(pr.prNumber);
+          this.logger.log(`Executing gh pr merge for PR: ${pr.prUrl}`);
+
+          // Get working directory (prefer task worktree, fallback to project)
+          const workingDir =
+            task.workingDirectory || task.project.workingDirectory;
+
+          try {
+            // Use gh pr merge with auto-merge strategy
+            await execAsync(
+              `gh pr merge ${pr.prUrl} --squash --delete-branch`,
+              { cwd: workingDir },
+            );
+
+            this.logger.log(`Successfully merged PR: ${pr.prUrl}`);
+
+            // Update PR status in database
+            pr.status = 'merged';
+            pr.mergedAt = new Date();
+            await this.prRepo.save(pr);
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : 'Unknown error';
+            this.logger.error(
+              `Failed to merge PR ${pr.prUrl}: ${errorMessage}`,
+            );
+            throw new Error(`PR merge failed: ${errorMessage}`);
+          }
         }
 
         // Mark task as completed
@@ -1259,7 +1288,10 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
         {
           prompt,
           context: {
-            workingDirectory: parentTask.project.workingDirectory,
+            // Phase 3.12: Use task-specific worktree path if available
+            workingDirectory:
+              parentTask.workingDirectory ||
+              parentTask.project.workingDirectory,
             taskId: parentTask.id,
           },
         },

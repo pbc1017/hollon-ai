@@ -249,7 +249,7 @@ export class QualityGateService {
       this.logger.log(`Running ESLint on: ${files}`);
 
       execSync(`npx eslint ${files} --format json`, {
-        cwd: task.project.workingDirectory,
+        cwd: task.workingDirectory || task.project.workingDirectory,
         stdio: 'pipe',
         encoding: 'utf-8',
       });
@@ -327,7 +327,7 @@ export class QualityGateService {
 
       // Run tsc --noEmit to check for type errors without generating output
       execSync('npx tsc --noEmit', {
-        cwd: task.project.workingDirectory,
+        cwd: task.workingDirectory || task.project.workingDirectory,
         stdio: 'pipe',
         encoding: 'utf-8',
       });
@@ -456,7 +456,7 @@ export class QualityGateService {
       const testCommand = `npx jest ${testFiles.join(' ')} --passWithNoTests --bail --json`;
 
       const result = execSync(testCommand, {
-        cwd: task.project.workingDirectory,
+        cwd: task.workingDirectory || task.project.workingDirectory,
         stdio: 'pipe',
         encoding: 'utf-8',
         timeout: 300000, // 5 minutes timeout
