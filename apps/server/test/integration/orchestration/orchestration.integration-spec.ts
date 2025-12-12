@@ -6,6 +6,7 @@ import { HollonOrchestratorService } from '@/modules/orchestration/services/holl
 import { TaskPoolService } from '@/modules/orchestration/services/task-pool.service';
 import { PromptComposerService } from '@/modules/orchestration/services/prompt-composer.service';
 import { BrainProviderService } from '@/modules/brain-provider/brain-provider.service';
+import { TaskExecutionService } from '@/modules/orchestration/services/task-execution.service';
 import { Hollon, HollonStatus } from '@/modules/hollon/entities/hollon.entity';
 import {
   Task,
@@ -13,7 +14,6 @@ import {
   TaskPriority,
   TaskType,
 } from '@/modules/task/entities/task.entity';
-import { Document } from '@/modules/document/entities/document.entity';
 import { Organization } from '@/modules/organization/entities/organization.entity';
 import { Team } from '@/modules/team/entities/team.entity';
 import { Role } from '@/modules/role/entities/role.entity';
@@ -51,6 +51,15 @@ describe('Orchestration E2E', () => {
     executeWithTracking: jest.fn(),
   };
 
+  const mockTaskExecutionService = {
+    executeTask: jest.fn().mockResolvedValue({
+      prUrl: 'https://github.com/test/repo/pull/1',
+      worktreePath: '/tmp/test-worktree',
+    }),
+    setupTaskWorktree: jest.fn(),
+    cleanupTaskWorktree: jest.fn(),
+  };
+
   // Helper to get repositories
   const getOrganizationRepo = () => dataSource.getRepository(Organization);
   const getTeamRepo = () => dataSource.getRepository(Team);
@@ -58,7 +67,6 @@ describe('Orchestration E2E', () => {
   const getHollonRepo = () => dataSource.getRepository(Hollon);
   const getProjectRepo = () => dataSource.getRepository(Project);
   const getTaskRepo = () => dataSource.getRepository(Task);
-  const getDocumentRepo = () => dataSource.getRepository(Document);
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -66,6 +74,8 @@ describe('Orchestration E2E', () => {
     })
       .overrideProvider(BrainProviderService)
       .useValue(mockBrainProvider)
+      .overrideProvider(TaskExecutionService)
+      .useValue(mockTaskExecutionService)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -189,28 +199,22 @@ describe('add', () => {
       expect(result.success).toBe(true);
       expect(result.taskId).toBe(testTask.id);
       expect(result.taskTitle).toBe('E2E Test Task');
-      expect(result.output).toContain('add function');
+      expect(result.output).toContain('Task executed with worktree isolation');
+      expect(result.output).toContain('https://github.com/test/repo/pull/1');
       expect(result.duration).toBeGreaterThan(0);
 
-      // Verify brain was called with correct parameters
-      expect(mockBrainProvider.executeWithTracking).toHaveBeenCalledWith(
-        expect.objectContaining({
-          prompt: expect.any(String),
-          systemPrompt: expect.any(String),
-        }),
-        expect.objectContaining({
-          organizationId: testOrg.id,
-          hollonId: testHollon.id,
-          taskId: testTask.id,
-        }),
+      // Verify TaskExecutionService was called
+      expect(mockTaskExecutionService.executeTask).toHaveBeenCalledWith(
+        testTask.id,
+        testHollon.id,
       );
 
-      // Verify task was completed
-      const completedTask = await getTaskRepo().findOne({
+      // Note: Task status is still IN_PROGRESS because TaskExecutionService is mocked
+      // In real execution, TaskExecutionService would update it to READY_FOR_REVIEW
+      const updatedTask = await getTaskRepo().findOne({
         where: { id: testTask.id },
       });
-      expect(completedTask?.status).toBe(TaskStatus.COMPLETED);
-      expect(completedTask?.completedAt).toBeDefined();
+      expect(updatedTask?.status).toBe(TaskStatus.IN_PROGRESS);
 
       // Verify hollon status returned to IDLE
       const updatedHollon = await getHollonRepo().findOne({
@@ -218,15 +222,8 @@ describe('add', () => {
       });
       expect(updatedHollon?.status).toBe(HollonStatus.IDLE);
 
-      // Verify document was created
-      const documents = await getDocumentRepo().find({
-        where: { hollonId: testHollon.id },
-      });
-      expect(documents.length).toBeGreaterThan(0);
-      expect(documents[0].content).toContain('add function');
-
-      // Cleanup the created document
-      await getDocumentRepo().delete(documents[0].id);
+      // Note: Document creation is handled by TaskExecutionService (mocked in this test)
+      // In real execution, a document would be created
     });
 
     it('should handle no available tasks gracefully', async () => {
@@ -313,15 +310,15 @@ describe('add', () => {
         organizationId: testOrg.id,
       });
 
-      // Mock brain failure
-      mockBrainProvider.executeWithTracking.mockRejectedValueOnce(
-        new Error('Brain execution failed'),
+      // Mock task execution failure
+      mockTaskExecutionService.executeTask.mockRejectedValueOnce(
+        new Error('Task execution failed'),
       );
 
       const result = await orchestrator.runCycle(testHollon.id);
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Brain execution failed');
+      expect(result.error).toContain('Task execution failed');
 
       // Verify hollon status - should be IDLE after error to allow picking up new tasks
       // ERROR state is reserved for unrecoverable situations

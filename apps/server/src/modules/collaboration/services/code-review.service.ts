@@ -155,6 +155,14 @@ export class CodeReviewService implements ICodeReviewService {
 
     await this.prRepo.save(pr);
 
+    // Phase 3.16: Post review comment to GitHub PR (for human visibility)
+    await this.postReviewCommentToGitHub(pr, review).catch((error) => {
+      // Don't fail the review if GitHub comment posting fails
+      this.logger.warn(
+        `Failed to post review comment to GitHub PR ${prId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    });
+
     // 작성자에게 리뷰 결과 알림
     if (pr.authorHollonId) {
       await this.messageService.send({
@@ -933,6 +941,70 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
    * Phase 3.12: Task worktree 정리
    * Task 완료 후 워크트리 삭제
    */
+  /**
+   * Phase 3.16: Post review comment to GitHub PR
+   * Makes review comments visible to human developers
+   */
+  private async postReviewCommentToGitHub(
+    pr: TaskPullRequest,
+    review: ReviewSubmissionDto,
+  ): Promise<void> {
+    if (!pr.prUrl || process.env.NODE_ENV === 'test') {
+      // Skip in test environment or if no PR URL
+      return;
+    }
+
+    // Extract PR details from URL
+    const match = pr.prUrl.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+
+    if (!match) {
+      this.logger.warn(`Invalid PR URL format: ${pr.prUrl}`);
+      return;
+    }
+
+    const [, owner, repo, prNumber] = match;
+
+    // Format comment based on review decision
+    const emoji = review.decision === PullRequestStatus.APPROVED ? '✅' : '⚠️';
+    const title =
+      review.decision === PullRequestStatus.APPROVED
+        ? 'Code Review: APPROVED'
+        : 'Code Review: Changes Requested';
+
+    const commentBody = `## ${emoji} ${title}
+
+${review.comments || 'No additional comments.'}
+
+---
+_Automated review by Hollon AI_`;
+
+    // Post comment using gh CLI
+    this.logger.log(
+      `Posting review comment to GitHub PR #${prNumber} (${review.decision})`,
+    );
+
+    try {
+      const { stdout, stderr } = await execAsync(
+        `gh pr comment ${prNumber} --repo ${owner}/${repo} --body ${JSON.stringify(commentBody)}`,
+        {
+          timeout: 30000, // 30 second timeout
+        },
+      );
+
+      this.logger.log(`GitHub PR comment posted: ${stdout}`);
+      if (stderr) {
+        this.logger.debug(`gh pr comment stderr: ${stderr}`);
+      }
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Failed to post GitHub PR comment: ${err.message}`,
+        err.stack,
+      );
+      throw error;
+    }
+  }
+
   private async cleanupTaskWorktree(
     taskId: string,
     hollonId: string,
