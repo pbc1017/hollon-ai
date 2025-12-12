@@ -271,6 +271,19 @@ Please provide the decomposition in JSON format only, no additional text.`;
       relations: ['manager', 'hollons'],
     });
 
+    // Get organization settings for workingDirectory and repositoryUrl
+    const organization = await this.goalRepo.manager
+      .getRepository('Organization')
+      .findOne({
+        where: { id: goal.organizationId },
+      });
+
+    const workingDirectory =
+      (organization?.settings as any)?.workingDirectory || process.cwd();
+    const repositoryUrl =
+      (organization?.settings as any)?.repositoryUrl ||
+      `file://${workingDirectory}`;
+
     for (const projectDef of decomposition) {
       // Project 생성
       const project = this.projectRepo.create({
@@ -279,6 +292,8 @@ Please provide the decomposition in JSON format only, no additional text.`;
         name: projectDef.name,
         description: projectDef.description,
         status: ProjectStatus.ACTIVE,
+        workingDirectory,
+        repositoryUrl,
       });
 
       const savedProject = await this.projectRepo.save(project);
