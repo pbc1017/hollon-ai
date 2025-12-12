@@ -296,39 +296,35 @@ describe('HollonOrchestratorService', () => {
       expect(result.success).toBe(true);
       expect(result.taskId).toBe('task-1');
       expect(result.taskTitle).toBe('Test Task');
-      expect(result.output).toBe('Brain output');
+      expect(result.output).toContain('Task executed with worktree isolation');
+      expect(result.output).toContain('https://github.com/test/repo/pull/1');
       expect(result.duration).toBeGreaterThanOrEqual(0);
 
-      // Verify workflow
+      // Verify workflow (Phase 3.12/4: TaskExecutionService integration)
       expect(mockHollonRepo.update).toHaveBeenCalledWith(
         { id: 'hollon-1' },
         { status: HollonStatus.WORKING },
       );
       expect(mockTaskPool.pullNextTask).toHaveBeenCalledWith('hollon-1');
-      expect(mockPromptComposer.composePrompt).toHaveBeenCalledWith(
-        'hollon-1',
+
+      // TaskExecutionService now handles: prompt, brain, quality gate, document, PR, CI
+      const taskExecutionService = module.get(TaskExecutionService);
+      expect(taskExecutionService.executeTask).toHaveBeenCalledWith(
         'task-1',
+        'hollon-1',
       );
-      expect(mockBrainProvider.executeWithTracking).toHaveBeenCalledWith(
-        expect.objectContaining({
-          prompt: 'User prompt',
-          systemPrompt: 'System prompt',
-        }),
-        expect.objectContaining({
-          organizationId: 'org-1',
-          hollonId: 'hollon-1',
-          taskId: 'task-1',
-        }),
-      );
-      expect(mockDocumentRepo.save).toHaveBeenCalled();
-      expect(mockTaskPool.completeTask).toHaveBeenCalledWith('task-1');
+
+      // Note: Task is NOT completed here - it's set to READY_FOR_REVIEW
+      // A reviewer hollon will pick it up later (Phase 3.16)
+      expect(mockTaskPool.completeTask).not.toHaveBeenCalled();
+
       expect(mockHollonRepo.update).toHaveBeenCalledWith(
         { id: 'hollon-1' },
         { status: HollonStatus.IDLE },
       );
     });
 
-    it('should handle brain execution failure', async () => {
+    it('should handle task execution failure', async () => {
       const mockHollon = {
         id: 'hollon-1',
         name: 'Alpha',
@@ -343,6 +339,9 @@ describe('HollonOrchestratorService', () => {
         project: { workingDirectory: '/tmp' },
       };
 
+      // Get the TaskExecutionService mock to override for this test
+      const taskExecutionService = module.get(TaskExecutionService);
+
       mockHollonRepo.findOne.mockResolvedValue(mockHollon);
       mockHollonRepo.update.mockResolvedValue({ affected: 1 });
       mockHollonRepo.manager.findOne.mockResolvedValue(null); // Task not complex
@@ -350,20 +349,16 @@ describe('HollonOrchestratorService', () => {
         task: mockTask,
         reason: 'Directly assigned',
       });
-      mockPromptComposer.composePrompt.mockResolvedValue({
-        systemPrompt: 'sys',
-        userPrompt: 'user',
-        totalTokens: 10,
-        layers: {},
-      });
-      mockBrainProvider.executeWithTracking.mockRejectedValue(
-        new Error('Brain failed'),
-      );
+
+      // Mock TaskExecutionService to fail
+      jest
+        .spyOn(taskExecutionService, 'executeTask')
+        .mockRejectedValue(new Error('Task execution failed'));
 
       const result = await service.runCycle('hollon-1');
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Brain failed');
+      expect(result.error).toContain('Task execution failed');
       // Hollon should return to IDLE after error to allow picking up new tasks
       // ERROR state is reserved for unrecoverable situations
       expect(mockHollonRepo.update).toHaveBeenCalledWith(

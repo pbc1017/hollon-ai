@@ -9,9 +9,15 @@ import { Project } from '../../project/entities/project.entity';
 import { Hollon } from '../../hollon/entities/hollon.entity';
 import { Organization } from '../../organization/entities/organization.entity';
 import { OrganizationSettings } from '../../organization/interfaces/organization-settings.interface';
+import {
+  Document,
+  DocumentType,
+} from '../../document/entities/document.entity';
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
+import { BrainResponse } from '../../brain-provider/interfaces/brain-provider.interface';
 import { ICodeReviewPort } from '../domain/ports/code-review.port';
 import { KnowledgeContext } from '../../brain-provider/services/knowledge-injection.service';
+import { QualityGateService } from './quality-gate.service';
 
 const execAsync = promisify(exec);
 
@@ -32,7 +38,10 @@ export class TaskExecutionService {
     private readonly hollonRepo: Repository<Hollon>,
     @InjectRepository(Organization)
     private readonly orgRepo: Repository<Organization>,
+    @InjectRepository(Document)
+    private readonly documentRepo: Repository<Document>,
     private readonly brainProvider: BrainProviderService,
+    private readonly qualityGateService: QualityGateService,
     @Inject('ICodeReviewPort')
     private readonly codeReviewPort: ICodeReviewPort,
   ) {}
@@ -40,11 +49,15 @@ export class TaskExecutionService {
   /**
    * Task 실행 전체 플로우
    * Phase 3.11: Hollon별 Worktree 재사용 + Hollon 이름이 포함된 브랜치
+   * Phase 3.12/4: Quality Gate + Document 저장 통합
    * 1. Hollon별 Worktree 확보 (재사용 전략)
    * 2. Hollon별 브랜치 생성
    * 3. BrainProvider 실행 (지식 주입 포함)
-   * 4. PR 생성
-   * 5. CodeReview 요청
+   * 4. Quality Gate 검증
+   * 5. Document로 결과 저장
+   * 6. PR 생성
+   * 7. CI 체크 대기 및 검증
+   * 8. CodeReview 요청
    */
   async executeTask(
     taskId: string,
@@ -94,9 +107,52 @@ export class TaskExecutionService {
       });
 
       // 4. BrainProvider 실행 (worktree 경로에서)
-      await this.executeBrainProvider(hollon, task, worktreePath);
+      const brainResult = await this.executeBrainProvider(
+        hollon,
+        task,
+        worktreePath,
+      );
 
-      // 5. PR 생성
+      // 5. Quality Gate 검증 (Phase 3.12/4)
+      const organization = await this.orgRepo.findOne({
+        where: { id: task.project.organizationId },
+      });
+      const settings = (organization?.settings || {}) as OrganizationSettings;
+
+      const qualityResult = await this.qualityGateService.validateResult({
+        task,
+        brainResult,
+        organizationId: task.project.organizationId,
+        costLimitDailyCents: settings.costLimitDailyCents,
+      });
+
+      if (!qualityResult.passed) {
+        this.logger.warn(
+          `Quality gate failed for task ${taskId}: ${qualityResult.reason}`,
+        );
+
+        if (qualityResult.shouldRetry) {
+          throw new Error(
+            `QUALITY_GATE_FAILURE: ${qualityResult.reason || 'Quality validation failed'}`,
+          );
+        } else {
+          throw new Error(
+            `QUALITY_GATE_FAILURE_NO_RETRY: ${qualityResult.reason || 'Quality validation failed - max retries'}`,
+          );
+        }
+      }
+
+      this.logger.log(`Quality gate passed for task ${taskId}`);
+
+      // 6. Document로 결과 저장 (Phase 3.12/4)
+      await this.saveResultDocument(
+        task,
+        hollonId,
+        brainResult.output,
+        brainResult.cost.totalCostCents,
+      );
+
+      // 7. PR 생성
       const prUrl = await this.createPullRequest(
         task.project,
         task,
@@ -104,11 +160,11 @@ export class TaskExecutionService {
       );
       this.logger.log(`PR created: ${prUrl}`);
 
-      // 5.5. Phase 4: Wait for CI checks to complete
+      // 8. Phase 4: Wait for CI checks to complete
       this.logger.log(`Waiting for CI checks to complete for PR: ${prUrl}`);
       await this.waitForCIChecks(prUrl, worktreePath);
 
-      // 5.6. Phase 4: Check CI status
+      // 9. Phase 4: Check CI status
       const ciResult = await this.checkCIStatus(prUrl, worktreePath);
 
       if (!ciResult.passed) {
@@ -137,10 +193,10 @@ export class TaskExecutionService {
 
       this.logger.log(`All CI checks passed for task ${taskId}`);
 
-      // 6. CodeReview 요청 (Phase 2 활용)
+      // 10. CodeReview 요청 (Phase 2 활용)
       await this.requestCodeReview(task, prUrl, hollonId, worktreePath);
 
-      // 7. Task를 READY_FOR_REVIEW로 변경 (Phase 3.16: Manager review 대기)
+      // 11. Task를 READY_FOR_REVIEW로 변경 (Phase 3.16: Manager review 대기)
       // Manager hollon이 이 status를 감지하고 temporary review hollon 생성
       await this.taskRepo.update(taskId, {
         status: TaskStatus.READY_FOR_REVIEW,
@@ -323,12 +379,13 @@ export class TaskExecutionService {
 
   /**
    * BrainProvider 실행 (지식 주입 포함)
+   * Phase 3.12/4: BrainResponse 반환하여 Quality Gate와 Document 저장에 사용
    */
   private async executeBrainProvider(
     hollon: Hollon,
     task: Task,
     worktreePath: string,
-  ): Promise<void> {
+  ): Promise<BrainResponse> {
     // 프롬프트 구성
     const prompt = this.buildTaskPrompt(task);
 
@@ -363,6 +420,54 @@ export class TaskExecutionService {
     this.logger.log(
       `Brain execution completed: cost=${result.cost.totalCostCents.toFixed(4)}`,
     );
+
+    return result;
+  }
+
+  /**
+   * Phase 3.12/4: Save execution result as document for future reference
+   * Documents serve as execution history and can be used for knowledge retrieval
+   */
+  private async saveResultDocument(
+    task: Task,
+    hollonId: string,
+    output: string,
+    costCents: number,
+  ): Promise<void> {
+    try {
+      const document = this.documentRepo.create({
+        title: `Task Execution: ${task.title}`,
+        content: output,
+        type: DocumentType.TASK_CONTEXT,
+        organizationId: task.organizationId,
+        projectId: task.projectId,
+        hollonId: hollonId,
+        taskId: task.id,
+        tags: [
+          'task-execution',
+          'automated',
+          ...(task.requiredSkills || []),
+          ...(task.tags || []),
+        ],
+        metadata: {
+          executionCostCents: costCents,
+          taskType: task.type,
+          hollonName: task.assignedHollon?.name || 'unknown',
+          executedAt: new Date().toISOString(),
+        },
+      });
+
+      await this.documentRepo.save(document);
+
+      this.logger.log(
+        `Task execution result saved as document: ${document.id}`,
+      );
+    } catch (error) {
+      // Log error but don't fail the task execution
+      this.logger.error(
+        `Failed to save result document: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
   }
 
   /**
