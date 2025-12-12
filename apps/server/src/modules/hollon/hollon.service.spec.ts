@@ -17,6 +17,9 @@ import { TeamService } from '../team/team.service';
 import { OrganizationService } from '../organization/organization.service';
 import { Team } from '../team/entities/team.entity';
 import { Role } from '../role/entities/role.entity';
+import { Organization } from '../organization/entities/organization.entity';
+import { Task } from '../task/entities/task.entity';
+import { ProcessManagerService } from '../brain-provider/services/process-manager.service';
 import {
   NotFoundException,
   ForbiddenException,
@@ -90,6 +93,21 @@ describe('HollonService', () => {
     findOne: jest.fn(),
   };
 
+  const mockOrganizationRepository = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    update: jest.fn(),
+  };
+
+  const mockTaskRepository = {
+    update: jest.fn(),
+  };
+
+  const mockProcessManagerService = {
+    killAll: jest.fn().mockReturnValue({ killed: 0, pids: [] }),
+    getRunningProcessCount: jest.fn().mockReturnValue(0),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -107,6 +125,14 @@ describe('HollonService', () => {
           useValue: mockRoleRepository,
         },
         {
+          provide: getRepositoryToken(Organization),
+          useValue: mockOrganizationRepository,
+        },
+        {
+          provide: getRepositoryToken(Task),
+          useValue: mockTaskRepository,
+        },
+        {
           provide: ApprovalService,
           useValue: mockApprovalService,
         },
@@ -121,6 +147,10 @@ describe('HollonService', () => {
         {
           provide: OrganizationService,
           useValue: mockOrganizationService,
+        },
+        {
+          provide: ProcessManagerService,
+          useValue: mockProcessManagerService,
         },
       ],
     }).compile();
