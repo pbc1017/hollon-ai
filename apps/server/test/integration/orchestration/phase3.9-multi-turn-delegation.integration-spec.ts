@@ -355,11 +355,11 @@ describe('Phase 3.9: Multi-Turn Delegation (SSOT)', () => {
       // Trigger parent task status update
       await subtaskService.updateParentTaskStatus(parentTask.id);
 
-      // Verify parent task is now COMPLETED
+      // Phase 3.10: Parent task goes to READY_FOR_REVIEW when all subtasks complete
       const updatedParent = await taskRepo.findOne({
         where: { id: parentTask.id },
       });
-      expect(updatedParent!.status).toBe(TaskStatus.COMPLETED);
+      expect(updatedParent!.status).toBe(TaskStatus.READY_FOR_REVIEW);
     });
   });
 

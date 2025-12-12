@@ -412,10 +412,12 @@ describe('Phase 3.7: Sub-Hollon Creation and Cleanup', () => {
         where: { id: parentTask.id },
       });
 
-      // Parent task status should be COMPLETED or IN_PROGRESS (depending on subtask completion)
-      expect([TaskStatus.COMPLETED, TaskStatus.IN_PROGRESS]).toContain(
-        updatedParentTask?.status,
-      );
+      // Phase 3.10: After subtasks complete, parent task goes to READY_FOR_REVIEW (not directly COMPLETED)
+      expect([
+        TaskStatus.COMPLETED,
+        TaskStatus.IN_PROGRESS,
+        TaskStatus.READY_FOR_REVIEW,
+      ]).toContain(updatedParentTask?.status);
 
       console.log(`✅ Parent task status: ${updatedParentTask?.status}`);
     });

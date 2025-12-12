@@ -1,34 +1,29 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { Repository } from 'typeorm';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import configuration from '../../../src/config/configuration';
-import { getTestDatabaseConfig } from '../../setup/test-database';
-import { HollonOrchestratorService } from '../../../src/modules/orchestration/services/hollon-orchestrator.service';
-import { TaskPoolService } from '../../../src/modules/orchestration/services/task-pool.service';
-import { PromptComposerService } from '../../../src/modules/orchestration/services/prompt-composer.service';
-import { QualityGateService } from '../../../src/modules/orchestration/services/quality-gate.service';
-import { EscalationService } from '../../../src/modules/orchestration/services/escalation.service';
-import { BrainProviderService } from '../../../src/modules/brain-provider/brain-provider.service';
-import { HollonService } from '../../../src/modules/hollon/hollon.service';
+import { INestApplication } from '@nestjs/common';
+import { DataSource } from 'typeorm';
+import { AppModule } from '@/app.module';
+import { HollonOrchestratorService } from '@/modules/orchestration/services/hollon-orchestrator.service';
+import { TaskPoolService } from '@/modules/orchestration/services/task-pool.service';
+import { PromptComposerService } from '@/modules/orchestration/services/prompt-composer.service';
+import { BrainProviderService } from '@/modules/brain-provider/brain-provider.service';
 import {
   Hollon,
   HollonStatus,
-} from '../../../src/modules/hollon/entities/hollon.entity';
+} from '@/modules/hollon/entities/hollon.entity';
 import {
   Task,
   TaskStatus,
   TaskPriority,
   TaskType,
-} from '../../../src/modules/task/entities/task.entity';
-import { Document } from '../../../src/modules/document/entities/document.entity';
-import { Organization } from '../../../src/modules/organization/entities/organization.entity';
-import { Team } from '../../../src/modules/team/entities/team.entity';
-import { Role } from '../../../src/modules/role/entities/role.entity';
-import { Project } from '../../../src/modules/project/entities/project.entity';
+} from '@/modules/task/entities/task.entity';
+import { Document } from '@/modules/document/entities/document.entity';
+import { Organization } from '@/modules/organization/entities/organization.entity';
+import { Team } from '@/modules/team/entities/team.entity';
+import { Role } from '@/modules/role/entities/role.entity';
+import { Project } from '@/modules/project/entities/project.entity';
 import { OrganizationFactory } from '../../fixtures/organization.factory';
 import { TeamFactory } from '../../fixtures/team.factory';
+import { cleanupTestData } from '../../utils/test-database.utils';
 
 /**
  * E2E Orchestration Test
@@ -41,18 +36,11 @@ import { TeamFactory } from '../../fixtures/team.factory';
  * Note: This test uses mocked brain provider to avoid actual Claude API calls
  */
 describe('Orchestration E2E', () => {
-  let module: TestingModule;
+  let app: INestApplication;
+  let dataSource: DataSource;
   let orchestrator: HollonOrchestratorService;
   let taskPool: TaskPoolService;
   let promptComposer: PromptComposerService;
-
-  let organizationRepo: Repository<Organization>;
-  let teamRepo: Repository<Team>;
-  let roleRepo: Repository<Role>;
-  let hollonRepo: Repository<Hollon>;
-  let projectRepo: Repository<Project>;
-  let taskRepo: Repository<Task>;
-  let documentRepo: Repository<Document>;
 
   // Test data IDs
   let testOrg: Organization;
@@ -66,94 +54,38 @@ describe('Orchestration E2E', () => {
     executeWithTracking: jest.fn(),
   };
 
+  // Helper to get repositories
+  const getOrganizationRepo = () => dataSource.getRepository(Organization);
+  const getTeamRepo = () => dataSource.getRepository(Team);
+  const getRoleRepo = () => dataSource.getRepository(Role);
+  const getHollonRepo = () => dataSource.getRepository(Hollon);
+  const getProjectRepo = () => dataSource.getRepository(Project);
+  const getTaskRepo = () => dataSource.getRepository(Task);
+  const getDocumentRepo = () => dataSource.getRepository(Document);
+
   beforeAll(async () => {
-    module = await Test.createTestingModule({
-      imports: [
-        ConfigModule.forRoot({
-          isGlobal: true,
-          load: [configuration],
-        }),
-        TypeOrmModule.forRootAsync({
-          imports: [ConfigModule],
-          useFactory: (configService: ConfigService) =>
-            getTestDatabaseConfig(configService),
-          inject: [ConfigService],
-        }),
-        TypeOrmModule.forFeature([
-          Organization,
-          Team,
-          Role,
-          Hollon,
-          Project,
-          Task,
-          Document,
-        ]),
-      ],
-      providers: [
-        HollonOrchestratorService,
-        TaskPoolService,
-        PromptComposerService,
-        QualityGateService,
-        {
-          provide: BrainProviderService,
-          useValue: mockBrainProvider,
-        },
-        {
-          provide: EscalationService,
-          useValue: {
-            escalate: jest.fn(),
-            determineEscalationLevel: jest.fn(),
-            getEscalationHistory: jest.fn(),
-            clearHistory: jest.fn(),
-          },
-        },
-        {
-          provide: HollonService,
-          useValue: {
-            createTemporary: jest.fn(),
-            findOne: jest.fn(),
-          },
-        },
-      ],
-    }).compile();
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(BrainProviderService)
+      .useValue(mockBrainProvider)
+      .compile();
 
-    orchestrator = module.get<HollonOrchestratorService>(
-      HollonOrchestratorService,
-    );
-    taskPool = module.get<TaskPoolService>(TaskPoolService);
-    promptComposer = module.get<PromptComposerService>(PromptComposerService);
-    module.get<BrainProviderService>(BrainProviderService);
+    app = moduleFixture.createNestApplication();
+    await app.init();
 
-    organizationRepo = module.get<Repository<Organization>>(
-      getRepositoryToken(Organization),
-    );
-    teamRepo = module.get<Repository<Team>>(getRepositoryToken(Team));
-    roleRepo = module.get<Repository<Role>>(getRepositoryToken(Role));
-    hollonRepo = module.get<Repository<Hollon>>(getRepositoryToken(Hollon));
-    projectRepo = module.get<Repository<Project>>(getRepositoryToken(Project));
-    taskRepo = module.get<Repository<Task>>(getRepositoryToken(Task));
-    documentRepo = module.get<Repository<Document>>(
-      getRepositoryToken(Document),
-    );
+    dataSource = app.get(DataSource);
+    orchestrator = app.get(HollonOrchestratorService);
+    taskPool = app.get(TaskPoolService);
+    promptComposer = app.get(PromptComposerService);
+
+    // Clean up before tests
+    await cleanupTestData(dataSource);
   });
 
   afterAll(async () => {
-    // Cleanup test data (order matters for foreign key constraints)
-    try {
-      if (testTask) await taskRepo.delete(testTask.id);
-      if (testHollon) await hollonRepo.delete(testHollon.id);
-      if (testProject) await projectRepo.delete(testProject.id);
-      if (testRole) await roleRepo.delete(testRole.id);
-      if (testTeam) await teamRepo.delete(testTeam.id);
-      if (testOrg) await organizationRepo.delete(testOrg.id);
-    } catch (error) {
-      // Ignore cleanup errors during test teardown
-      console.log('Cleanup error (ignored):', error.message);
-    }
-
-    if (module) {
-      await module.close();
-    }
+    await cleanupTestData(dataSource);
+    await app.close();
   });
 
   beforeEach(() => {
@@ -164,17 +96,17 @@ describe('Orchestration E2E', () => {
     it('should execute complete workflow: setup → task pull → prompt composition → brain execution → completion', async () => {
       // ==================== SETUP PHASE ====================
       // Create organization using factory
-      testOrg = await OrganizationFactory.createPersisted(organizationRepo, {
+      testOrg = await OrganizationFactory.createPersisted(getOrganizationRepo(), {
         description: 'E2E orchestration test organization',
       });
 
       // Create team using factory
-      testTeam = await TeamFactory.createPersisted(teamRepo, testOrg.id, {
+      testTeam = await TeamFactory.createPersisted(getTeamRepo(), testOrg.id, {
         description: 'E2E orchestration test team',
       });
 
       // Create role
-      testRole = await roleRepo.save({
+      testRole = await getRoleRepo().save({
         name: 'E2E Backend Engineer',
         description: 'Test role for backend development',
         systemPrompt:
@@ -184,7 +116,7 @@ describe('Orchestration E2E', () => {
       });
 
       // Create hollon
-      testHollon = await hollonRepo.save({
+      testHollon = await getHollonRepo().save({
         name: 'E2E Alpha Hollon',
         status: HollonStatus.IDLE,
         systemPrompt: 'You are Alpha, a diligent backend engineer.',
@@ -195,7 +127,7 @@ describe('Orchestration E2E', () => {
       });
 
       // Create project
-      testProject = await projectRepo.save({
+      testProject = await getProjectRepo().save({
         name: 'E2E Test Project',
         description: 'Test project for E2E',
         workingDirectory: '/tmp/e2e-test',
@@ -203,7 +135,7 @@ describe('Orchestration E2E', () => {
       });
 
       // Create task
-      testTask = await taskRepo.save({
+      testTask = await getTaskRepo().save({
         title: 'E2E Test Task',
         description: 'Implement a simple function to add two numbers',
         type: TaskType.IMPLEMENTATION,
@@ -274,32 +206,32 @@ describe('add', () => {
       );
 
       // Verify task was completed
-      const completedTask = await taskRepo.findOne({
+      const completedTask = await getTaskRepo().findOne({
         where: { id: testTask.id },
       });
       expect(completedTask?.status).toBe(TaskStatus.COMPLETED);
       expect(completedTask?.completedAt).toBeDefined();
 
       // Verify hollon status returned to IDLE
-      const updatedHollon = await hollonRepo.findOne({
+      const updatedHollon = await getHollonRepo().findOne({
         where: { id: testHollon.id },
       });
       expect(updatedHollon?.status).toBe(HollonStatus.IDLE);
 
       // Verify document was created
-      const documents = await documentRepo.find({
+      const documents = await getDocumentRepo().find({
         where: { hollonId: testHollon.id },
       });
       expect(documents.length).toBeGreaterThan(0);
       expect(documents[0].content).toContain('add function');
 
       // Cleanup the created document
-      await documentRepo.delete(documents[0].id);
+      await getDocumentRepo().delete(documents[0].id);
     });
 
     it('should handle no available tasks gracefully', async () => {
       // Create hollon without assigned tasks
-      const idleHollon = await hollonRepo.save({
+      const idleHollon = await getHollonRepo().save({
         name: 'E2E Idle Hollon',
         status: HollonStatus.IDLE,
         systemPrompt: 'You are an idle hollon.',
@@ -316,12 +248,12 @@ describe('add', () => {
       expect(mockBrainProvider.executeWithTracking).not.toHaveBeenCalled();
 
       // Cleanup
-      await hollonRepo.delete(idleHollon.id);
+      await getHollonRepo().delete(idleHollon.id);
     });
 
     it('should handle file conflicts correctly', async () => {
       // Create first task and mark as in progress
-      const task1 = await taskRepo.save({
+      const task1 = await getTaskRepo().save({
         title: 'Task 1',
         description: 'First task',
         type: TaskType.IMPLEMENTATION,
@@ -334,7 +266,7 @@ describe('add', () => {
       });
 
       // Create conflicting task
-      const task2 = await taskRepo.save({
+      const task2 = await getTaskRepo().save({
         title: 'Task 2',
         description: 'Conflicting task',
         type: TaskType.IMPLEMENTATION,
@@ -346,7 +278,7 @@ describe('add', () => {
       });
 
       // Create another hollon
-      const hollon2 = await hollonRepo.save({
+      const hollon2 = await getHollonRepo().save({
         name: 'E2E Beta Hollon',
         status: HollonStatus.IDLE,
         systemPrompt: 'You are Beta.',
@@ -363,14 +295,14 @@ describe('add', () => {
       expect(pullResult.reason).toBe('No available tasks');
 
       // Cleanup
-      await taskRepo.delete(task1.id);
-      await taskRepo.delete(task2.id);
-      await hollonRepo.delete(hollon2.id);
+      await getTaskRepo().delete(task1.id);
+      await getTaskRepo().delete(task2.id);
+      await getHollonRepo().delete(hollon2.id);
     });
 
     it('should handle brain execution errors', async () => {
       // Create task
-      const errorTask = await taskRepo.save({
+      const errorTask = await getTaskRepo().save({
         title: 'Error Task',
         description: 'This task will fail',
         type: TaskType.IMPLEMENTATION,
@@ -393,23 +325,23 @@ describe('add', () => {
 
       // Verify hollon status - should be IDLE after error to allow picking up new tasks
       // ERROR state is reserved for unrecoverable situations
-      const hollon = await hollonRepo.findOne({
+      const hollon = await getHollonRepo().findOne({
         where: { id: testHollon.id },
       });
       expect(hollon?.status).toBe(HollonStatus.IDLE);
 
       // Cleanup
-      await taskRepo.delete(errorTask.id);
+      await getTaskRepo().delete(errorTask.id);
 
       // Reset hollon status
-      await hollonRepo.update(testHollon.id, { status: HollonStatus.IDLE });
+      await getHollonRepo().update(testHollon.id, { status: HollonStatus.IDLE });
     });
   });
 
   describe('Task Pool Priority System', () => {
     it('should prioritize directly assigned tasks', async () => {
       // Create multiple tasks with different priorities
-      const directTask = await taskRepo.save({
+      const directTask = await getTaskRepo().save({
         title: 'Direct Task',
         description: 'Directly assigned',
         type: TaskType.IMPLEMENTATION,
@@ -420,7 +352,7 @@ describe('add', () => {
         organizationId: testOrg.id,
       });
 
-      const unassignedTask = await taskRepo.save({
+      const unassignedTask = await getTaskRepo().save({
         title: 'Unassigned Task',
         description: 'Higher priority but unassigned',
         type: TaskType.IMPLEMENTATION,
@@ -438,15 +370,15 @@ describe('add', () => {
       expect(pullResult.reason).toBe('Directly assigned');
 
       // Cleanup
-      await taskRepo.delete(directTask.id);
-      await taskRepo.delete(unassignedTask.id);
+      await getTaskRepo().delete(directTask.id);
+      await getTaskRepo().delete(unassignedTask.id);
     });
   });
 
   describe('Prompt Composition', () => {
     it('should compose all 6 layers correctly', async () => {
       // Create a task for testing
-      const promptTask = await taskRepo.save({
+      const promptTask = await getTaskRepo().save({
         title: 'Prompt Test Task',
         description: 'Test prompt composition',
         type: TaskType.IMPLEMENTATION,
@@ -483,7 +415,7 @@ describe('add', () => {
       expect(prompt.totalTokens).toBeGreaterThan(0);
 
       // Cleanup
-      await taskRepo.delete(promptTask.id);
+      await getTaskRepo().delete(promptTask.id);
     });
   });
 });

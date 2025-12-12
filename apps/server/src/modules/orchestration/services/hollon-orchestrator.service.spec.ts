@@ -10,9 +10,7 @@ import { Task, TaskStatus } from '../../task/entities/task.entity';
 import { Organization } from '../../organization/entities/organization.entity';
 import { QualityGateService } from './quality-gate.service';
 import { EscalationService } from './escalation.service';
-import { HollonService } from '../../hollon/hollon.service';
 import { SubtaskCreationService } from './subtask-creation.service';
-import { CodeReviewService } from '../../collaboration/services/code-review.service';
 import { Role } from '../../role/entities/role.entity';
 
 describe('HollonOrchestratorService', () => {
@@ -103,10 +101,11 @@ describe('HollonOrchestratorService', () => {
           useValue: mockEscalationService,
         },
         {
-          provide: HollonService,
+          provide: 'IHollonService',
           useValue: {
-            createTemporary: jest.fn(),
-            findOne: jest.fn(),
+            createTemporaryHollon: jest.fn(),
+            releaseTemporaryHollon: jest.fn(),
+            findById: jest.fn(),
             create: jest.fn(),
             remove: jest.fn(),
           },
@@ -135,13 +134,13 @@ describe('HollonOrchestratorService', () => {
           },
         },
         {
-          provide: CodeReviewService,
+          provide: 'ICodeReviewPort',
           useValue: {
             createPullRequest: jest.fn(),
             requestReview: jest.fn(),
-            getPullRequestsForTask: jest.fn().mockResolvedValue([]),
-            assignReviewer: jest.fn(),
-            getReviewsForPR: jest.fn().mockResolvedValue([]),
+            findPullRequestsByTaskId: jest.fn().mockResolvedValue([]),
+            findPullRequest: jest.fn(),
+            findPullRequestByNumber: jest.fn(),
           },
         },
         {
