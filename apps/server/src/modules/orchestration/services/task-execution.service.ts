@@ -222,6 +222,7 @@ export class TaskExecutionService {
    * - Task당 1개의 독립적인 worktree 생성
    * - 경로: {projectDir}/../.git-worktrees/hollon-{hollonId}/task-{taskId}
    * - 장점: 완전 격리, Git 충돌 없음, 병렬 처리 가능
+   * - Organization settings의 baseBranch를 기준으로 생성 (기본값: main)
    */
   private async getOrCreateWorktree(
     project: Project,
@@ -246,9 +247,16 @@ export class TaskExecutionService {
       throw new Error(`Worktree already exists: ${worktreePath}`);
     }
 
+    // Get base branch from organization settings
+    const organization = await this.orgRepo.findOne({
+      where: { id: project.organizationId },
+    });
+    const settings = (organization?.settings || {}) as OrganizationSettings;
+    const baseBranch = settings.baseBranch || 'main';
+
     // Create new worktree for this task
     this.logger.log(
-      `Creating task worktree for ${hollon.name} / task ${task.id.slice(0, 8)}`,
+      `Creating task worktree for ${hollon.name} / task ${task.id.slice(0, 8)} from ${baseBranch}`,
     );
 
     try {
@@ -264,16 +272,16 @@ export class TaskExecutionService {
       // Create unique temporary branch name for worktree
       const tempBranch = `wt-hollon-${hollon.id.slice(0, 8)}-task-${task.id.slice(0, 8)}`;
 
-      // Create worktree with explicit branch from main
+      // Create worktree with explicit branch from organization's base branch
       await execAsync(
-        `git worktree add -b ${tempBranch} ${worktreePath} main`,
+        `git worktree add -b ${tempBranch} ${worktreePath} ${baseBranch}`,
         {
           cwd: project.workingDirectory,
         },
       );
 
       this.logger.log(
-        `Task worktree created: hollon-${hollon.id.slice(0, 8)}/task-${task.id.slice(0, 8)}`,
+        `Task worktree created: hollon-${hollon.id.slice(0, 8)}/task-${task.id.slice(0, 8)} from ${baseBranch}`,
       );
     } catch (error: unknown) {
       const err = error as Error & { stderr?: string };
@@ -282,8 +290,12 @@ export class TaskExecutionService {
       const fullError = stderr
         ? `${errorMessage}\nstderr: ${stderr}`
         : errorMessage;
-      this.logger.error(`Failed to create task worktree: ${fullError}`);
-      throw new Error(`Task worktree creation failed: ${fullError}`);
+      this.logger.error(
+        `Failed to create task worktree from ${baseBranch}: ${fullError}`,
+      );
+      throw new Error(
+        `Task worktree creation failed from ${baseBranch}: ${fullError}`,
+      );
     }
 
     // Phase 3.12: Save worktree path to task entity
