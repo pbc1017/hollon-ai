@@ -494,9 +494,9 @@ export class HollonService implements IHollonService {
   }> {
     this.logger.warn('EMERGENCY STOP: Pausing all hollons and tasks');
 
-    // 1. Pause all ACTIVE/WORKING hollons
+    // 1. Pause all WORKING/REVIEWING hollons
     const { affected: stoppedHollons } = await this.hollonRepo.update(
-      { status: In([HollonStatus.ACTIVE, HollonStatus.WORKING]) },
+      { status: In([HollonStatus.WORKING, HollonStatus.REVIEWING]) },
       { status: HollonStatus.PAUSED },
     );
 

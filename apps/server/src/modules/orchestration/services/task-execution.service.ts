@@ -603,35 +603,6 @@ Make sure to:
   }
 
   /**
-   * Phase 4: Request manager review after CI passes
-   * Triggers the code review process via the code review port
-   */
-  async requestManagerReview(task: Task, prUrl: string): Promise<void> {
-    this.logger.log(
-      `CI checks passed for task ${task.id}, requesting manager review`,
-    );
-
-    try {
-      // Use the code review port to initiate review
-      // The orchestrator will handle creating reviewer sub-hollon
-      await this.codeReviewPort.requestReview({
-        taskId: task.id,
-        prUrl,
-        reviewType: 'manager_review',
-      });
-
-      this.logger.log(
-        `Manager review requested for task ${task.id}, PR: ${prUrl}`,
-      );
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to request manager review: ${errorMessage}`);
-      throw new Error(`Manager review request failed: ${errorMessage}`);
-    }
-  }
-
-  /**
    * Phase 4: Wait for CI checks to start and complete
    * Polls the PR until CI checks are done (success or failure)
    */
