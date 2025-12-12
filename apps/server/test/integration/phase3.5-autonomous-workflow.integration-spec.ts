@@ -30,6 +30,7 @@ import { BrainResponse } from '../../src/modules/brain-provider/interfaces/brain
 describe('Phase 3.5 Autonomous Workflow (integration)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
+  let accessToken: string;
 
   // Services
   let taskExecutionService: TaskExecutionService;
@@ -57,6 +58,8 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
   let brainProviderConfigId: string;
 
   const testRunId = Date.now();
+  const testEmail = `test-${testRunId}@hollon.test`;
+  const testPassword = 'TestPassword123!';
 
   beforeAll(async () => {
     // Mock ClaudeCodeProvider - returns successful mock response
@@ -101,6 +104,19 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
     brainProviderConfigRepo = moduleFixture.get<
       Repository<BrainProviderConfig>
     >(getRepositoryToken(BrainProviderConfig));
+
+    // Register test user and get access token
+    const registerResponse = await request(app.getHttpServer())
+      .post('/api/auth/register')
+      .send({
+        email: testEmail,
+        password: testPassword,
+        firstName: 'Test',
+        lastName: 'User',
+      })
+      .expect(201);
+
+    accessToken = registerResponse.body.accessToken;
 
     console.log('✅ Integration Test Environment Initialized (Mock LLM)');
   });
@@ -171,6 +187,7 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
       // Create Organization
       const orgResponse = await request(app.getHttpServer())
         .post('/api/organizations')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           name: `Phase3.5 Integration Org ${testRunId}`,
           description: 'Testing Phase 3.5 with mocked LLM',
@@ -183,6 +200,7 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
       // Create Team
       const teamResponse = await request(app.getHttpServer())
         .post('/api/teams')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           name: `Integration Team ${testRunId}`,
           organizationId,
@@ -207,6 +225,7 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
       // Manager Role
       const managerResponse = await request(app.getHttpServer())
         .post('/api/roles')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           name: 'Team Manager',
           level: 'manager',
@@ -220,6 +239,7 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
       // Developer Role
       const developerResponse = await request(app.getHttpServer())
         .post('/api/roles')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           name: 'Developer',
           level: 'member',
@@ -233,6 +253,7 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
       // Reviewer Role
       const reviewerResponse = await request(app.getHttpServer())
         .post('/api/roles')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           name: 'Code Reviewer',
           level: 'member',
@@ -252,6 +273,7 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
       // Manager Hollon (depth 0)
       const managerResponse = await request(app.getHttpServer())
         .post('/api/hollons')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           name: `Manager_${testRunId}`,
           roleId: managerRoleId,
@@ -267,6 +289,7 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
       // Developer Hollon (depth 1)
       const developerResponse = await request(app.getHttpServer())
         .post('/api/hollons')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           name: `Developer_${testRunId}`,
           roleId: developerRoleId,
@@ -282,6 +305,7 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
       // Reviewer Hollon (depth 1)
       const reviewerResponse = await request(app.getHttpServer())
         .post('/api/hollons')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           name: `Reviewer_${testRunId}`,
           roleId: reviewerRoleId,
@@ -303,6 +327,7 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
       // Create Project
       const projectResponse = await request(app.getHttpServer())
         .post('/api/projects')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           name: `Phase3.5 Integration Project ${testRunId}`,
           description: 'Testing autonomous workflow with mock',
@@ -350,6 +375,7 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
       // Create Task
       const taskResponse = await request(app.getHttpServer())
         .post('/api/tasks')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           title: 'Implement user authentication',
           description: 'Add JWT authentication to API',
@@ -402,6 +428,7 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
       // Verify manager hollon
       const manager = await request(app.getHttpServer())
         .get(`/api/hollons/${managerHollonId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
       expect(manager.body.depth).toBe(0);
       expect(manager.body.managerId).toBeNull();
@@ -409,6 +436,7 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
       // Verify developer hollon reports to manager
       const developer = await request(app.getHttpServer())
         .get(`/api/hollons/${developerHollonId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
       expect(developer.body.depth).toBe(1);
       expect(developer.body.managerId).toBe(managerHollonId);
@@ -416,6 +444,7 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
       // Verify reviewer hollon reports to manager
       const reviewer = await request(app.getHttpServer())
         .get(`/api/hollons/${reviewerHollonId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
       expect(reviewer.body.depth).toBe(1);
       expect(reviewer.body.managerId).toBe(managerHollonId);
@@ -467,12 +496,14 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
       // Verify Organization
       const org = await request(app.getHttpServer())
         .get(`/api/organizations/${organizationId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
       expect(org.body.id).toBe(organizationId);
 
       // Verify Team
       const team = await request(app.getHttpServer())
         .get(`/api/teams/${teamId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
       expect(team.body.id).toBe(teamId);
       expect(team.body.organizationId).toBe(organizationId);
@@ -480,6 +511,7 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
       // Verify Project
       const project = await request(app.getHttpServer())
         .get(`/api/projects/${projectId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
       expect(project.body.id).toBe(projectId);
       expect(project.body.organizationId).toBe(organizationId);
@@ -487,6 +519,7 @@ describe('Phase 3.5 Autonomous Workflow (integration)', () => {
       // Verify Task
       const task = await request(app.getHttpServer())
         .get(`/api/tasks/${taskId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
       expect(task.body.id).toBe(taskId);
       expect(task.body.projectId).toBe(projectId);
