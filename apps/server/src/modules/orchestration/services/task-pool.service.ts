@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Not, IsNull } from 'typeorm';
-import { Task, TaskStatus } from '../../task/entities/task.entity';
+import { Task, TaskStatus, TaskType } from '../../task/entities/task.entity';
 import { Hollon } from '../../hollon/entities/hollon.entity';
+import { Team } from '../../team/entities/team.entity';
 
 export interface TaskPullResult {
   task: Task | null;
@@ -72,19 +73,30 @@ export class TaskPoolService {
       return this.claimTask(task, hollon, 'Directly assigned');
     }
 
-    // Priority 2: Same-file tasks (continuation of work)
+    // Priority 2: Team Epic tasks for managers (Phase 3.8+)
+    // Managers pull team_epic tasks assigned to their managed teams
+    task = await this.findManagedTeamEpicTask(hollon, now);
+    if (task) {
+      return this.claimTask(
+        task,
+        hollon,
+        'Managed team epic - needs decomposition',
+      );
+    }
+
+    // Priority 3: Same-file tasks (continuation of work)
     task = await this.findSameFileTask(hollon, lockedFiles, now);
     if (task) {
       return this.claimTask(task, hollon, 'Same-file continuation');
     }
 
-    // Priority 3: Team unassigned tasks
+    // Priority 4: Team unassigned tasks
     task = await this.findTeamUnassignedTask(hollon, lockedFiles, now);
     if (task) {
       return this.claimTask(task, hollon, 'Team unassigned');
     }
 
-    // Priority 4: Role matching tasks across organization
+    // Priority 5: Role matching tasks across organization
     task = await this.findRoleMatchingTask(hollon, lockedFiles, now);
     if (task) {
       return this.claimTask(task, hollon, 'Role matching');
@@ -344,6 +356,54 @@ export class TaskPoolService {
         continue;
       }
       if (this.hasFileConflict(task, lockedFiles)) {
+        continue;
+      }
+      if (!(await this.areDependenciesCompleted(task))) {
+        continue;
+      }
+      return task;
+    }
+
+    return null;
+  }
+
+  /**
+   * Phase 3.8+: Find team_epic tasks for teams managed by this hollon
+   * Team managers should pull team_epic tasks assigned to their managed teams
+   * and decompose them into implementation tasks for team members
+   */
+  private async findManagedTeamEpicTask(
+    hollon: Hollon,
+    now: Date,
+  ): Promise<Task | null> {
+    // Find all teams managed by this hollon
+    const managedTeams = await this.hollonRepo.manager
+      .getRepository(Team)
+      .find({
+        where: { managerHollonId: hollon.id },
+      });
+
+    if (managedTeams.length === 0) {
+      return null; // Not a manager
+    }
+
+    const teamIds = managedTeams.map((team) => team.id);
+
+    // Find team_epic tasks assigned to these teams
+    const tasks = await this.taskRepo.find({
+      where: {
+        assignedTeamId: In(teamIds),
+        type: TaskType.TEAM_EPIC,
+        status: In([TaskStatus.READY, TaskStatus.PENDING]),
+      },
+      order: {
+        priority: 'ASC',
+        createdAt: 'ASC',
+      },
+    });
+
+    for (const task of tasks) {
+      if (this.isTaskBlocked(task, now)) {
         continue;
       }
       if (!(await this.areDependenciesCompleted(task))) {
