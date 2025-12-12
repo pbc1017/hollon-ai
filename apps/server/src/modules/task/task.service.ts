@@ -12,6 +12,7 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { DocumentService } from '../document/document.service';
 import { DocumentType } from '../document/entities/document.entity';
+import { KnowledgeVersionService } from '../document/services/knowledge-version.service';
 
 const MAX_SUBTASK_DEPTH = 3;
 const MAX_SUBTASKS_PER_TASK = 10;
@@ -35,6 +36,7 @@ export class TaskService {
     @InjectRepository(Project)
     private readonly projectRepo: Repository<Project>,
     private readonly documentService: DocumentService,
+    private readonly knowledgeVersionService: KnowledgeVersionService,
   ) {}
 
   async create(dto: CreateTaskDto, creatorHollonId?: string): Promise<Task> {
@@ -240,28 +242,68 @@ export class TaskService {
       ...smartTags,
     ].filter((tag, index, self) => self.indexOf(tag) === index); // 중복 제거
 
-    try {
-      const document = await this.documentService.create({
-        title: `[지식] ${task.title} - 해결 패턴`,
-        content,
-        type: DocumentType.KNOWLEDGE,
-        organizationId: task.organizationId,
-        projectId: null, // 🔑 조직 레벨 지식 (모든 홀론이 접근 가능)
-        hollonId: hollonId ?? null,
-        taskId: task.id,
-        tags,
-        metadata: {
-          taskType: task.type,
-          priority: task.priority,
-          completedAt: task.completedAt,
-          filesChanged: result?.filesChanged || [],
-          pullRequestUrl: result?.pullRequestUrl || null,
-        },
-      });
+    const metadata = {
+      taskType: task.type,
+      priority: task.priority,
+      completedAt: task.completedAt,
+      filesChanged: result?.filesChanged || [],
+      pullRequestUrl: result?.pullRequestUrl || null,
+    };
 
-      this.logger.log(
-        `✅ Knowledge document created: ${document.id} for task ${task.id}`,
-      );
+    try {
+      // Check if knowledge document already exists for this task
+      const existingDoc =
+        await this.knowledgeVersionService.findKnowledgeDocumentByTask(task.id);
+
+      if (existingDoc) {
+        // Update existing document
+        this.logger.log(
+          `Updating existing knowledge document ${existingDoc.id} for task ${task.id}`,
+        );
+
+        // Get previous version before updating
+        const previousVersion =
+          await this.knowledgeVersionService.getLatestVersion(existingDoc.id);
+
+        // Update the document
+        const updatedDoc = await this.documentService.update(existingDoc.id, {
+          title: `[지식] ${task.title} - 해결 패턴`,
+          content,
+          tags,
+          metadata,
+          hollonId: hollonId ?? existingDoc.hollonId,
+        });
+
+        // Create version snapshot
+        await this.knowledgeVersionService.createVersion(
+          updatedDoc,
+          previousVersion || undefined,
+        );
+
+        this.logger.log(
+          `✅ Knowledge document updated with version tracking: ${updatedDoc.id} for task ${task.id}`,
+        );
+      } else {
+        // Create new document
+        const document = await this.documentService.create({
+          title: `[지식] ${task.title} - 해결 패턴`,
+          content,
+          type: DocumentType.KNOWLEDGE,
+          organizationId: task.organizationId,
+          projectId: null, // 🔑 조직 레벨 지식 (모든 홀론이 접근 가능)
+          hollonId: hollonId ?? null,
+          taskId: task.id,
+          tags,
+          metadata,
+        });
+
+        // Create initial version
+        await this.knowledgeVersionService.createVersion(document);
+
+        this.logger.log(
+          `✅ Knowledge document created with version tracking: ${document.id} for task ${task.id}`,
+        );
+      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
