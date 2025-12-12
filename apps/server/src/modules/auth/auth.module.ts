@@ -8,7 +8,10 @@ import { AuthController } from './auth.controller';
 import { OAuthController } from './oauth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { GoogleStrategy } from './strategies/google.strategy';
+import { GitHubStrategy } from './strategies/github.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { DeviceFingerprintService } from './services/device-fingerprint.service';
 import { User } from './entities/user.entity';
 import { Session } from './entities/session.entity';
 
@@ -30,7 +33,10 @@ import { Session } from './entities/session.entity';
   controllers: [AuthController, OAuthController],
   providers: [
     AuthService,
+    DeviceFingerprintService,
     JwtStrategy,
+    GoogleStrategy,
+    GitHubStrategy,
     // Apply JWT guard globally
     {
       provide: APP_GUARD,

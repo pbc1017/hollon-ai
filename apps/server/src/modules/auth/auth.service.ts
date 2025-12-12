@@ -8,13 +8,21 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { Request } from 'express';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import * as speakeasy from 'speakeasy';
+import * as QRCode from 'qrcode';
 import { User, AuthProvider } from './entities/user.entity';
 import { Session } from './entities/session.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { AuthResponseDto, TwoFactorChallengeDto } from './dto/auth-response.dto';
+import {
+  AuthResponseDto,
+  TwoFactorChallengeDto,
+} from './dto/auth-response.dto';
+import { DeviceFingerprintService } from './services/device-fingerprint.service';
 
 interface JwtPayload {
   sub: string;
@@ -37,10 +45,15 @@ export class AuthService {
     @InjectRepository(Session)
     private readonly sessionRepository: Repository<Session>,
     private readonly configService: ConfigService,
+    private readonly jwtService: JwtService,
+    private readonly deviceFingerprintService: DeviceFingerprintService,
   ) {
-    this.jwtSecret = this.configService.get<string>('JWT_SECRET') || 'your-secret-key';
-    this.jwtExpiration = this.configService.get<number>('JWT_EXPIRATION') || 3600; // 1 hour
-    this.refreshExpiration = this.configService.get<number>('REFRESH_EXPIRATION') || 604800; // 7 days
+    this.jwtSecret =
+      this.configService.get<string>('JWT_SECRET') || 'your-secret-key';
+    this.jwtExpiration =
+      this.configService.get<number>('JWT_EXPIRATION') || 3600; // 1 hour
+    this.refreshExpiration =
+      this.configService.get<number>('REFRESH_EXPIRATION') || 604800; // 7 days
   }
 
   /**
@@ -50,7 +63,9 @@ export class AuthService {
     const { email, password, firstName, lastName } = registerDto;
 
     // Check if user already exists
-    const existingUser = await this.userRepository.findOne({ where: { email } });
+    const existingUser = await this.userRepository.findOne({
+      where: { email },
+    });
     if (existingUser) {
       throw new ConflictException('User with this email already exists');
     }
@@ -81,7 +96,7 @@ export class AuthService {
    */
   async login(
     loginDto: LoginDto,
-    ipAddress?: string,
+    req?: Request,
   ): Promise<AuthResponseDto | TwoFactorChallengeDto> {
     const { email, password, twoFactorCode } = loginDto;
 
@@ -93,7 +108,9 @@ export class AuthService {
 
     // Check if account is locked
     if (user.lockedUntil && user.lockedUntil > new Date()) {
-      throw new UnauthorizedException('Account is temporarily locked. Please try again later.');
+      throw new UnauthorizedException(
+        'Account is temporarily locked. Please try again later.',
+      );
     }
 
     // Verify password
@@ -134,13 +151,15 @@ export class AuthService {
 
     // Update last login
     user.lastLoginAt = new Date();
-    user.lastLoginIp = ipAddress || null;
+    user.lastLoginIp = req
+      ? this.deviceFingerprintService.generateFingerprint(req).ipAddress
+      : null;
     await this.userRepository.save(user);
 
     this.logger.log(`User logged in: ${email}`);
 
-    // Generate tokens and create session
-    return this.generateAuthResponse(user, ipAddress);
+    // Generate tokens and create session with device info
+    return this.generateAuthResponse(user, req);
   }
 
   /**
@@ -247,29 +266,39 @@ export class AuthService {
       throw new BadRequestException('2FA is already enabled');
     }
 
-    // Generate secret (in production, use speakeasy or similar library)
-    const secret = this.generateSecret();
+    // Generate secret using speakeasy
+    const secret = speakeasy.generateSecret({
+      name: `HollonAI (${user.email})`,
+      issuer: 'HollonAI',
+      length: 32,
+    });
 
     // Generate backup codes
     const backupCodes = this.generateBackupCodes(10);
 
-    user.twoFactorSecret = secret;
+    user.twoFactorSecret = secret.base32;
     user.twoFactorBackupCodes = await Promise.all(
-      backupCodes.map(code => this.hashPassword(code))
+      backupCodes.map((code) => this.hashPassword(code)),
     );
 
     await this.userRepository.save(user);
 
-    // Generate QR code URL (in production, use qrcode library)
-    const qrCode = `otpauth://totp/HollonAI:${user.email}?secret=${secret}&issuer=HollonAI`;
+    // Generate QR code using qrcode library
+    const qrCodeDataUrl = await QRCode.toDataURL(secret.otpauth_url!);
 
-    return { secret, qrCode };
+    return {
+      secret: secret.base32,
+      qrCode: qrCodeDataUrl,
+    };
   }
 
   /**
    * Verify and activate 2FA
    */
-  async verify2FASetup(userId: string, code: string): Promise<{ backupCodes: string[] }> {
+  async verify2FASetup(
+    userId: string,
+    code: string,
+  ): Promise<{ backupCodes: string[] }> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user || !user.twoFactorSecret) {
       throw new BadRequestException('2FA setup not initiated');
@@ -353,21 +382,45 @@ export class AuthService {
 
   private async generateAuthResponse(
     user: User,
-    ipAddress?: string,
-    userAgent?: string,
+    req?: Request,
   ): Promise<AuthResponseDto> {
     const accessToken = this.generateToken(user, 'access', this.jwtExpiration);
-    const refreshToken = this.generateToken(user, 'refresh', this.refreshExpiration);
+    const refreshToken = this.generateToken(
+      user,
+      'refresh',
+      this.refreshExpiration,
+    );
 
-    // Create session
+    // Generate device fingerprint if request is provided
+    let deviceInfo = null;
+    let ipAddress = null;
+    let userAgent = null;
+
+    if (req) {
+      const fingerprint =
+        this.deviceFingerprintService.generateFingerprint(req);
+      deviceInfo = {
+        fingerprint: fingerprint.fingerprint,
+        platform: fingerprint.platform,
+        browser: fingerprint.browser,
+        browserVersion: fingerprint.browserVersion,
+        os: fingerprint.os,
+        device: fingerprint.device,
+      };
+      ipAddress = fingerprint.ipAddress;
+      userAgent = fingerprint.userAgent;
+    }
+
+    // Create session with device information
     const expiresAt = new Date(Date.now() + this.refreshExpiration * 1000);
     const session = this.sessionRepository.create({
       userId: user.id,
       accessToken,
       refreshToken,
       expiresAt,
-      ipAddress: ipAddress || null,
-      userAgent: userAgent || null,
+      ipAddress,
+      userAgent,
+      deviceInfo,
       lastActivityAt: new Date(),
     });
 
@@ -388,23 +441,22 @@ export class AuthService {
     };
   }
 
-  private generateToken(user: User, type: 'access' | 'refresh' | 'temp', expiresIn: number): string {
+  private generateToken(
+    user: User,
+    type: 'access' | 'refresh' | 'temp',
+    expiresIn: number,
+  ): string {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
       type,
     };
 
-    // In production, use @nestjs/jwt JwtService
-    // This is a simplified version using basic encoding
-    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-    const payloadData = Buffer.from(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + expiresIn })).toString('base64url');
-    const signature = crypto
-      .createHmac('sha256', this.jwtSecret)
-      .update(`${header}.${payloadData}`)
-      .digest('base64url');
-
-    return `${header}.${payloadData}.${signature}`;
+    // Use NestJS JWT service for proper token generation
+    return this.jwtService.sign(payload, {
+      expiresIn: `${expiresIn}s`,
+      secret: this.jwtSecret,
+    });
   }
 
   private async hashPassword(password: string): Promise<string> {
@@ -417,7 +469,9 @@ export class AuthService {
 
     if (user.failedLoginAttempts >= this.maxLoginAttempts) {
       user.lockedUntil = new Date(Date.now() + this.lockoutDuration);
-      this.logger.warn(`Account locked due to failed login attempts: ${user.email}`);
+      this.logger.warn(
+        `Account locked due to failed login attempts: ${user.email}`,
+      );
     }
 
     await this.userRepository.save(user);
@@ -428,9 +482,13 @@ export class AuthService {
       return false;
     }
 
-    // In production, use speakeasy or similar library to verify TOTP
-    // This is a simplified check
-    const isValidTOTP = this.verifyTOTP(user.twoFactorSecret, code);
+    // Use speakeasy to verify TOTP code
+    const isValidTOTP = speakeasy.totp.verify({
+      secret: user.twoFactorSecret,
+      encoding: 'base32',
+      token: code,
+      window: 2, // Allow 2 steps before/after (60 seconds tolerance)
+    });
 
     if (isValidTOTP) {
       return true;
@@ -439,58 +497,21 @@ export class AuthService {
     // Check backup codes
     if (user.twoFactorBackupCodes && user.twoFactorBackupCodes.length > 0) {
       for (let i = 0; i < user.twoFactorBackupCodes.length; i++) {
-        const isMatch = await bcrypt.compare(code, user.twoFactorBackupCodes[i]);
+        const isMatch = await bcrypt.compare(
+          code,
+          user.twoFactorBackupCodes[i],
+        );
         if (isMatch) {
           // Remove used backup code
           user.twoFactorBackupCodes.splice(i, 1);
           await this.userRepository.save(user);
+          this.logger.log(`Backup code used for user: ${user.email}`);
           return true;
         }
       }
     }
 
     return false;
-  }
-
-  private verifyTOTP(secret: string, token: string): boolean {
-    // Simplified TOTP verification
-    // In production, use speakeasy.totp.verify()
-    const window = 1; // Allow 1 step before/after
-    const step = 30; // 30 seconds
-    const currentTime = Math.floor(Date.now() / 1000 / step);
-
-    for (let i = -window; i <= window; i++) {
-      const time = currentTime + i;
-      const expectedToken = this.generateTOTP(secret, time);
-      if (expectedToken === token) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  private generateTOTP(secret: string, time: number): string {
-    // Simplified TOTP generation
-    // In production, use speakeasy.totp.generate()
-    const hmac = crypto.createHmac('sha1', secret);
-    const timeBuffer = Buffer.allocUnsafe(8);
-    timeBuffer.writeBigInt64BE(BigInt(time));
-    hmac.update(timeBuffer);
-    const hash = hmac.digest();
-
-    const offset = hash[hash.length - 1] & 0xf;
-    const binary = ((hash[offset] & 0x7f) << 24) |
-                   ((hash[offset + 1] & 0xff) << 16) |
-                   ((hash[offset + 2] & 0xff) << 8) |
-                   (hash[offset + 3] & 0xff);
-
-    const otp = binary % 1000000;
-    return otp.toString().padStart(6, '0');
-  }
-
-  private generateSecret(): string {
-    return crypto.randomBytes(20).toString('hex');
   }
 
   private generateBackupCodes(count: number): string[] {

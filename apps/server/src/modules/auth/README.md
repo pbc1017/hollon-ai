@@ -1,46 +1,58 @@
 # Advanced Authentication System
 
-A comprehensive authentication system for NestJS with JWT, OAuth (Google/GitHub), Two-Factor Authentication (2FA), and session management.
+A production-ready, comprehensive authentication system for NestJS with JWT, OAuth (Google/GitHub), Two-Factor Authentication (2FA), device fingerprinting, rate limiting, and advanced session management.
 
 ## Features
 
 ### 🔐 Core Authentication
+
 - **Email/Password Registration & Login** with bcrypt hashing
 - **JWT Token-based Authentication** with access and refresh tokens
 - **Session Management** with device tracking
 - **Account Security** with failed login attempts tracking and account lockout
 
 ### 🌐 OAuth Integration
+
 - **Google OAuth** integration
 - **GitHub OAuth** integration
 - **Automatic Account Linking** for existing users
 - **Seamless Provider Switching**
 
 ### 🔑 Two-Factor Authentication (2FA)
+
 - **TOTP-based 2FA** using time-based one-time passwords
 - **QR Code Generation** for easy setup with authenticator apps
 - **Backup Codes** for account recovery
 - **Flexible 2FA Enforcement** - users can enable/disable as needed
 
 ### 📊 Session Management
+
 - **Multiple Active Sessions** support
+- **Device Fingerprinting** for session tracking and anomaly detection
+- **Detailed Device Information** - Platform, browser, OS, IP address
 - **Session Tracking** with IP address and user agent
-- **Device Information** storage
+- **Device Information** storage in JSONB format
 - **Session Revocation** (individual or all sessions)
 - **Automatic Session Expiration**
 
 ### 🛡️ Security Features
+
 - **Password Hashing** with bcrypt (12 salt rounds)
 - **Account Lockout** after 5 failed login attempts (15-minute lockout)
+- **Rate Limiting** on authentication endpoints (5 attempts per 15 minutes)
+- **IP-based Rate Limiting** with automatic cleanup
 - **Token Expiration** management
 - **Refresh Token Rotation**
 - **Session Validation**
+- **Production-grade TOTP** using speakeasy library
+- **QR Code Generation** using qrcode library for 2FA setup
 
 ## Architecture
 
 ### Entities
 
 #### User Entity
+
 ```typescript
 - id: UUID (primary key)
 - email: string (unique, indexed)
@@ -64,6 +76,7 @@ A comprehensive authentication system for NestJS with JWT, OAuth (Google/GitHub)
 ```
 
 #### Session Entity
+
 ```typescript
 - id: UUID (primary key)
 - userId: UUID (foreign key, indexed)
@@ -81,6 +94,7 @@ A comprehensive authentication system for NestJS with JWT, OAuth (Google/GitHub)
 ### Controllers
 
 #### AuthController (`/auth`)
+
 - `POST /auth/register` - Register new user
 - `POST /auth/login` - Login with email/password
 - `POST /auth/refresh` - Refresh access token
@@ -93,6 +107,7 @@ A comprehensive authentication system for NestJS with JWT, OAuth (Google/GitHub)
 - `POST /auth/2fa/disable` - Disable 2FA
 
 #### OAuthController (`/auth/oauth`)
+
 - `GET /auth/oauth/google` - Initiate Google OAuth
 - `GET /auth/oauth/google/callback` - Google OAuth callback
 - `GET /auth/oauth/github` - Initiate GitHub OAuth
@@ -101,29 +116,57 @@ A comprehensive authentication system for NestJS with JWT, OAuth (Google/GitHub)
 ### Services
 
 #### AuthService
+
 Core authentication logic including:
+
 - User registration and login
 - Password hashing and validation
-- JWT token generation and validation
+- JWT token generation using @nestjs/jwt
 - OAuth user creation/linking
-- 2FA setup, verification, and management
-- Session management
+- Production-grade 2FA with speakeasy and QRCode
+- Session management with device fingerprinting
 - Account security (lockout, failed attempts)
+
+#### DeviceFingerprintService
+
+Device identification and tracking:
+
+- Generate unique device fingerprints from request headers
+- Extract and parse user agent information
+- Detect platform, browser, OS, and device type
+- Handle IP extraction behind proxies/load balancers
+- Support for Cloudflare and other reverse proxies
 
 ### Guards & Decorators
 
 #### Guards
-- **JwtAuthGuard** - Protects routes requiring authentication
-- **TwoFactorGuard** - Ensures 2FA verification when enabled
+
+- **JwtAuthGuard** - Global authentication guard for protected routes
+- **GoogleAuthGuard** - Google OAuth flow guard
+- **GitHubAuthGuard** - GitHub OAuth flow guard
+- **RateLimitGuard** - IP-based rate limiting with configurable windows
+  - `AuthRateLimitGuard()` - 5 attempts per 15 minutes
+  - `StrictRateLimitGuard()` - 3 attempts per 5 minutes
+  - `StandardRateLimitGuard()` - 10 attempts per 15 minutes
 
 #### Decorators
+
 - **@Public()** - Marks routes as publicly accessible
 - **@CurrentUser()** - Injects authenticated user into route handler
 
 ### Strategies
 
 #### JwtStrategy
+
 Passport strategy for validating JWT tokens and loading user data.
+
+#### GoogleStrategy
+
+Passport OAuth strategy for Google authentication using passport-google-oauth20.
+
+#### GitHubStrategy
+
+Passport OAuth strategy for GitHub authentication using passport-github2.
 
 ## API Usage
 
@@ -142,6 +185,7 @@ Content-Type: application/json
 ```
 
 **Response:**
+
 ```json
 {
   "accessToken": "eyJhbGciOiJIUzI1NiIs...",
@@ -171,6 +215,7 @@ Content-Type: application/json
 ```
 
 **With 2FA enabled:**
+
 ```json
 {
   "requiresTwoFactor": true,
@@ -179,6 +224,7 @@ Content-Type: application/json
 ```
 
 **Then verify 2FA:**
+
 ```bash
 POST /auth/login
 Content-Type: application/json
@@ -193,6 +239,7 @@ Content-Type: application/json
 ### OAuth Login
 
 #### Google
+
 ```bash
 GET /auth/oauth/google
 # Redirects to Google OAuth consent screen
@@ -200,6 +247,7 @@ GET /auth/oauth/google
 ```
 
 #### GitHub
+
 ```bash
 GET /auth/oauth/github
 # Redirects to GitHub OAuth authorization
@@ -209,12 +257,14 @@ GET /auth/oauth/github
 ### Enable 2FA
 
 **Step 1: Initiate 2FA setup**
+
 ```bash
 POST /auth/2fa/enable
 Authorization: Bearer <access-token>
 ```
 
 **Response:**
+
 ```json
 {
   "secret": "JBSWY3DPEHPK3PXP",
@@ -223,6 +273,7 @@ Authorization: Bearer <access-token>
 ```
 
 **Step 2: Verify and activate**
+
 ```bash
 POST /auth/2fa/verify-setup
 Authorization: Bearer <access-token>
@@ -234,6 +285,7 @@ Content-Type: application/json
 ```
 
 **Response:**
+
 ```json
 {
   "backupCodes": [
@@ -247,18 +299,21 @@ Content-Type: application/json
 ### Session Management
 
 **Get active sessions:**
+
 ```bash
 GET /auth/sessions
 Authorization: Bearer <access-token>
 ```
 
 **Revoke a session:**
+
 ```bash
 DELETE /auth/sessions/:sessionId
 Authorization: Bearer <access-token>
 ```
 
 **Logout (revoke current session):**
+
 ```bash
 POST /auth/logout
 Authorization: Bearer <access-token>
@@ -306,12 +361,15 @@ npm install
 ```
 
 ### Dependencies Added:
+
 - `@nestjs/jwt` - JWT token handling
 - `@nestjs/passport` - Passport integration
 - `passport` - Authentication middleware
 - `passport-jwt` - JWT strategy for Passport
-- `bcrypt` - Password hashing
-- `speakeasy` - TOTP generation for 2FA
+- `passport-google-oauth20` - Google OAuth strategy
+- `passport-github2` - GitHub OAuth strategy
+- `bcrypt` - Password hashing (12 rounds)
+- `speakeasy` - Production-grade TOTP generation for 2FA
 - `qrcode` - QR code generation for 2FA setup
 
 ## Security Best Practices
@@ -340,7 +398,7 @@ describe('AuthController', () => {
         email: 'test@example.com',
         password: 'SecurePass123',
         firstName: 'Test',
-        lastName: 'User'
+        lastName: 'User',
       })
       .expect(201);
 

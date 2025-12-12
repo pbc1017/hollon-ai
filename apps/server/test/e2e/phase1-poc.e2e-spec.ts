@@ -8,6 +8,7 @@ import request from 'supertest';
  * Phase 1 POC End-to-End Test
  *
  * Tests the complete flow of the Hollon AI system:
+ * 0. Register and login test user (get JWT token)
  * 1. Create Organization
  * 2. Create Team
  * 3. Create Role
@@ -22,6 +23,7 @@ import request from 'supertest';
 describe('Phase 1 POC (e2e)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
+  let accessToken: string;
 
   // Entity IDs created during the test
   let organizationId: string;
@@ -33,6 +35,8 @@ describe('Phase 1 POC (e2e)', () => {
 
   // Unique suffix to avoid conflicts in concurrent/repeated test runs
   const testRunId = Date.now();
+  const testEmail = `test-${testRunId}@hollon.test`;
+  const testPassword = 'TestPassword123!';
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -52,6 +56,20 @@ describe('Phase 1 POC (e2e)', () => {
     await dataSource.query(
       'TRUNCATE tasks, projects, hollons, roles, teams, organizations RESTART IDENTITY CASCADE',
     );
+
+    // Register test user
+    const registerResponse = await request(app.getHttpServer())
+      .post('/api/auth/register')
+      .send({
+        email: testEmail,
+        password: testPassword,
+        firstName: 'Test',
+        lastName: 'User',
+      })
+      .expect(201);
+
+    accessToken = registerResponse.body.accessToken;
+    expect(accessToken).toBeDefined();
   });
 
   afterAll(async () => {
@@ -94,6 +112,7 @@ describe('Phase 1 POC (e2e)', () => {
     it('should create an organization', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/organizations')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           name: 'POC Test Organization',
           description: 'Testing Phase 1 POC functionality',
@@ -118,6 +137,7 @@ describe('Phase 1 POC (e2e)', () => {
     it('should create a team within the organization', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/teams')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           organizationId,
           name: 'Backend Team',
@@ -137,6 +157,7 @@ describe('Phase 1 POC (e2e)', () => {
     it('should create a role within the organization', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/roles')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           organizationId,
           name: `Backend Engineer ${testRunId}`,
@@ -160,6 +181,7 @@ describe('Phase 1 POC (e2e)', () => {
     it('should create a hollon assigned to team and role', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/hollons')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           organizationId,
           teamId,
@@ -187,6 +209,7 @@ describe('Phase 1 POC (e2e)', () => {
     it('should create a project within the organization', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/projects')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           organizationId,
           name: 'POC Project',
@@ -208,6 +231,7 @@ describe('Phase 1 POC (e2e)', () => {
     it('should create a task within the project', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/tasks')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           organizationId,
           projectId,
@@ -241,6 +265,7 @@ describe('Phase 1 POC (e2e)', () => {
     it('should assign the task to the hollon', async () => {
       const response = await request(app.getHttpServer())
         .patch(`/api/tasks/${taskId}/assign`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           hollonId,
         })
@@ -255,6 +280,7 @@ describe('Phase 1 POC (e2e)', () => {
     it('should verify task is assigned', async () => {
       const response = await request(app.getHttpServer())
         .get(`/api/tasks/${taskId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
       expect(response.body.assignedHollonId).toBe(hollonId);
@@ -266,6 +292,7 @@ describe('Phase 1 POC (e2e)', () => {
     it('should verify organization has team', async () => {
       const response = await request(app.getHttpServer())
         .get(`/api/organizations/${organizationId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
       expect(response.body.id).toBe(organizationId);
@@ -274,6 +301,7 @@ describe('Phase 1 POC (e2e)', () => {
     it('should verify team has hollon', async () => {
       const response = await request(app.getHttpServer())
         .get(`/api/teams/${teamId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
       expect(response.body.id).toBe(teamId);
@@ -283,6 +311,7 @@ describe('Phase 1 POC (e2e)', () => {
     it('should verify hollon has correct team and role', async () => {
       const response = await request(app.getHttpServer())
         .get(`/api/hollons/${hollonId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
       expect(response.body.id).toBe(hollonId);
@@ -294,6 +323,7 @@ describe('Phase 1 POC (e2e)', () => {
     it('should verify project belongs to organization', async () => {
       const response = await request(app.getHttpServer())
         .get(`/api/projects/${projectId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
       expect(response.body.id).toBe(projectId);
@@ -303,6 +333,7 @@ describe('Phase 1 POC (e2e)', () => {
     it('should verify task is linked to project and hollon', async () => {
       const response = await request(app.getHttpServer())
         .get(`/api/tasks/${taskId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
       expect(response.body.id).toBe(taskId);
@@ -315,6 +346,7 @@ describe('Phase 1 POC (e2e)', () => {
     it('should verify system health', async () => {
       const response = await request(app.getHttpServer())
         .get('/api/health')
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
       expect(response.body.status).toBe('healthy');

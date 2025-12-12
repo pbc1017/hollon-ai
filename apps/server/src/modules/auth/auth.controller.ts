@@ -17,8 +17,12 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { Enable2FADto } from './dto/enable-2fa.dto';
 import { Verify2FADto } from './dto/verify-2fa.dto';
-import { AuthResponseDto, TwoFactorChallengeDto } from './dto/auth-response.dto';
+import {
+  AuthResponseDto,
+  TwoFactorChallengeDto,
+} from './dto/auth-response.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { AuthRateLimitGuard } from './guards/rate-limit.guard';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { User } from './entities/user.entity';
@@ -33,6 +37,7 @@ export class AuthController {
    */
   @Public()
   @Post('register')
+  @UseGuards(AuthRateLimitGuard())
   @HttpCode(HttpStatus.CREATED)
   async register(@Body() registerDto: RegisterDto): Promise<AuthResponseDto> {
     return this.authService.register(registerDto);
@@ -43,13 +48,13 @@ export class AuthController {
    */
   @Public()
   @Post('login')
+  @UseGuards(AuthRateLimitGuard())
   @HttpCode(HttpStatus.OK)
   async login(
     @Body() loginDto: LoginDto,
     @Req() req: Request,
   ): Promise<AuthResponseDto | TwoFactorChallengeDto> {
-    const ipAddress = req.ip || req.socket.remoteAddress;
-    return this.authService.login(loginDto, ipAddress);
+    return this.authService.login(loginDto, req);
   }
 
   /**
@@ -58,7 +63,9 @@ export class AuthController {
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  async refresh(@Body() refreshTokenDto: RefreshTokenDto): Promise<AuthResponseDto> {
+  async refresh(
+    @Body() refreshTokenDto: RefreshTokenDto,
+  ): Promise<AuthResponseDto> {
     return this.authService.refreshToken(refreshTokenDto.refreshToken);
   }
 
