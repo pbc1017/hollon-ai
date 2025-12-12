@@ -627,12 +627,12 @@ Always prioritize code quality, maintainability, and following established patte
             console.log(`   ✓ Worktree verified: ${result.worktreePath}`);
           }
 
-          // Verify tasks status changed
+          // Verify tasks status changed (Phase 3.10: tasks go to READY_FOR_REVIEW after completion)
           for (const result of executionResults) {
             const task = await taskRepo.findOne({
               where: { id: result.taskId },
             });
-            expect(task?.status).toBe(TaskStatus.IN_REVIEW);
+            expect(task?.status).toBe(TaskStatus.READY_FOR_REVIEW);
           }
 
           console.log(`\n📊 Execution Summary:`);

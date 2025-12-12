@@ -17,9 +17,10 @@ import {
 } from '../../message/entities/message.entity';
 import { CreatePullRequestDto } from '../dto/create-pull-request.dto';
 import { ReviewSubmissionDto } from '../dto/review-submission.dto';
+import { ICodeReviewService } from '../domain/code-review-service.interface';
 
 @Injectable()
-export class CodeReviewService {
+export class CodeReviewService implements ICodeReviewService {
   private readonly logger = new Logger(CodeReviewService.name);
 
   constructor(
@@ -64,6 +65,13 @@ export class CodeReviewService {
 
     this.logger.log(`PR created: ${pr.id}`);
     return pr;
+  }
+
+  /**
+   * ICodeReviewService interface method - alias for createPullRequest
+   */
+  async createPR(dto: CreatePullRequestDto): Promise<TaskPullRequest> {
+    return this.createPullRequest(dto);
   }
 
   /**
@@ -626,7 +634,7 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
   async performAutomatedReview(
     prId: string,
     reviewerHollonId: string,
-  ): Promise<void> {
+  ): Promise<TaskPullRequest> {
     this.logger.log(
       `Performing automated review for PR ${prId} by Hollon ${reviewerHollonId}`,
     );
@@ -644,7 +652,7 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
       this.logger.warn(
         `PR ${prId} is not in 'ready_for_review' status. Current: ${pr.status}`,
       );
-      return;
+      return pr;
     }
 
     // Phase 3.5: 간단한 자동 승인 로직
@@ -667,6 +675,8 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
     this.logger.log(
       `Automated review completed for PR ${prId}: ${shouldApprove ? 'APPROVED' : 'CHANGES_REQUESTED'}`,
     );
+
+    return pr;
   }
 
   /**
@@ -832,6 +842,33 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
       relations: ['authorHollon', 'reviewerHollon'],
       order: { createdAt: 'DESC' },
     });
+  }
+
+  /**
+   * ICodeReviewService interface method - alias for getPullRequestsForTask
+   */
+  async findPullRequestsByTaskId(taskId: string): Promise<TaskPullRequest[]> {
+    return this.getPullRequestsForTask(taskId);
+  }
+
+  /**
+   * ICodeReviewService interface method - find PR by number and repository
+   */
+  async findPullRequestByNumber(
+    prNumber: number,
+    repository: string,
+  ): Promise<TaskPullRequest | null> {
+    return this.prRepo.findOne({
+      where: { prNumber, repository },
+      relations: ['task', 'assignedReviewer'],
+    });
+  }
+
+  /**
+   * ICodeReviewService interface method - update PR status
+   */
+  async updatePRStatus(prId: string, status: PullRequestStatus): Promise<void> {
+    await this.prRepo.update({ id: prId }, { status });
   }
 
   /**

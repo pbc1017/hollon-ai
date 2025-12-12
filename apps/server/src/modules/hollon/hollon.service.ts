@@ -17,6 +17,7 @@ import { CreateHollonDto } from './dto/create-hollon.dto';
 import { UpdateHollonDto } from './dto/update-hollon.dto';
 import { CreateTemporaryHollonDto } from './dto/create-temporary-hollon.dto';
 import { CreatePermanentHollonDto } from './dto/create-permanent-hollon.dto';
+import { IHollonService } from './domain/hollon-service.interface';
 import { ApprovalService } from '../approval/approval.service';
 import {
   ApprovalRequest,
@@ -29,7 +30,7 @@ import { Team } from '../team/entities/team.entity';
 import { Role } from '../role/entities/role.entity';
 
 @Injectable()
-export class HollonService {
+export class HollonService implements IHollonService {
   private readonly logger = new Logger(HollonService.name);
 
   constructor(
@@ -108,6 +109,48 @@ export class HollonService {
       hollon.lastActiveAt = new Date();
     }
     return this.hollonRepo.save(hollon);
+  }
+
+  /**
+   * IHollonService interface method - alias for findOne
+   */
+  async findById(id: string): Promise<Hollon> {
+    return this.findOne(id);
+  }
+
+  /**
+   * IHollonService interface method - find hollons by status
+   */
+  async findByStatus(status: HollonStatus): Promise<Hollon[]> {
+    return this.hollonRepo.find({
+      where: { status },
+      relations: ['organization', 'team', 'role'],
+    });
+  }
+
+  /**
+   * IHollonService interface method - assign task to hollon
+   */
+  async assignTask(hollonId: string, taskId: string): Promise<void> {
+    const hollon = await this.findOne(hollonId);
+    hollon.currentTaskId = taskId;
+    hollon.status = HollonStatus.WORKING;
+    hollon.lastActiveAt = new Date();
+    await this.hollonRepo.save(hollon);
+  }
+
+  /**
+   * IHollonService interface method - alias for createTemporary
+   */
+  async createTemporaryHollon(dto: CreateTemporaryHollonDto): Promise<Hollon> {
+    return this.createTemporary(dto);
+  }
+
+  /**
+   * IHollonService interface method - alias for terminateTemporaryHollon
+   */
+  async releaseTemporaryHollon(hollonId: string): Promise<void> {
+    return this.terminateTemporaryHollon(hollonId);
   }
 
   async remove(id: string): Promise<void> {

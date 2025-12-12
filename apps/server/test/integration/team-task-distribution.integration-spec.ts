@@ -1,27 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { INestApplication } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { TeamTaskDistributionService } from '../../src/modules/orchestration/services/team-task-distribution.service';
-import { SubtaskCreationService } from '../../src/modules/orchestration/services/subtask-creation.service';
+import { AppModule } from '@/app.module';
+import { TeamTaskDistributionService } from '@/modules/orchestration/services/team-task-distribution.service';
 import {
   Task,
   TaskStatus,
   TaskType,
-} from '../../src/modules/task/entities/task.entity';
-import { Team } from '../../src/modules/team/entities/team.entity';
-import {
-  Hollon,
-  HollonStatus,
-} from '../../src/modules/hollon/entities/hollon.entity';
-import { Role } from '../../src/modules/role/entities/role.entity';
-import { Organization } from '../../src/modules/organization/entities/organization.entity';
-import { Project } from '../../src/modules/project/entities/project.entity';
-import { Document } from '../../src/modules/document/entities/document.entity';
-import { Goal } from '../../src/modules/goal/entities/goal.entity';
-import { GoalProgressRecord } from '../../src/modules/goal/entities/goal-progress-record.entity';
-import { Cycle } from '../../src/modules/project/entities/cycle.entity';
-import { BrainProviderModule } from '../../src/modules/brain-provider/brain-provider.module';
-import { BrainProviderService } from '../../src/modules/brain-provider/brain-provider.service';
+} from '@/modules/task/entities/task.entity';
+import { Team } from '@/modules/team/entities/team.entity';
+import { Hollon, HollonStatus } from '@/modules/hollon/entities/hollon.entity';
+import { Role } from '@/modules/role/entities/role.entity';
+import { Organization } from '@/modules/organization/entities/organization.entity';
+import { BrainProviderService } from '@/modules/brain-provider/brain-provider.service';
 import { cleanupTestData } from '../utils/test-database.utils';
 
 /**
@@ -30,7 +21,7 @@ import { cleanupTestData } from '../utils/test-database.utils';
  * Tests hierarchical task distribution with real database
  */
 describe('TeamTaskDistributionService Integration Test', () => {
-  let module: TestingModule;
+  let app: INestApplication;
   let service: TeamTaskDistributionService;
   let brainProvider: BrainProviderService;
   let dataSource: DataSource;
@@ -45,53 +36,16 @@ describe('TeamTaskDistributionService Integration Test', () => {
   let teamTask: Task;
 
   beforeAll(async () => {
-    module = await Test.createTestingModule({
-      imports: [
-        TypeOrmModule.forRoot({
-          type: 'postgres',
-          host: process.env.DB_HOST || 'localhost',
-          port: parseInt(process.env.DB_PORT || '5432'),
-          username: process.env.DB_USER || 'hollon',
-          password: process.env.DB_PASSWORD || 'hollon_dev_password',
-          database: process.env.DB_NAME || 'hollon',
-          schema: process.env.DB_SCHEMA || 'hollon_test_worker_1',
-          entities: [
-            Task,
-            Team,
-            Hollon,
-            Role,
-            Organization,
-            Project,
-            Document,
-            Goal,
-            GoalProgressRecord,
-            Cycle,
-          ],
-          synchronize: false,
-          logging: false,
-        }),
-        TypeOrmModule.forFeature([
-          Task,
-          Team,
-          Hollon,
-          Role,
-          Organization,
-          Project,
-          Document,
-          Goal,
-          GoalProgressRecord,
-          Cycle,
-        ]),
-        BrainProviderModule,
-      ],
-      providers: [TeamTaskDistributionService, SubtaskCreationService],
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
     }).compile();
 
-    service = module.get<TeamTaskDistributionService>(
-      TeamTaskDistributionService,
-    );
-    brainProvider = module.get<BrainProviderService>(BrainProviderService);
-    dataSource = module.get<DataSource>(DataSource);
+    app = moduleFixture.createNestApplication();
+    await app.init();
+
+    service = app.get(TeamTaskDistributionService);
+    brainProvider = app.get(BrainProviderService);
+    dataSource = app.get(DataSource);
 
     // Clean up before tests
     await cleanupTestData(dataSource);
@@ -100,7 +54,7 @@ describe('TeamTaskDistributionService Integration Test', () => {
   afterAll(async () => {
     // Clean up after tests
     await cleanupTestData(dataSource);
-    await module.close();
+    await app.close();
   });
 
   describe('Hierarchical Distribution Flow', () => {
