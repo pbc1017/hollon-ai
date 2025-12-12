@@ -445,6 +445,11 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
    * - Story points > 8
    */
   private async isTaskComplex(task: Task, _hollon: Hollon): Promise<boolean> {
+    // Criteria 0: Team Epic tasks always require decomposition (Phase 3.8+)
+    if (task.type === 'team_epic') {
+      return true;
+    }
+
     // Criteria 1: Explicit high complexity
     if (task.estimatedComplexity === 'high') {
       return true;
@@ -1151,12 +1156,20 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
       );
 
       try {
-        // Merge PR (in test env, just mark as completed)
+        // Phase 4: Merge PR using gh CLI
         if (process.env.NODE_ENV === 'test') {
           this.logger.debug('Skipping PR merge in test environment');
         } else {
-          // Real merge logic would go here
-          // await this.githubService.mergePR(pr.prNumber);
+          // Phase 4: PR merge is manual - just log for now
+          this.logger.log(
+            `Review approved for PR ${pr.prUrl}. Manual merge required.`,
+          );
+
+          // Note: Automatic merge is disabled for safety
+          // To enable: uncomment the gh pr merge command below
+          //
+          // const workingDir = task.workingDirectory || task.project.workingDirectory;
+          // await execAsync(`gh pr merge ${pr.prUrl} --squash --delete-branch`, { cwd: workingDir });
         }
 
         // Mark task as completed
@@ -1254,7 +1267,10 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
         {
           prompt,
           context: {
-            workingDirectory: parentTask.project.workingDirectory,
+            // Phase 3.12: Use task-specific worktree path if available
+            workingDirectory:
+              parentTask.workingDirectory ||
+              parentTask.project.workingDirectory,
             taskId: parentTask.id,
           },
         },

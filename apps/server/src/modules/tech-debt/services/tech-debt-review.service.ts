@@ -171,7 +171,7 @@ export class TechDebtReviewService {
       // ESLint 실행
       const files = existingFiles.join(' ');
       execSync(`npx eslint ${files} --format json`, {
-        cwd: task.project.workingDirectory,
+        cwd: task.workingDirectory || task.project.workingDirectory,
         stdio: 'pipe',
         encoding: 'utf-8',
       });
@@ -232,7 +232,10 @@ export class TechDebtReviewService {
     for (const file of affectedFiles) {
       if (!task.project?.workingDirectory) continue;
 
-      const filePath = join(task.project.workingDirectory, file);
+      const filePath = join(
+        task.workingDirectory || task.project.workingDirectory,
+        file,
+      );
       if (existsSync(filePath)) {
         try {
           const content = readFileSync(filePath, 'utf-8');
@@ -288,7 +291,10 @@ export class TechDebtReviewService {
     for (const file of codeFiles) {
       if (!task.project?.workingDirectory) continue;
 
-      const filePath = join(task.project.workingDirectory, file);
+      const filePath = join(
+        task.workingDirectory || task.project.workingDirectory,
+        file,
+      );
       if (existsSync(filePath)) {
         try {
           const content = readFileSync(filePath, 'utf-8');
@@ -350,7 +356,10 @@ export class TechDebtReviewService {
         .replace(/\.(ts|js|tsx|jsx)$/, '.spec.$1')
         .replace(/src\//, 'test/');
 
-      const testFilePath = join(task.project.workingDirectory, testFile);
+      const testFilePath = join(
+        task.workingDirectory || task.project.workingDirectory,
+        testFile,
+      );
       const hasTestFile = existsSync(testFilePath);
 
       if (!hasTestFile) {
@@ -391,7 +400,10 @@ export class TechDebtReviewService {
     for (const file of affectedFiles) {
       if (!task.project?.workingDirectory) continue;
 
-      const filePath = join(task.project.workingDirectory, file);
+      const filePath = join(
+        task.workingDirectory || task.project.workingDirectory,
+        file,
+      );
       if (existsSync(filePath)) {
         try {
           const content = readFileSync(filePath, 'utf-8');
@@ -441,7 +453,10 @@ export class TechDebtReviewService {
     for (const file of affectedFiles) {
       if (!task.project?.workingDirectory) continue;
 
-      const filePath = join(task.project.workingDirectory, file);
+      const filePath = join(
+        task.workingDirectory || task.project.workingDirectory,
+        file,
+      );
       if (existsSync(filePath)) {
         try {
           const content = readFileSync(filePath, 'utf-8');

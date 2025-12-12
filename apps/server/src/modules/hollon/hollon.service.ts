@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import {
   Hollon,
   HollonStatus,
@@ -28,6 +28,9 @@ import { TeamService } from '../team/team.service';
 import { OrganizationService } from '../organization/organization.service';
 import { Team } from '../team/entities/team.entity';
 import { Role } from '../role/entities/role.entity';
+import { Organization } from '../organization/entities/organization.entity';
+import { Task, TaskStatus } from '../task/entities/task.entity';
+import { ProcessManagerService } from '../brain-provider/services/process-manager.service';
 
 @Injectable()
 export class HollonService implements IHollonService {
@@ -40,10 +43,15 @@ export class HollonService implements IHollonService {
     private readonly teamRepo: Repository<Team>,
     @InjectRepository(Role)
     private readonly roleRepo: Repository<Role>,
+    @InjectRepository(Organization)
+    private readonly orgRepo: Repository<Organization>,
+    @InjectRepository(Task)
+    private readonly taskRepo: Repository<Task>,
     private readonly approvalService: ApprovalService,
     private readonly roleService: RoleService,
     private readonly teamService: TeamService,
     private readonly organizationService: OrganizationService,
+    private readonly processManager: ProcessManagerService,
   ) {}
 
   async create(dto: CreateHollonDto): Promise<Hollon> {
@@ -472,5 +480,97 @@ export class HollonService implements IHollonService {
     await this.hollonRepo.softRemove(hollon);
 
     this.logger.log(`💀 Temporary hollon terminated: ${hollon.name}`);
+  }
+
+  /**
+   * Emergency stop all hollons
+   * Pauses all active/working hollons and sets all in-progress tasks to pending
+   * Disables autonomous execution in organization settings
+   */
+  async emergencyStopAll(): Promise<{
+    message: string;
+    stoppedHollons: number;
+    pausedTasks: number;
+  }> {
+    this.logger.warn('EMERGENCY STOP: Pausing all hollons and tasks');
+
+    // 1. Pause all WORKING/REVIEWING hollons
+    const { affected: stoppedHollons } = await this.hollonRepo.update(
+      { status: In([HollonStatus.WORKING, HollonStatus.REVIEWING]) },
+      { status: HollonStatus.PAUSED },
+    );
+
+    // 2. Set all IN_PROGRESS tasks to PENDING
+    const { affected: pausedTasks } = await this.taskRepo.update(
+      { status: TaskStatus.IN_PROGRESS },
+      { status: TaskStatus.PENDING },
+    );
+
+    // 3. Disable autonomous execution in all organizations
+    const organizations = await this.orgRepo.find();
+    for (const org of organizations) {
+      const settings = (org.settings || {}) as any;
+      settings.autonomousExecutionEnabled = false;
+      settings.emergencyStopReason = `Manual emergency stop at ${new Date().toISOString()}`;
+
+      await this.orgRepo.update(org.id, {
+        settings: settings as any,
+      });
+    }
+
+    // 4. Kill all running Claude Code processes
+    const killResult = this.processManager.killAll();
+    this.logger.warn(
+      `EMERGENCY STOP: Killed ${killResult.killed} running processes (PIDs: ${killResult.pids.join(', ') || 'none'})`,
+    );
+
+    this.logger.warn(
+      `EMERGENCY STOP COMPLETE: ${stoppedHollons || 0} hollons paused, ${pausedTasks || 0} tasks reset, ${killResult.killed} processes killed`,
+    );
+
+    return {
+      message: 'Emergency stop executed successfully',
+      stoppedHollons: stoppedHollons || 0,
+      pausedTasks: pausedTasks || 0,
+      killedProcesses: killResult.killed,
+    } as any;
+  }
+
+  /**
+   * Resume all hollons
+   * Re-enables autonomous execution and sets paused hollons to idle
+   */
+  async resumeAll(): Promise<{
+    message: string;
+    resumedHollons: number;
+  }> {
+    this.logger.log('RESUME: Re-enabling autonomous execution');
+
+    // 1. Enable autonomous execution in all organizations
+    const organizations = await this.orgRepo.find();
+    for (const org of organizations) {
+      const settings = (org.settings || {}) as any;
+      settings.autonomousExecutionEnabled = true;
+      delete settings.emergencyStopReason;
+
+      await this.orgRepo.update(org.id, {
+        settings: settings as any,
+      });
+    }
+
+    // 2. Set all PAUSED hollons to IDLE
+    const { affected: resumedHollons } = await this.hollonRepo.update(
+      { status: HollonStatus.PAUSED },
+      { status: HollonStatus.IDLE },
+    );
+
+    this.logger.log(
+      `RESUME COMPLETE: Autonomous execution enabled, ${resumedHollons || 0} hollons resumed`,
+    );
+
+    return {
+      message: 'Autonomous execution resumed successfully',
+      resumedHollons: resumedHollons || 0,
+    };
   }
 }

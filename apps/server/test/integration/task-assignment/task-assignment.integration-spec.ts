@@ -31,6 +31,7 @@ import { TeamService } from '../../../src/modules/team/team.service';
 import { OrganizationService } from '../../../src/modules/organization/organization.service';
 import { DocumentService } from '../../../src/modules/document/document.service';
 import { Document } from '../../../src/modules/document/entities/document.entity';
+import { ProcessManagerService } from '../../../src/modules/brain-provider/services/process-manager.service';
 
 describe('Task Assignment Integration Tests', () => {
   let module: TestingModule;
@@ -110,6 +111,13 @@ describe('Task Assignment Integration Tests', () => {
           useValue: {
             findOne: jest.fn(),
             create: jest.fn(),
+          },
+        },
+        {
+          provide: ProcessManagerService,
+          useValue: {
+            killAll: jest.fn().mockReturnValue({ killed: 0, pids: [] }),
+            getRunningProcessCount: jest.fn().mockReturnValue(0),
           },
         },
       ],

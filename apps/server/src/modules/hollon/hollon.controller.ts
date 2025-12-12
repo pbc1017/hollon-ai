@@ -54,4 +54,22 @@ export class HollonController {
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.hollonService.remove(id);
   }
+
+  /**
+   * Emergency stop all hollons
+   * Pauses all active hollons and pending tasks
+   */
+  @Post('emergency-stop')
+  emergencyStop() {
+    return this.hollonService.emergencyStopAll();
+  }
+
+  /**
+   * Resume all hollons
+   * Resumes autonomous execution after emergency stop
+   */
+  @Post('resume')
+  resumeAll() {
+    return this.hollonService.resumeAll();
+  }
 }

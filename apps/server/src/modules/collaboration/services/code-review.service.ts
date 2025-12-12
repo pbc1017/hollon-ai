@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { promisify } from 'util';
+import { exec } from 'child_process';
+
+const execAsync = promisify(exec);
 import {
   TaskPullRequest,
   PullRequestStatus,
@@ -196,6 +200,44 @@ export class CodeReviewService implements ICodeReviewService {
 
     if (pr.status !== PullRequestStatus.APPROVED) {
       throw new Error(`PR ${prId} is not approved yet`);
+    }
+
+    // Phase 4: Final CI check before merge
+    if (pr.prUrl && process.env.NODE_ENV !== 'test') {
+      this.logger.log(`Performing final CI check before merge: ${pr.prUrl}`);
+
+      try {
+        const { stdout } = await execAsync(
+          `gh pr checks ${pr.prUrl} --json conclusion`,
+        );
+
+        const checks = JSON.parse(stdout.trim()) as Array<{
+          conclusion: string;
+        }>;
+
+        const hasFailedChecks = checks.some(
+          (check) => check.conclusion !== 'success',
+        );
+
+        if (hasFailedChecks) {
+          this.logger.error(
+            `Cannot merge PR ${prId}: CI checks are not all passing`,
+          );
+          throw new Error(
+            'CI checks must pass before merging. Please fix any failures and try again.',
+          );
+        }
+
+        this.logger.log(`Final CI check passed for PR ${prId}`);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('CI checks')) {
+          throw error; // Re-throw our custom error
+        }
+        this.logger.warn(
+          `Could not verify CI status: ${error instanceof Error ? error.message : 'Unknown'}`,
+        );
+        // Continue with merge if CI check command fails (might be no CI configured)
+      }
     }
 
     this.logger.log(`Merging PR ${prId}`);
@@ -913,19 +955,24 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
       return;
     }
 
-    // Worktree path 구성 (Phase 3.12 규칙)
-    const worktreePath = path.join(
-      task.project.workingDirectory,
-      '..',
-      '.git-worktrees',
-      `hollon-${hollonId.slice(0, 8)}`,
-      `task-${taskId.slice(0, 8)}`,
-    );
+    // Phase 3.12: Use task-specific worktree path if available
+    const worktreePath =
+      task.workingDirectory ||
+      path.join(
+        task.project.workingDirectory,
+        '..',
+        '.git-worktrees',
+        `hollon-${hollonId.slice(0, 8)}`,
+        `task-${taskId.slice(0, 8)}`,
+      );
+
+    // Get working directory for git commands
+    const gitCwd = task.workingDirectory || task.project.workingDirectory;
 
     try {
       this.logger.log(`Cleaning up task worktree: ${worktreePath}`);
       await execAsync(`git worktree remove ${worktreePath} --force`, {
-        cwd: task.project.workingDirectory,
+        cwd: gitCwd,
       });
       this.logger.log(`Task worktree cleaned up: ${worktreePath}`);
     } catch (error) {

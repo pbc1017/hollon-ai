@@ -7,6 +7,8 @@ import * as path from 'path';
 import { Task, TaskStatus } from '../../task/entities/task.entity';
 import { Project } from '../../project/entities/project.entity';
 import { Hollon } from '../../hollon/entities/hollon.entity';
+import { Organization } from '../../organization/entities/organization.entity';
+import { OrganizationSettings } from '../../organization/interfaces/organization-settings.interface';
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 import { ICodeReviewPort } from '../domain/ports/code-review.port';
 import { KnowledgeContext } from '../../brain-provider/services/knowledge-injection.service';
@@ -28,6 +30,8 @@ export class TaskExecutionService {
     private readonly taskRepo: Repository<Task>,
     @InjectRepository(Hollon)
     private readonly hollonRepo: Repository<Hollon>,
+    @InjectRepository(Organization)
+    private readonly orgRepo: Repository<Organization>,
     private readonly brainProvider: BrainProviderService,
     @Inject('ICodeReviewPort')
     private readonly codeReviewPort: ICodeReviewPort,
@@ -100,6 +104,39 @@ export class TaskExecutionService {
       );
       this.logger.log(`PR created: ${prUrl}`);
 
+      // 5.5. Phase 4: Wait for CI checks to complete
+      this.logger.log(`Waiting for CI checks to complete for PR: ${prUrl}`);
+      await this.waitForCIChecks(prUrl, worktreePath);
+
+      // 5.6. Phase 4: Check CI status
+      const ciResult = await this.checkCIStatus(prUrl, worktreePath);
+
+      if (!ciResult.passed) {
+        this.logger.error(
+          `CI checks failed for task ${taskId}: ${ciResult.failedChecks.join(', ')}`,
+        );
+
+        // Handle CI failure and get retry decision
+        const { shouldRetry, feedback } = await this.handleCIFailure(
+          task,
+          ciResult.failedChecks,
+          prUrl,
+          worktreePath,
+        );
+
+        if (shouldRetry) {
+          // Throw error with feedback for orchestrator to retry
+          throw new Error(`CI_FAILURE_RETRY: ${feedback}`);
+        } else {
+          // Max retries reached, fail the task
+          throw new Error(
+            `CI_FAILURE_MAX_RETRIES: Maximum CI retry attempts reached. ${feedback}`,
+          );
+        }
+      }
+
+      this.logger.log(`All CI checks passed for task ${taskId}`);
+
       // 6. CodeReview 요청 (Phase 2 활용)
       await this.requestCodeReview(task, prUrl, hollonId, worktreePath);
 
@@ -116,7 +153,7 @@ export class TaskExecutionService {
       );
 
       // Phase 3.12: Task worktree 정리 (에러 발생 시)
-      await this.cleanupTaskWorktree(worktreePath).catch(() => {
+      await this.cleanupTaskWorktree(worktreePath, task.id).catch(() => {
         // Already logged in cleanupTaskWorktree
       });
 
@@ -193,6 +230,13 @@ export class TaskExecutionService {
       throw new Error(`Task worktree creation failed: ${fullError}`);
     }
 
+    // Phase 3.12: Save worktree path to task entity
+    await this.taskRepo.update(task.id, {
+      workingDirectory: worktreePath,
+    });
+
+    this.logger.log(`Task worktree path saved: ${worktreePath}`);
+
     return worktreePath;
   }
 
@@ -250,12 +294,25 @@ export class TaskExecutionService {
    * Phase 3.12: Task worktree 정리 (Task 완료 후 호출)
    * PR merge 후 자동으로 호출되어 worktree 삭제
    */
-  async cleanupTaskWorktree(worktreePath: string): Promise<void> {
+  async cleanupTaskWorktree(
+    worktreePath: string,
+    taskId?: string,
+  ): Promise<void> {
     this.logger.debug(`Cleaning up task worktree: ${worktreePath}`);
 
     try {
       await execAsync(`git worktree remove ${worktreePath} --force`);
       this.logger.log(`Task worktree removed: ${worktreePath}`);
+
+      // Phase 3.12: Clear workingDirectory field after successful cleanup
+      if (taskId) {
+        await this.taskRepo.update(taskId, {
+          workingDirectory: null,
+        });
+        this.logger.log(
+          `Task workingDirectory cleared for task ${taskId.slice(0, 8)}`,
+        );
+      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -377,9 +434,18 @@ export class TaskExecutionService {
       // 3. PR body 구성
       const prBody = this.buildPRBody(task);
 
-      // 4. Create PR using gh CLI
+      // 4. Get base branch from organization settings
+      const organization = await this.orgRepo.findOne({
+        where: { id: task.project.organizationId },
+      });
+      const settings = (organization?.settings || {}) as OrganizationSettings;
+      const baseBranch = settings.baseBranch || 'main';
+
+      this.logger.debug(`Creating PR with base branch: ${baseBranch}`);
+
+      // 5. Create PR using gh CLI
       const { stdout } = await execAsync(
-        `gh pr create --title "${task.title}" --body "${prBody}" --base main`,
+        `gh pr create --title "${task.title}" --body "${prBody}" --base ${baseBranch}`,
         { cwd: worktreePath },
       );
 
@@ -390,6 +456,223 @@ export class TaskExecutionService {
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to create PR: ${errorMessage}`);
       throw new Error(`PR creation failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Phase 4: Check CI status for a PR
+   * Uses gh CLI to check all CI checks on the PR
+   */
+  async checkCIStatus(
+    prUrl: string,
+    worktreePath: string,
+  ): Promise<{ passed: boolean; failedChecks: string[] }> {
+    this.logger.debug(`Checking CI status for PR: ${prUrl}`);
+
+    // Skip CI checks in test environment
+    if (process.env.NODE_ENV === 'test') {
+      this.logger.debug(`Skipping CI checks in test environment`);
+      return { passed: true, failedChecks: [] };
+    }
+
+    try {
+      // Use gh pr checks to get CI status
+      const { stdout } = await execAsync(`gh pr checks ${prUrl}`, {
+        cwd: worktreePath,
+      });
+
+      // Parse output to check if all checks passed
+      // gh pr checks output format:
+      // X  check-name  conclusion  url
+      // ✓  check-name  success     url
+      const lines = stdout.trim().split('\n');
+      const failedChecks: string[] = [];
+
+      for (const line of lines) {
+        // Lines starting with X or ✗ indicate failure
+        if (line.trim().startsWith('X') || line.trim().startsWith('✗')) {
+          // Extract check name (second column)
+          const parts = line.trim().split(/\s+/);
+          if (parts.length >= 2) {
+            failedChecks.push(parts[1]);
+          }
+        }
+      }
+
+      const passed = failedChecks.length === 0;
+
+      if (passed) {
+        this.logger.log(`All CI checks passed for PR: ${prUrl}`);
+      } else {
+        this.logger.warn(
+          `CI checks failed for PR ${prUrl}: ${failedChecks.join(', ')}`,
+        );
+      }
+
+      return { passed, failedChecks };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to check CI status: ${errorMessage}`);
+
+      // If gh pr checks fails, it might mean checks are still pending
+      // Return as not passed so we can retry
+      return { passed: false, failedChecks: ['CI check command failed'] };
+    }
+  }
+
+  /**
+   * Phase 4: Handle CI failure with retry logic
+   * Returns feedback for the brain and determines if retry is possible
+   */
+  async handleCIFailure(
+    task: Task,
+    failedChecks: string[],
+    prUrl: string,
+    worktreePath: string,
+  ): Promise<{
+    shouldRetry: boolean;
+    feedback: string;
+    retryCount: number;
+  }> {
+    this.logger.warn(
+      `Handling CI failure for task ${task.id}: ${failedChecks.join(', ')}`,
+    );
+
+    // Get current retry count from task metadata
+    const metadata = (task.metadata || {}) as Record<string, unknown>;
+    const currentRetryCount = (metadata.ciRetryCount as number) || 0;
+    const maxRetries = 3;
+
+    const shouldRetry = currentRetryCount < maxRetries;
+    const retryCount = currentRetryCount + 1;
+
+    // Get detailed CI logs for failed checks
+    let ciLogs = '';
+    try {
+      // Use gh run view to get detailed logs
+      const { stdout } = await execAsync(
+        `gh pr checks ${prUrl} --json name,conclusion,detailsUrl | jq -r '.[] | select(.conclusion != "success") | "\\(.name): \\(.detailsUrl)"'`,
+        { cwd: worktreePath },
+      );
+      ciLogs = stdout.trim();
+    } catch {
+      this.logger.debug('Could not fetch detailed CI logs');
+      ciLogs = `Failed checks: ${failedChecks.join(', ')}`;
+    }
+
+    // Format feedback for the brain
+    const feedback = `
+CI Checks Failed (Attempt ${retryCount}/${maxRetries}):
+
+${ciLogs}
+
+The following CI checks failed:
+${failedChecks.map((check) => `- ${check}`).join('\n')}
+
+Please review the CI errors and fix the issues in your code. 
+${shouldRetry ? 'You will have another chance to fix this.' : 'This is the final attempt.'}
+
+Make sure to:
+1. Review the error messages carefully
+2. Fix any linting, type, or test failures
+3. Ensure all tests pass locally before committing
+`.trim();
+
+    // Update task metadata with retry count
+    await this.taskRepo.update(task.id, {
+      metadata: {
+        ...metadata,
+        ciRetryCount: retryCount,
+        lastCIFailure: new Date().toISOString(),
+        lastCIFailedChecks: failedChecks,
+      } as any,
+    });
+
+    if (shouldRetry) {
+      this.logger.log(
+        `Will retry task ${task.id} after CI failure (attempt ${retryCount}/${maxRetries})`,
+      );
+    } else {
+      this.logger.warn(
+        `Max retries reached for task ${task.id}, will not retry`,
+      );
+    }
+
+    return { shouldRetry, feedback, retryCount };
+  }
+
+  /**
+   * Phase 4: Wait for CI checks to start and complete
+   * Polls the PR until CI checks are done (success or failure)
+   */
+  private async waitForCIChecks(
+    prUrl: string,
+    worktreePath: string,
+    maxWaitMinutes: number = 10,
+  ): Promise<void> {
+    this.logger.debug(
+      `Waiting for CI checks to complete (max ${maxWaitMinutes} minutes)`,
+    );
+
+    // Skip in test environment
+    if (process.env.NODE_ENV === 'test') {
+      this.logger.debug('Skipping CI wait in test environment');
+      return;
+    }
+
+    const startTime = Date.now();
+    const maxWaitMs = maxWaitMinutes * 60 * 1000;
+    const pollIntervalMs = 30 * 1000; // Poll every 30 seconds
+
+    while (true) {
+      try {
+        // Check if CI checks have started and completed
+        const { stdout } = await execAsync(
+          `gh pr checks ${prUrl} --json state,status,conclusion`,
+          { cwd: worktreePath },
+        );
+
+        const checks = JSON.parse(stdout.trim()) as Array<{
+          state: string;
+          status: string;
+          conclusion: string;
+        }>;
+
+        // If no checks yet, continue waiting
+        if (checks.length === 0) {
+          this.logger.debug('No CI checks found yet, waiting...');
+        } else {
+          // Check if all checks are completed
+          const allCompleted = checks.every(
+            (check) =>
+              check.status === 'completed' || check.conclusion !== null,
+          );
+
+          if (allCompleted) {
+            this.logger.log('All CI checks completed');
+            return;
+          }
+
+          this.logger.debug(
+            `CI checks in progress (${checks.filter((c) => c.status === 'completed').length}/${checks.length} completed)`,
+          );
+        }
+      } catch (error) {
+        this.logger.debug(
+          `Error checking CI status (will retry): ${error instanceof Error ? error.message : 'Unknown'}`,
+        );
+      }
+
+      // Check timeout
+      if (Date.now() - startTime > maxWaitMs) {
+        throw new Error(
+          `CI checks did not complete within ${maxWaitMinutes} minutes`,
+        );
+      }
+
+      // Wait before next poll
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
   }
 

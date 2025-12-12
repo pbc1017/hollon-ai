@@ -19,6 +19,11 @@ describe('TaskPoolService', () => {
   const mockHollonRepo = {
     findOne: jest.fn(),
     find: jest.fn(),
+    manager: {
+      getRepository: jest.fn().mockReturnValue({
+        find: jest.fn().mockResolvedValue([]),
+      }),
+    },
   };
 
   beforeEach(async () => {

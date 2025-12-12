@@ -188,6 +188,14 @@ export class Task extends BaseEntity {
   @Column({ name: 'last_reviewed_at', type: 'timestamp', nullable: true })
   lastReviewedAt?: Date | null;
 
+  // ✅ Phase 3.12: Task-specific worktree path
+  @Column({ name: 'working_directory', type: 'text', nullable: true })
+  workingDirectory?: string | null;
+
+  // ✅ Phase 4: CI/CD metadata
+  @Column({ type: 'jsonb', nullable: true })
+  metadata?: Record<string, unknown>;
+
   // Relations
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organization_id' })

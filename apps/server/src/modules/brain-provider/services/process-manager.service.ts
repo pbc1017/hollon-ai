@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { spawn } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import { existsSync } from 'fs';
 import {
   IProcessManager,
@@ -12,6 +12,7 @@ import { BrainExecutionError } from '../exceptions/brain-execution.error';
 @Injectable()
 export class ProcessManagerService implements IProcessManager {
   private readonly logger = new Logger(ProcessManagerService.name);
+  private readonly runningProcesses: Map<number, ChildProcess> = new Map();
 
   async spawn(options: ProcessOptions): Promise<ProcessResult> {
     const startTime = Date.now();
@@ -49,6 +50,14 @@ export class ProcessManagerService implements IProcessManager {
 
       this.logger.debug(`[SPAWN DEBUG] Process spawned with PID: ${proc.pid}`);
 
+      // Track running process for emergency stop
+      if (proc.pid) {
+        this.runningProcesses.set(proc.pid, proc);
+        this.logger.debug(
+          `[PROCESS TRACKING] Added process ${proc.pid} (total: ${this.runningProcesses.size})`,
+        );
+      }
+
       // Timeout handler
       const timeoutHandle = setTimeout(() => {
         timedOut = true;
@@ -84,6 +93,14 @@ export class ProcessManagerService implements IProcessManager {
         clearTimeout(timeoutHandle);
         const duration = Date.now() - startTime;
 
+        // Remove from tracking
+        if (proc.pid) {
+          this.runningProcesses.delete(proc.pid);
+          this.logger.debug(
+            `[PROCESS TRACKING] Removed process ${proc.pid} (remaining: ${this.runningProcesses.size})`,
+          );
+        }
+
         if (timedOut) {
           reject(new BrainTimeoutError(options.timeoutMs, duration));
         } else {
@@ -103,6 +120,14 @@ export class ProcessManagerService implements IProcessManager {
       proc.on('error', (err: Error & { code?: string }) => {
         clearTimeout(timeoutHandle);
         const duration = Date.now() - startTime;
+
+        // Remove from tracking
+        if (proc.pid) {
+          this.runningProcesses.delete(proc.pid);
+          this.logger.debug(
+            `[PROCESS TRACKING] Removed process ${proc.pid} on error (remaining: ${this.runningProcesses.size})`,
+          );
+        }
 
         // Enhanced error logging for ENOENT
         this.logger.error(`[SPAWN ERROR] Error code: ${err.code}`);
@@ -134,5 +159,59 @@ export class ProcessManagerService implements IProcessManager {
         proc.stdin.end();
       }
     });
+  }
+
+  /**
+   * Kill all running processes
+   * Used for emergency stop functionality
+   */
+  killAll(): { killed: number; pids: number[] } {
+    const killed: number[] = [];
+
+    this.logger.warn(
+      `[EMERGENCY STOP] Killing all running processes (${this.runningProcesses.size} processes)`,
+    );
+
+    for (const [pid, proc] of this.runningProcesses.entries()) {
+      try {
+        // Try graceful shutdown first
+        proc.kill('SIGTERM');
+        killed.push(pid);
+        this.logger.warn(`[EMERGENCY STOP] Sent SIGTERM to process ${pid}`);
+
+        // Force kill after 2s if still alive
+        setTimeout(() => {
+          if (!proc.killed) {
+            this.logger.warn(
+              `[EMERGENCY STOP] Force killing process ${pid} with SIGKILL`,
+            );
+            proc.kill('SIGKILL');
+          }
+        }, 2000);
+      } catch (error) {
+        this.logger.error(
+          `[EMERGENCY STOP] Failed to kill process ${pid}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+      }
+    }
+
+    // Clear the map (processes will be removed by close handler too)
+    this.runningProcesses.clear();
+
+    this.logger.warn(
+      `[EMERGENCY STOP] Kill signal sent to ${killed.length} processes`,
+    );
+
+    return {
+      killed: killed.length,
+      pids: killed,
+    };
+  }
+
+  /**
+   * Get count of currently running processes
+   */
+  getRunningProcessCount(): number {
+    return this.runningProcesses.size;
   }
 }
