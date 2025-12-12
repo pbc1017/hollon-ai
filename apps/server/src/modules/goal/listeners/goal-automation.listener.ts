@@ -103,6 +103,96 @@ export class GoalAutomationListener {
   }
 
   /**
+   * Step 1.5: 자동 Team Epic Decomposition (Phase 3.8+)
+   * 매 1분 30초마다 team_epic 태스크를 찾아서 team manager에게 분해 요청
+   *
+   * 워크플로우:
+   * - PENDING/READY 상태의 team_epic 태스크 찾기
+   * - 해당 팀의 manager hollon 찾기
+   * - Manager의 runCycle 실행 → team_epic pull → decompose
+   */
+  @Cron('*/1 * * * *') // 1분마다 (Goal decomposition과 동일 간격)
+  async autoDecomposeTeamEpics(): Promise<void> {
+    try {
+      this.logger.debug('Checking for team epics that need decomposition...');
+
+      // PENDING/READY 상태의 team_epic 태스크 찾기
+      const teamEpics = await this.taskRepo
+        .createQueryBuilder('task')
+        .where('task.type = :type', { type: 'team_epic' })
+        .andWhere('task.status IN (:...statuses)', {
+          statuses: [TaskStatus.PENDING, TaskStatus.READY],
+        })
+        .andWhere('task.assignedTeamId IS NOT NULL')
+        .leftJoinAndSelect('task.assignedTeam', 'team')
+        .leftJoinAndSelect('team.manager', 'manager')
+        .take(5) // 한 번에 최대 5개까지만 처리
+        .getMany();
+
+      if (teamEpics.length === 0) {
+        this.logger.debug('No team epics need decomposition');
+        return;
+      }
+
+      this.logger.log(
+        `Found ${teamEpics.length} team epics ready for manager decomposition`,
+      );
+
+      // Group by manager to avoid running same manager multiple times
+      const tasksByManager = new Map<string, Task[]>();
+      for (const task of teamEpics) {
+        if (task.assignedTeam?.manager) {
+          const managerId = task.assignedTeam.manager.id;
+          if (!tasksByManager.has(managerId)) {
+            tasksByManager.set(managerId, []);
+          }
+          tasksByManager.get(managerId)!.push(task);
+        } else {
+          this.logger.warn(
+            `Team ${task.assignedTeamId} has no manager assigned - skipping task ${task.id}`,
+          );
+        }
+      }
+
+      // Run cycle for each manager (they will pull and decompose team epics)
+      for (const [managerId, tasks] of tasksByManager.entries()) {
+        try {
+          const managerName = tasks[0].assignedTeam?.manager?.name || 'Unknown';
+          this.logger.log(
+            `Manager ${managerName} processing ${tasks.length} team epic(s)`,
+          );
+
+          const result =
+            await this.hollonOrchestratorService.runCycle(managerId);
+
+          if (result.success) {
+            this.logger.log(
+              `✅ Manager ${managerName} decomposed team epic: ${result.taskTitle}`,
+            );
+          } else {
+            this.logger.warn(
+              `⚠️ Manager ${managerName} cycle failed: ${result.error || 'Unknown error'}`,
+            );
+          }
+        } catch (error) {
+          const err = error as Error;
+          this.logger.error(
+            `Failed to run cycle for manager ${managerId}: ${err.message}`,
+            err.stack,
+          );
+          // 에러가 발생해도 다음 Manager는 계속 처리
+        }
+      }
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Team epic decomposition automation failed: ${err.message}`,
+        err.stack,
+      );
+    }
+  }
+
+  /**
    * Step 2: 자동 Task Execution
    * 매 2분마다 할당되었지만 아직 실행되지 않은 Task를 찾아서 자동으로 실행
    *
