@@ -6,10 +6,7 @@ import { HollonOrchestratorService } from '@/modules/orchestration/services/holl
 import { TaskPoolService } from '@/modules/orchestration/services/task-pool.service';
 import { PromptComposerService } from '@/modules/orchestration/services/prompt-composer.service';
 import { BrainProviderService } from '@/modules/brain-provider/brain-provider.service';
-import {
-  Hollon,
-  HollonStatus,
-} from '@/modules/hollon/entities/hollon.entity';
+import { Hollon, HollonStatus } from '@/modules/hollon/entities/hollon.entity';
 import {
   Task,
   TaskStatus,
@@ -96,9 +93,12 @@ describe('Orchestration E2E', () => {
     it('should execute complete workflow: setup → task pull → prompt composition → brain execution → completion', async () => {
       // ==================== SETUP PHASE ====================
       // Create organization using factory
-      testOrg = await OrganizationFactory.createPersisted(getOrganizationRepo(), {
-        description: 'E2E orchestration test organization',
-      });
+      testOrg = await OrganizationFactory.createPersisted(
+        getOrganizationRepo(),
+        {
+          description: 'E2E orchestration test organization',
+        },
+      );
 
       // Create team using factory
       testTeam = await TeamFactory.createPersisted(getTeamRepo(), testOrg.id, {
@@ -334,7 +334,9 @@ describe('add', () => {
       await getTaskRepo().delete(errorTask.id);
 
       // Reset hollon status
-      await getHollonRepo().update(testHollon.id, { status: HollonStatus.IDLE });
+      await getHollonRepo().update(testHollon.id, {
+        status: HollonStatus.IDLE,
+      });
     });
   });
 

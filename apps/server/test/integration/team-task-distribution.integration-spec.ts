@@ -9,10 +9,7 @@ import {
   TaskType,
 } from '@/modules/task/entities/task.entity';
 import { Team } from '@/modules/team/entities/team.entity';
-import {
-  Hollon,
-  HollonStatus,
-} from '@/modules/hollon/entities/hollon.entity';
+import { Hollon, HollonStatus } from '@/modules/hollon/entities/hollon.entity';
 import { Role } from '@/modules/role/entities/role.entity';
 import { Organization } from '@/modules/organization/entities/organization.entity';
 import { BrainProviderService } from '@/modules/brain-provider/brain-provider.service';
