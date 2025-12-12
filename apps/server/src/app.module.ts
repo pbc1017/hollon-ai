@@ -24,6 +24,7 @@ import { CrossTeamCollaborationModule } from './modules/cross-team-collaboration
 import { IncidentModule } from './modules/incident/incident.module';
 import { ConflictResolutionModule } from './modules/conflict-resolution/conflict-resolution.module';
 import { GoalModule } from './modules/goal/goal.module';
+import { DddProvidersModule } from './modules/ddd-providers/ddd-providers.module';
 
 @Module({
   imports: [
@@ -68,6 +69,9 @@ import { GoalModule } from './modules/goal/goal.module';
     IncidentModule,
     ConflictResolutionModule,
     GoalModule,
+
+    // ✅ DDD: Global Port Providers Module
+    DddProvidersModule,
   ],
 })
 export class AppModule {}

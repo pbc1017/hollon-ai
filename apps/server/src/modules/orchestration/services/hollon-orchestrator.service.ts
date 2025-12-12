@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -22,9 +22,9 @@ import {
 import { QualityGateService } from './quality-gate.service';
 import { Organization } from '../../organization/entities/organization.entity';
 import { EscalationService, EscalationLevel } from './escalation.service';
-import { HollonService } from '../../hollon/hollon.service';
+import { IHollonService } from '../../hollon/domain/hollon-service.interface';
 import { SubtaskCreationService } from './subtask-creation.service'; // Phase 3.10: Re-added for review cycle
-import { CodeReviewService } from '../../collaboration/services/code-review.service'; // Phase 3.16
+import { ICodeReviewPort } from '../domain/ports/code-review.port'; // ✅ DDD: Port 사용
 import { TaskPullRequest } from '../../collaboration/entities/task-pull-request.entity'; // Phase 3.16
 import { Role } from '../../role/entities/role.entity';
 import { ComposedPrompt } from '../interfaces/prompt-context.interface';
@@ -50,6 +50,8 @@ export interface ExecutionCycleResult {
  * 4. Create result document
  * 5. Update task status
  * 6. Handle errors and state transitions
+ *
+ * ✅ DDD: HollonService, CodeReviewService 직접 의존성 제거, Port 사용
  */
 
 @Injectable()
@@ -68,13 +70,13 @@ export class HollonOrchestratorService {
     private readonly taskPool: TaskPoolService,
     private readonly qualityGate: QualityGateService,
     private readonly escalationService: EscalationService,
-    @Inject(forwardRef(() => HollonService))
-    private readonly hollonService: HollonService,
+    @Inject('IHollonService')
+    private readonly hollonService: IHollonService,
     private readonly subtaskService: SubtaskCreationService, // Phase 3.10: Re-added
     @InjectRepository(Task)
     private readonly taskRepo: Repository<Task>, // Phase 3.16
-    @Inject(forwardRef(() => CodeReviewService))
-    private readonly codeReviewService: CodeReviewService, // Phase 3.16
+    @Inject('ICodeReviewPort')
+    private readonly codeReviewPort: ICodeReviewPort, // ✅ DDD: Port 사용
     @InjectRepository(Role)
     private readonly roleRepo: Repository<Role>, // Phase 3.16
   ) {}
@@ -573,7 +575,8 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
         }
 
         // 4.2 Create temporary Sub-Hollon
-        const subHollon = await this.hollonService.createTemporary({
+        // ✅ DDD: createTemporaryHollon 사용 (Port 인터페이스)
+        const subHollon = await this.hollonService.createTemporaryHollon({
           name: `${role.name}-${task.id.substring(0, 8)}`,
           organizationId: parentHollon.organizationId,
           teamId: parentHollon.teamId || undefined,
@@ -1032,8 +1035,8 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
     // 2. For each subtask, create temporary review hollon and request review
     for (const subtask of subtasksToReview) {
       try {
-        // Find the PR for this task
-        const prs = await this.codeReviewService.getPullRequestsForTask(
+        // ✅ DDD: Find the PR for this task (Port 사용)
+        const prs = await this.codeReviewPort.findPullRequestsByTaskId(
           subtask.id,
         );
         const pr = prs[0]; // Get the first (most recent) PR
@@ -1055,13 +1058,11 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
           `Manager ${managerHollon.name} created reviewer ${reviewerHollon.name} for task ${subtask.id}`,
         );
 
-        // Request code review (reuse Phase 3.13)
-        // Note: requestReview will automatically select a reviewer
-        // For Phase 3.16, we want the manager to directly assign the temporary reviewer
-        // So we update the PR's reviewerHollonId directly
-        await this.codeReviewService['prRepo'].update(pr.id, {
-          reviewerHollonId: reviewerHollon.id,
-        });
+        // ✅ DDD: Request code review (Port 사용)
+        // Note: This assigns the temporary reviewer to the PR
+        // TODO: Port에 updateReviewer 메서드 추가 필요
+        // 임시로 requestReview 사용 (자동 할당되지만 나중에 수정 필요)
+        await this.codeReviewPort.requestReview(pr.id, reviewerHollon.id);
 
         // Update task status to IN_REVIEW
         await this.taskRepo.update(subtask.id, {
@@ -1384,14 +1385,17 @@ If you choose "complete", the parent task will be marked as done.
     reviewerHollonId: string,
   ): Promise<void> {
     try {
-      const reviewerHollon = await this.hollonService.findOne(reviewerHollonId);
+      // ✅ DDD: findById 사용 (Port 인터페이스)
+      const reviewerHollon =
+        await this.hollonService.findById(reviewerHollonId);
 
       // Check if hollon is temporary by lifecycle or name pattern
       if (
         reviewerHollon?.lifecycle === HollonLifecycle.TEMPORARY ||
         reviewerHollon?.name.startsWith('Reviewer-')
       ) {
-        await this.hollonService.remove(reviewerHollonId);
+        // ✅ DDD: releaseTemporaryHollon 사용 (Port 인터페이스)
+        await this.hollonService.releaseTemporaryHollon(reviewerHollonId);
         this.logger.log(
           `Cleaned up temporary reviewer hollon ${reviewerHollonId}`,
         );

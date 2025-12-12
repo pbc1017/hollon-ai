@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { promisify } from 'util';
@@ -8,7 +8,7 @@ import { Task, TaskStatus } from '../../task/entities/task.entity';
 import { Project } from '../../project/entities/project.entity';
 import { Hollon } from '../../hollon/entities/hollon.entity';
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
-import { CodeReviewService } from '../../collaboration/services/code-review.service';
+import { ICodeReviewPort } from '../domain/ports/code-review.port';
 import { KnowledgeContext } from '../../brain-provider/services/knowledge-injection.service';
 
 const execAsync = promisify(exec);
@@ -16,6 +16,8 @@ const execAsync = promisify(exec);
 /**
  * Phase 3.5: Task 실행 → Worktree → 코딩 → 커밋 → PR 생성
  * Git Worktree를 활용한 격리된 작업 환경 제공
+ *
+ * ✅ DDD: CodeReviewService 직접 의존성 제거, ICodeReviewPort 사용
  */
 @Injectable()
 export class TaskExecutionService {
@@ -27,7 +29,8 @@ export class TaskExecutionService {
     @InjectRepository(Hollon)
     private readonly hollonRepo: Repository<Hollon>,
     private readonly brainProvider: BrainProviderService,
-    private readonly codeReviewService: CodeReviewService,
+    @Inject('ICodeReviewPort')
+    private readonly codeReviewPort: ICodeReviewPort,
   ) {}
 
   /**
@@ -442,8 +445,8 @@ export class TaskExecutionService {
     });
     const branchName = stdout.trim();
 
-    // TaskPullRequest 생성 (Phase 2)
-    const pr = await this.codeReviewService.createPullRequest({
+    // ✅ DDD: TaskPullRequest 생성 (Port 사용)
+    const pr = await this.codeReviewPort.createPullRequest({
       taskId: task.id,
       prNumber,
       prUrl,
@@ -452,8 +455,8 @@ export class TaskExecutionService {
       authorHollonId,
     });
 
-    // 리뷰어 자동 할당 (Phase 2)
-    await this.codeReviewService.requestReview(pr.id);
+    // ✅ DDD: 리뷰어 자동 할당 (Port 사용)
+    await this.codeReviewPort.requestReview(pr.id);
   }
 
   /**

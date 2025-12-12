@@ -7,9 +7,7 @@ import { Organization } from '../organization/entities/organization.entity';
 import { Project } from '../project/entities/project.entity';
 import { Team } from '../team/entities/team.entity';
 import { BrainProviderModule } from '../brain-provider/brain-provider.module';
-import { CollaborationModule } from '../collaboration/collaboration.module';
 import { GoalModule } from '../goal/goal.module';
-import { HollonModule } from '../hollon/hollon.module';
 import { PromptComposerService } from './services/prompt-composer.service';
 import { TaskPoolService } from './services/task-pool.service';
 import { HollonOrchestratorService } from './services/hollon-orchestrator.service';
@@ -26,6 +24,11 @@ import { ManagerService } from './services/manager.service';
 import { CostRecord } from '../cost-tracking/entities/cost-record.entity';
 import { GoalDecompositionService } from '../goal/services/goal-decomposition.service';
 import { ApprovalRequest } from '../approval/entities/approval-request.entity';
+import { Role } from '../role/entities/role.entity';
+// DDD: Port Adapters
+import { HollonManagementAdapter } from './infrastructure/adapters/hollon-management.adapter';
+import { CodeReviewAdapter } from './infrastructure/adapters/code-review.adapter';
+import { MessagingAdapter } from './infrastructure/adapters/messaging.adapter';
 
 @Module({
   imports: [
@@ -38,13 +41,14 @@ import { ApprovalRequest } from '../approval/entities/approval-request.entity';
       Team,
       CostRecord,
       ApprovalRequest,
+      Role,
     ]),
     BrainProviderModule,
-    forwardRef(() => CollaborationModule),
+    // ✅ DDD: CollaborationModule, HollonModule import 제거 (Port 사용)
     forwardRef(() => GoalModule),
-    forwardRef(() => HollonModule),
   ],
   providers: [
+    // Application Services
     PromptComposerService,
     TaskPoolService,
     QualityGateService,
@@ -61,6 +65,20 @@ import { ApprovalRequest } from '../approval/entities/approval-request.entity';
     {
       provide: 'GoalDecompositionService',
       useExisting: GoalDecompositionService,
+    },
+
+    // ✅ DDD: Port Adapters (OrchestrationModule 내에서만 사용)
+    {
+      provide: 'IHollonManagementPort',
+      useClass: HollonManagementAdapter,
+    },
+    {
+      provide: 'ICodeReviewPort',
+      useClass: CodeReviewAdapter,
+    },
+    {
+      provide: 'IMessagingPort',
+      useClass: MessagingAdapter,
     },
   ],
   exports: [
