@@ -10,6 +10,7 @@ import { CostCalculatorService } from './services/cost-calculator.service';
 import { ResponseParserService } from './services/response-parser.service';
 import { BrainProviderConfigService } from './services/brain-provider-config.service';
 import { KnowledgeInjectionService } from './services/knowledge-injection.service';
+import { KnowledgeExtractionService } from './services/knowledge-extraction.service';
 import { ClaudeCodeProvider } from './providers/claude-code.provider';
 import { DocumentModule } from '../document/document.module';
 
@@ -27,6 +28,7 @@ import { DocumentModule } from '../document/document.module';
     ResponseParserService,
     BrainProviderConfigService,
     KnowledgeInjectionService, // Phase 3.5: 지식 주입
+    KnowledgeExtractionService, // Knowledge extraction from tasks
 
     // Provider
     ClaudeCodeProvider,
@@ -34,6 +36,10 @@ import { DocumentModule } from '../document/document.module';
     // Main service
     BrainProviderService,
   ],
-  exports: [BrainProviderService, ClaudeCodeProvider],
+  exports: [
+    BrainProviderService,
+    ClaudeCodeProvider,
+    KnowledgeExtractionService,
+  ],
 })
 export class BrainProviderModule {}
