@@ -11,10 +11,12 @@ import { OrchestrationModule } from '../orchestration/orchestration.module';
 import { BrainProviderModule } from '../brain-provider/brain-provider.module';
 import { Team } from '../team/entities/team.entity';
 import { Role } from '../role/entities/role.entity';
+import { Organization } from '../organization/entities/organization.entity';
+import { Task } from '../task/entities/task.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Hollon, Team, Role]),
+    TypeOrmModule.forFeature([Hollon, Team, Role, Organization, Task]),
     ApprovalModule,
     RoleModule,
     forwardRef(() => TeamModule),
