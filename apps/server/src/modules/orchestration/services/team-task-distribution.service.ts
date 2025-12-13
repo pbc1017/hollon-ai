@@ -195,8 +195,11 @@ Break down this team task into 3-7 subtasks and assign each to the most suitable
 **Consider:**
 1. Each member's skills and capabilities
 2. Current workload balance
-3. Dependencies between subtasks
-4. Opportunities for parallel execution
+3. **CRITICAL: Dependencies between subtasks** - Ensure proper execution order!
+   - Example: "DTO 작성" MUST complete before "Repository 구현"
+   - Example: "Repository 구현" MUST complete before "Service 구현"
+   - Example: "Service 구현" MUST complete before "Controller 구현"
+4. Opportunities for parallel execution (only for truly independent tasks)
 
 **Response Format (JSON):**
 {
@@ -217,7 +220,11 @@ Break down this team task into 3-7 subtasks and assign each to the most suitable
 **Important:**
 - Assign each subtask to exactly one team member from the list above
 - Ensure workload is balanced
-- Put dependent tasks in logical order
+- **MANDATORY: Set "dependencies" array for all tasks that depend on others**
+  - Use exact subtask titles in the dependencies array
+  - Don't create circular dependencies
+  - Default to sequential execution if unsure - parallel execution is an optimization
+- Put dependent tasks in logical order (foundation → implementation → integration → testing)
 - Match skills to task requirements`;
   }
 
@@ -365,34 +372,53 @@ Break down this team task into 3-7 subtasks and assign each to the most suitable
         continue;
       }
 
-      // Update subtask with assignment
+      // Update subtask with assignment and reviewer
+      // Phase 3.16: Set reviewer to parent task's manager
       await this.taskRepo.update(subtask.id, {
         assignedHollonId: hollonId,
+        reviewerHollonId: teamTask.assignedHollonId, // Manager reviews subtasks
         status: TaskStatus.READY,
       });
 
-      // Set up dependencies
-      // TODO: Re-enable when task_dependencies table exists
-      // if (sp.dependencies && sp.dependencies.length > 0) {
-      //   const dependencyTasks: Task[] = [];
-      //   for (const depTitle of sp.dependencies) {
-      //     const depTask = titleToTaskMap.get(depTitle);
-      //     if (depTask) {
-      //       dependencyTasks.push(depTask);
-      //     }
-      //   }
+      // Phase 4: Set up task dependencies
+      if (sp.dependencies && sp.dependencies.length > 0) {
+        const dependencyTasks: Task[] = [];
+        for (const depTitle of sp.dependencies) {
+          const depTask = titleToTaskMap.get(depTitle);
+          if (depTask) {
+            dependencyTasks.push(depTask);
+            this.logger.debug(
+              `Task "${sp.title}" depends on "${depTitle}" (${depTask.id})`,
+            );
+          } else {
+            this.logger.warn(
+              `Dependency "${depTitle}" not found for task "${sp.title}"`,
+            );
+          }
+        }
 
-      //   if (dependencyTasks.length > 0) {
-      //     subtask.dependencies = dependencyTasks;
-      //     await this.taskRepo.save(subtask);
-      //   }
-      // }
+        if (dependencyTasks.length > 0) {
+          // Load subtask with dependencies relation
+          const subtaskWithDeps = await this.taskRepo.findOne({
+            where: { id: subtask.id },
+            relations: ['dependencies'],
+          });
+
+          if (subtaskWithDeps) {
+            subtaskWithDeps.dependencies = dependencyTasks;
+            await this.taskRepo.save(subtaskWithDeps);
+            this.logger.log(
+              `Set ${dependencyTasks.length} dependencies for task "${sp.title}"`,
+            );
+          }
+        }
+      }
     }
 
     // Reload to get updated data
     const createdSubtasks = await this.taskRepo.find({
       where: { parentTaskId: teamTask.id },
-      relations: ['assignedHollon'],
+      relations: ['assignedHollon', 'dependencies'],
     });
 
     return createdSubtasks;

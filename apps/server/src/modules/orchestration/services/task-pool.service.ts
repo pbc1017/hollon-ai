@@ -157,10 +157,40 @@ export class TaskPoolService {
   /**
    * Check if task's dependencies are all completed
    */
-  private async areDependenciesCompleted(_task: Task): Promise<boolean> {
-    // TODO: Implement dependency graph checking
-    // For now, assume no dependencies or all completed
-    return true;
+  private async areDependenciesCompleted(task: Task): Promise<boolean> {
+    // Load dependencies if not already loaded
+    const taskWithDeps = await this.taskRepo.findOne({
+      where: { id: task.id },
+      relations: ['dependencies'],
+    });
+
+    if (!taskWithDeps || !taskWithDeps.dependencies) {
+      // No dependencies, task is ready
+      return true;
+    }
+
+    if (taskWithDeps.dependencies.length === 0) {
+      // Empty dependencies array, task is ready
+      return true;
+    }
+
+    // Check if all dependencies are completed
+    const allCompleted = taskWithDeps.dependencies.every(
+      (dep) => dep.status === TaskStatus.COMPLETED,
+    );
+
+    if (!allCompleted) {
+      const incompleteDeps = taskWithDeps.dependencies
+        .filter((dep) => dep.status !== TaskStatus.COMPLETED)
+        .map((dep) => `${dep.title} (${dep.status})`)
+        .join(', ');
+
+      this.logger.debug(
+        `Task ${task.id} blocked by incomplete dependencies: ${incompleteDeps}`,
+      );
+    }
+
+    return allCompleted;
   }
 
   /**

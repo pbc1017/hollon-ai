@@ -638,19 +638,26 @@ ${i + 1}. **${item.title}**
       );
       await execAsync(`mkdir -p ${hollonDir}`);
 
+      // Phase 4: Fetch latest from origin to ensure we have up-to-date base branch
+      this.logger.log(`Fetching latest from origin for ${baseBranch}`);
+      await execAsync('git fetch origin', {
+        cwd: project.workingDirectory,
+      });
+
       // Create unique temporary branch name for worktree
       const tempBranch = `wt-hollon-${hollon.id.slice(0, 8)}-task-${task.id.slice(0, 8)}`;
 
-      // Create worktree with explicit branch from organization's base branch
+      // Create worktree from origin/baseBranch to ensure latest code
+      // This avoids depending on potentially outdated local branch
       await execAsync(
-        `git worktree add -b ${tempBranch} ${worktreePath} ${baseBranch}`,
+        `git worktree add -b ${tempBranch} ${worktreePath} origin/${baseBranch}`,
         {
           cwd: project.workingDirectory,
         },
       );
 
       this.logger.log(
-        `Task worktree created: hollon-${hollon.id.slice(0, 8)}/task-${task.id.slice(0, 8)} from ${baseBranch}`,
+        `Task worktree created: hollon-${hollon.id.slice(0, 8)}/task-${task.id.slice(0, 8)} from origin/${baseBranch}`,
       );
     } catch (error: unknown) {
       const err = error as Error & { stderr?: string };
@@ -696,6 +703,22 @@ ${i + 1}. **${item.title}**
     );
 
     try {
+      // Phase 4: Create parent directory structure in .git/logs/refs/heads/
+      // This is needed for nested branch names like feature/TechLead-Alpha/task-xxx
+      const branchParts = branchName.split('/');
+      if (branchParts.length > 1) {
+        // Extract parent path (e.g., "feature/TechLead-Alpha" from "feature/TechLead-Alpha/task-xxx")
+        const parentPath = branchParts.slice(0, -1).join('/');
+        const gitLogPath = `${worktreePath}/.git/logs/refs/heads/${parentPath}`;
+
+        this.logger.debug(`Creating git log directory: ${gitLogPath}`);
+
+        // Create parent directory if it doesn't exist
+        await execAsync(`mkdir -p "${gitLogPath}"`, {
+          cwd: worktreePath,
+        });
+      }
+
       // The worktree was created with a temporary branch, now rename it to the feature branch
       await execAsync(`git branch -m ${branchName}`, {
         cwd: worktreePath,
