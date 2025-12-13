@@ -208,7 +208,7 @@ Break down this team task into 3-7 subtasks and assign each to the most suitable
       "title": "Subtask title",
       "description": "Detailed description",
       "assignedTo": "Member name",
-      "type": "implementation|planning|analysis|review|research",
+      "type": "implementation|review|research|bug_fix|documentation",
       "priority": "P1|P2|P3|P4",
       "estimatedComplexity": "low|medium|high",
       "dependencies": ["Other subtask title if any"]
