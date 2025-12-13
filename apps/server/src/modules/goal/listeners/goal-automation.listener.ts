@@ -328,6 +328,23 @@ export class GoalAutomationListener {
             continue;
           }
 
+          // Dependency 체크 (Phase 4: Critical!)
+          const canExecuteResult = await this.taskService.canExecute(task.id);
+          if (!canExecuteResult.canExecute) {
+            this.logger.log(
+              `Task ${task.id} cannot execute: ${canExecuteResult.reason}`,
+            );
+            if (
+              canExecuteResult.blockedBy &&
+              canExecuteResult.blockedBy.length > 0
+            ) {
+              this.logger.log(
+                `  Blocked by: ${canExecuteResult.blockedBy.map((t) => `${t.title} (${t.id})`).join(', ')}`,
+              );
+            }
+            continue;
+          }
+
           this.logger.log(
             `Auto-executing task: ${task.title} (${task.id}) by ${task.assignedHollon?.name}`,
           );

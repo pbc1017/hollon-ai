@@ -203,7 +203,45 @@ export class TaskExecutionService {
 
       this.logger.log(`Quality gate passed for task ${taskId}`);
 
-      // 6. Document로 결과 저장 (Phase 3.12/4)
+      // 6. Brain이 서브태스크 분해를 제안했는지 확인 (Phase 4: Recursive Task Decomposition)
+      const shouldDecompose = this.shouldDecomposeTask(
+        brainResult.output,
+        task,
+      );
+
+      if (shouldDecompose) {
+        this.logger.log(
+          `Brain suggests decomposing task ${taskId} into subtasks`,
+        );
+
+        // 서브태스크로 분해하고 임시 Hollon들에게 할당
+        await this.decomposeIntoSubtasks(
+          task,
+          hollon,
+          worktreePath,
+          brainResult.output,
+        );
+
+        // 부모 Task는 PENDING 상태로 대기 (자식들이 완료될 때까지)
+        await this.taskRepo.update(taskId, {
+          status: TaskStatus.PENDING,
+        });
+
+        // Hollon은 IDLE로 해방
+        await this.hollonRepo.update(hollonId, {
+          status: HollonStatus.IDLE,
+          currentTaskId: null as any,
+        });
+
+        this.logger.log(
+          `✅ Task ${taskId} decomposed into subtasks, waiting for completion`,
+        );
+
+        // 분해된 경우 PR 생성 안함
+        return { prUrl: null, worktreePath };
+      }
+
+      // 7. Document로 결과 저장 (Phase 3.12/4)
       await this.saveResultDocument(
         task,
         hollonId,
@@ -893,6 +931,10 @@ ${i + 1}. **${item.title}**
   /**
    * Task 프롬프트 생성
    */
+  /**
+   * Task 프롬프트 생성
+   * Phase 4: Ask Brain if decomposition is needed for complex tasks
+   */
   private buildTaskPrompt(task: Task): string {
     const sections: string[] = [];
 
@@ -918,10 +960,134 @@ ${i + 1}. **${item.title}**
         `2. Follow the project's coding standards\n` +
         `3. Add appropriate tests if needed\n` +
         `4. Update documentation if required\n` +
-        `5. Commit your changes with a descriptive message\n`,
+        `5. Commit your changes with a descriptive message\n\n` +
+        `## Task Decomposition (Phase 4)\n` +
+        `If this task is complex and would benefit from being broken down into smaller subtasks ` +
+        `(e.g., needs planning phase, exploration phase, and implementation phase), ` +
+        `you can suggest decomposition by starting your response with:\n` +
+        `"DECOMPOSE_TASK: <reason>"\n\n` +
+        `Then provide a JSON object with this structure:\n` +
+        `{\n` +
+        `  "subtasks": [\n` +
+        `    {\n` +
+        `      "title": "Subtask title",\n` +
+        `      "description": "Detailed description",\n` +
+        `      "priority": "P1",\n` +
+        `      "acceptanceCriteria": ["criterion 1", "criterion 2"],\n` +
+        `      "requiredSkills": ["skill1", "skill2"]\n` +
+        `    }\n` +
+        `  ]\n` +
+        `}\n\n` +
+        `Only suggest decomposition if the task is truly complex. ` +
+        `For simple tasks, just implement them directly.\n`,
     );
 
     return sections.join('\n');
+  }
+
+  /**
+   * Phase 4: Check if Brain suggests task decomposition
+   */
+  private shouldDecomposeTask(brainOutput: string, _task: Task): boolean {
+    // Look for decomposition marker in Brain's output
+    return brainOutput.trim().startsWith('DECOMPOSE_TASK:');
+  }
+
+  /**
+   * Phase 4: Decompose task into subtasks
+   * Subtasks share the parent hollon's worktree (no temporary hollons created)
+   */
+  private async decomposeIntoSubtasks(
+    task: Task,
+    hollon: Hollon,
+    worktreePath: string,
+    brainOutput: string,
+  ): Promise<void> {
+    this.logger.log(
+      `Decomposing task ${task.id.slice(0, 8)} into subtasks for hollon ${hollon.name}`,
+    );
+
+    // Parse the decomposition result
+    const decompositionResult = this.parseSubtaskDecomposition(brainOutput);
+
+    if (
+      !decompositionResult.subtasks ||
+      decompositionResult.subtasks.length === 0
+    ) {
+      this.logger.warn('No subtasks found in decomposition result');
+      return;
+    }
+
+    // Create subtasks
+    const subtasks: Task[] = [];
+
+    for (const subtaskData of decompositionResult.subtasks) {
+      const subtask = this.taskRepo.create({
+        organizationId: task.organizationId,
+        projectId: task.projectId,
+        parentTaskId: task.id, // Link to parent
+        creatorHollonId: hollon.id,
+        title: subtaskData.title,
+        description: subtaskData.description,
+        type: TaskType.IMPLEMENTATION,
+        status: TaskStatus.READY, // Ready to execute immediately
+        assignedHollonId: hollon.id, // Same hollon as parent (permanent team member hollon)
+        depth: (task.depth || 0) + 1,
+        priority: this.mapPriority(subtaskData.priority || ''),
+        acceptanceCriteria: subtaskData.acceptanceCriteria,
+        workingDirectory: worktreePath, // ✅ Share parent's worktree (key requirement)
+        requiredSkills: subtaskData.requiredSkills,
+      });
+
+      const savedSubtask = await this.taskRepo.save(subtask);
+      subtasks.push(savedSubtask);
+
+      this.logger.log(
+        `Created subtask ${savedSubtask.id.slice(0, 8)}: ${savedSubtask.title}`,
+      );
+    }
+
+    this.logger.log(
+      `Created ${subtasks.length} subtasks for task ${task.id.slice(0, 8)}, ` +
+        `all sharing worktree: ${worktreePath}`,
+    );
+  }
+
+  /**
+   * Phase 4: Parse subtask decomposition from Brain output
+   */
+  private parseSubtaskDecomposition(output: string): {
+    subtasks: Array<{
+      title: string;
+      description: string;
+      priority?: string;
+      acceptanceCriteria?: string[];
+      requiredSkills?: string[];
+    }>;
+  } {
+    // Remove the DECOMPOSE_TASK: marker and reason
+    const lines = output.split('\n');
+    const jsonStartIndex = lines.findIndex((line) =>
+      line.trim().startsWith('{'),
+    );
+
+    if (jsonStartIndex === -1) {
+      throw new Error('No JSON found in decomposition output');
+    }
+
+    const jsonStr = lines.slice(jsonStartIndex).join('\n');
+
+    // Extract JSON from markdown code blocks or plain text
+    const jsonMatch =
+      jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/) ||
+      jsonStr.match(/\{[\s\S]*\}/);
+
+    if (!jsonMatch) {
+      throw new Error('Failed to parse subtask decomposition: No JSON found');
+    }
+
+    const extractedJson = jsonMatch[1] || jsonMatch[0];
+    return JSON.parse(extractedJson);
   }
 
   /**
