@@ -40,6 +40,17 @@ error() {
   echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Validate ID
+validate_id() {
+  local id="$1"
+  local name="$2"
+  
+  if [ -z "$id" ] || [ "$id" = "null" ]; then
+    error "Failed to create $name"
+    exit 1
+  fi
+}
+
 # Check if server is running
 check_server() {
   log "Checking if server is running at $API_URL..."
@@ -414,7 +425,7 @@ assign_managers() {
 # Create CTO (Engineering Director)
 create_cto() {
   echo ""
-  info "Creating CTO (Engineering Director)..."
+  log "Creating CTO (Engineering Director)..."
 
   # Create CTO Role
   CTO_ROLE_RESPONSE=$(curl -s -X POST "$API_URL/roles" \
@@ -454,7 +465,7 @@ create_cto() {
   success "CTO-Zeus created: $CTO_HOLLON_ID"
 
   # Set CTO as manager for all team managers
-  info "Setting CTO-Zeus as manager of team managers..."
+  log "Setting CTO-Zeus as manager of team managers..."
 
   curl -s -X PATCH "$API_URL/hollons/$TECHLEAD_ALPHA_ID" \
     -H "Content-Type: application/json" \
