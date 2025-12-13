@@ -40,6 +40,19 @@ export interface ExecutionCycleResult {
 }
 
 /**
+ * Phase 3.10: Review decision interface for type safety
+ */
+interface ReviewDecision {
+  action: 'complete' | 'rework' | 'add_tasks' | 'redirect';
+  reasoning: string;
+  subtaskIds?: string[];
+  reworkInstructions?: string;
+  newSubtasks?: unknown[];
+  cancelSubtaskIds?: string[];
+  newDirection?: string;
+}
+
+/**
  * HollonOrchestratorService
  *
  * Main execution cycle orchestrator:
@@ -801,7 +814,7 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
             taskId: task.id,
             taskTitle: task.title,
             duration: Date.now() - startTime,
-            output: `➕ Added ${decision.newSubtasks.length} follow-up tasks: ${decision.reasoning}`,
+            output: `➕ Added ${decision.newSubtasks?.length || 0} follow-up tasks: ${decision.reasoning}`,
           };
 
         case 'redirect':
@@ -836,7 +849,7 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
   /**
    * Phase 3.10: Parse LLM review decision from JSON output
    */
-  private parseLLMReviewDecision(output: string): any {
+  private parseLLMReviewDecision(output: string): ReviewDecision {
     try {
       // Extract JSON block from markdown
       const jsonMatch = output.match(/```json\s*([\s\S]*?)\s*```/);
@@ -863,8 +876,15 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
   /**
    * Phase 3.10: Request rework for specific subtasks
    */
-  private async requestRework(task: Task, decision: any): Promise<void> {
+  private async requestRework(
+    task: Task,
+    decision: ReviewDecision,
+  ): Promise<void> {
     const { subtaskIds, reworkInstructions } = decision;
+
+    if (!subtaskIds || subtaskIds.length === 0) {
+      throw new Error('subtaskIds is required for rework action');
+    }
 
     const taskRepo = this.hollonRepo.manager.getRepository(Task);
 
@@ -889,10 +909,17 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
   /**
    * Phase 3.10: Add follow-up subtasks
    */
-  private async addFollowUpTasks(task: Task, decision: any): Promise<void> {
+  private async addFollowUpTasks(
+    task: Task,
+    decision: ReviewDecision,
+  ): Promise<void> {
     const { newSubtasks } = decision;
 
-    await this.subtaskService.createSubtasks(task.id, newSubtasks);
+    if (!newSubtasks || newSubtasks.length === 0) {
+      throw new Error('newSubtasks is required for add_tasks action');
+    }
+
+    await this.subtaskService.createSubtasks(task.id, newSubtasks as any[]);
 
     // Parent task stays IN_PROGRESS (waiting for new subtasks)
     const taskRepo = this.hollonRepo.manager.getRepository(Task);
@@ -908,8 +935,15 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
   /**
    * Phase 3.10: Redirect task with new approach
    */
-  private async redirectTask(task: Task, decision: any): Promise<void> {
+  private async redirectTask(
+    task: Task,
+    decision: ReviewDecision,
+  ): Promise<void> {
     const { cancelSubtaskIds, newDirection } = decision;
+
+    if (!cancelSubtaskIds || cancelSubtaskIds.length === 0) {
+      throw new Error('cancelSubtaskIds is required for redirect action');
+    }
 
     const taskRepo = this.hollonRepo.manager.getRepository(Task);
 
@@ -973,10 +1007,28 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
       `Manager ${managerHollon.name} found ${subtasksToReview.length} subtasks to review`,
     );
 
-    // 2. For each subtask, create temporary review hollon and request review
+    // 2. For each subtask, handle review based on task type
     for (const subtask of subtasksToReview) {
       try {
-        // ✅ DDD: Find the PR for this task (Port 사용)
+        // ✅ Phase 4: team_epic tasks don't have PRs - they review child task results
+        if (subtask.type === 'team_epic') {
+          this.logger.log(
+            `Manager ${managerHollon.name} reviewing team_epic task ${subtask.id} (checking child results)`,
+          );
+
+          // team_epic: No PR, no temporary hollon - manager reviews directly
+          // Just transition to IN_REVIEW, then autoReviewTasks will trigger handleReviewMode
+          await this.taskRepo.update(subtask.id, {
+            status: TaskStatus.IN_REVIEW,
+          });
+
+          this.logger.log(
+            `Team epic task ${subtask.id} transitioned to IN_REVIEW for manager review`,
+          );
+          continue;
+        }
+
+        // ✅ Implementation tasks: Find PR and create reviewer hollon
         const prs = await this.codeReviewPort.findPullRequestsByTaskId(
           subtask.id,
         );
@@ -1000,9 +1052,6 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
         );
 
         // ✅ DDD: Request code review (Port 사용)
-        // Note: This assigns the temporary reviewer to the PR
-        // TODO: Port에 updateReviewer 메서드 추가 필요
-        // 임시로 requestReview 사용 (자동 할당되지만 나중에 수정 필요)
         await this.codeReviewPort.requestReview(pr.id, reviewerHollon.id);
 
         // Update task status to IN_REVIEW

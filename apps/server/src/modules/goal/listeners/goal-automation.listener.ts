@@ -362,6 +362,94 @@ export class GoalAutomationListener {
    * - 리뷰 홀론이 코드 리뷰 수행
    * - Manager가 결과 받아서 merge/rework/add_tasks 결정
    */
+  /**
+   * Step 2.3: 자동 부모 태스크 리뷰 준비 (Phase 4)
+   * 매 1분마다 PENDING 상태의 부모 태스크를 찾아서
+   * 모든 자식 태스크가 COMPLETED면 READY_FOR_REVIEW로 전환
+   *
+   * SSOT Line 185-189:
+   * - 부모 태스크는 PENDING 상태로 대기
+   * - 서브태스크 모두 완료 시 → READY_FOR_REVIEW
+   * - 리뷰 사이클은 Priority 0으로 부모 홀론이 담당
+   */
+  @Cron('*/1 * * * *') // 1분마다
+  async autoTransitionParentsToReview(): Promise<void> {
+    try {
+      this.logger.debug(
+        'Checking for parent tasks ready for review transition...',
+      );
+
+      // PENDING 상태이면서 자식 태스크가 있는 부모 태스크 찾기
+      const parentTasks = await this.taskRepo
+        .createQueryBuilder('task')
+        .where('task.status = :status', { status: TaskStatus.PENDING })
+        .andWhere('task.parentTaskId IS NULL') // 최상위 부모만 (또는 parentTaskId가 있어도 자식을 가진 태스크)
+        .leftJoinAndSelect('task.subtasks', 'subtasks')
+        .take(10) // 한 번에 최대 10개까지 처리
+        .getMany();
+
+      if (parentTasks.length === 0) {
+        this.logger.debug('No parent tasks in PENDING state');
+        return;
+      }
+
+      // 실제로 자식이 있고 모든 자식이 완료된 부모만 필터링
+      const parentsReadyForReview = parentTasks.filter((task) => {
+        if (!task.subtasks || task.subtasks.length === 0) {
+          return false; // 자식이 없으면 제외
+        }
+
+        // 모든 자식이 COMPLETED 상태인지 확인
+        const allChildrenCompleted = task.subtasks.every(
+          (subtask) => subtask.status === TaskStatus.COMPLETED,
+        );
+
+        return allChildrenCompleted;
+      });
+
+      if (parentsReadyForReview.length === 0) {
+        this.logger.debug('No parent tasks have all children completed');
+        return;
+      }
+
+      this.logger.log(
+        `Found ${parentsReadyForReview.length} parent task(s) ready for review`,
+      );
+
+      for (const task of parentsReadyForReview) {
+        try {
+          this.logger.log(
+            `Transitioning parent task "${task.title}" (${task.id}) to READY_FOR_REVIEW`,
+          );
+
+          // SSOT: 부모 태스크 → READY_FOR_REVIEW
+          // reviewerHollonId는 creatorHollonId (부모 홀론이 자신의 작업 리뷰)
+          await this.taskRepo.update(task.id, {
+            status: TaskStatus.READY_FOR_REVIEW,
+            reviewerHollonId: task.creatorHollonId,
+          });
+
+          this.logger.log(
+            `✅ Parent task ${task.id} transitioned to READY_FOR_REVIEW (${task.subtasks.length} children completed)`,
+          );
+        } catch (error) {
+          const err = error as Error;
+          this.logger.error(
+            `Failed to transition parent task ${task.id}: ${err.message}`,
+            err.stack,
+          );
+          // 에러가 발생해도 다음 태스크는 계속 처리
+        }
+      }
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Parent task review transition failed: ${err.message}`,
+        err.stack,
+      );
+    }
+  }
+
   @Cron('*/1 * * * *') // 1분마다
   async autoManagerReview(): Promise<void> {
     try {
