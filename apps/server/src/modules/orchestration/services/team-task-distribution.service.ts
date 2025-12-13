@@ -76,6 +76,11 @@ export class TeamTaskDistributionService {
       `Distributing team task "${teamTask.title}" (${teamTask.id}) to team "${team.name}" via manager "${team.manager.name}"`,
     );
 
+    // Mark as IN_PROGRESS immediately to prevent duplicate distribution by concurrent cron jobs
+    await this.taskRepo.update(teamTask.id, {
+      status: TaskStatus.IN_PROGRESS,
+    });
+
     // 1. Create distribution plan via Manager's Brain Provider
     const plan = await this.createDistributionPlan(teamTask, team);
 
@@ -84,11 +89,6 @@ export class TeamTaskDistributionService {
 
     // 3. Create subtasks
     const subtasks = await this.createSubtasksFromPlan(teamTask, plan, team);
-
-    // 4. Update team task status
-    await this.taskRepo.update(teamTask.id, {
-      status: TaskStatus.IN_PROGRESS,
-    });
 
     this.logger.log(
       `Successfully distributed team task ${teamTask.id} into ${subtasks.length} subtasks`,
@@ -359,10 +359,22 @@ Break down this team task into 3-7 subtasks and assign each to the most suitable
       titleToTaskMap.set(subtask.title, subtask);
     }
 
+    this.logger.log(
+      `Assigning ${plan.subtasks.length} subtasks to hollons. Team task manager (reviewer): ${teamTask.assignedHollonId}`,
+    );
+
+    let assignedCount = 0;
+    let reviewerSetCount = 0;
+
     // Assign hollons and set up dependencies
     for (const sp of plan.subtasks) {
       const subtask = titleToTaskMap.get(sp.title);
-      if (!subtask) continue;
+      if (!subtask) {
+        this.logger.warn(
+          `Subtask with title "${sp.title}" not found in created subtasks map`,
+        );
+        continue;
+      }
 
       const hollonId = hollonMap.get(sp.assignedTo);
       if (!hollonId) {
@@ -374,11 +386,22 @@ Break down this team task into 3-7 subtasks and assign each to the most suitable
 
       // Update subtask with assignment and reviewer
       // Phase 3.16: Set reviewer to parent task's manager
+      const reviewerId = teamTask.assignedHollonId;
+
+      this.logger.debug(
+        `Setting subtask "${sp.title}" (${subtask.id}): assignedHollonId=${hollonId}, reviewerHollonId=${reviewerId}`,
+      );
+
       await this.taskRepo.update(subtask.id, {
         assignedHollonId: hollonId,
-        reviewerHollonId: teamTask.assignedHollonId, // Manager reviews subtasks
+        reviewerHollonId: reviewerId, // Manager reviews subtasks
         status: TaskStatus.READY,
       });
+
+      assignedCount++;
+      if (reviewerId) {
+        reviewerSetCount++;
+      }
 
       // Phase 4: Set up task dependencies
       if (sp.dependencies && sp.dependencies.length > 0) {
@@ -415,11 +438,27 @@ Break down this team task into 3-7 subtasks and assign each to the most suitable
       }
     }
 
+    this.logger.log(
+      `Subtask assignment complete: ${assignedCount}/${plan.subtasks.length} assigned, ${reviewerSetCount} with reviewer`,
+    );
+
     // Reload to get updated data
     const createdSubtasks = await this.taskRepo.find({
       where: { parentTaskId: teamTask.id },
-      relations: ['assignedHollon', 'dependencies'],
+      relations: ['assignedHollon', 'dependencies', 'reviewerHollon'],
     });
+
+    // Verify reviewer assignments
+    const withReviewer = createdSubtasks.filter((t) => t.reviewerHollonId);
+    this.logger.log(
+      `Verification: ${withReviewer.length}/${createdSubtasks.length} subtasks have reviewerHollonId in DB`,
+    );
+
+    if (withReviewer.length === 0 && createdSubtasks.length > 0) {
+      this.logger.error(
+        `WARNING: No subtasks have reviewerHollonId! Expected reviewer: ${teamTask.assignedHollonId}`,
+      );
+    }
 
     return createdSubtasks;
   }
