@@ -227,6 +227,113 @@ Please provide the decomposition in JSON format only, no additional text.`;
   /**
    * LLM 응답 파싱
    */
+  /**
+   * Phase 4: Match tasks to teams based on expertise and task type
+   * Analyzes task titles, descriptions, and required skills to assign to appropriate teams
+   */
+  private matchTasksToTeams(
+    tasks: TaskDecomposition[],
+    teams: Team[],
+  ): Map<Team, TaskDecomposition[]> {
+    const teamTasksMap = new Map<Team, TaskDecomposition[]>();
+
+    // Initialize map
+    for (const team of teams) {
+      teamTasksMap.set(team, []);
+    }
+
+    // Define team expertise patterns
+    const teamPatterns = new Map<string, RegExp[]>();
+
+    // Backend Engineering patterns
+    teamPatterns.set('backend', [
+      /backend|api|rest|graphql|endpoint|controller|service|repository/i,
+      /database|postgres|sql|orm|typeorm|migration|schema/i,
+      /nestjs|express|nodejs|typescript/i,
+      /auth|authentication|authorization|jwt|session/i,
+      /crud|entity|model|dto/i,
+    ]);
+
+    // Data & AI Engineering patterns
+    teamPatterns.set('ai', [
+      /ai|llm|claude|gpt|machine learning|ml/i,
+      /rag|vector|embedding|semantic search/i,
+      /data pipeline|etl|data processing/i,
+      /knowledge|document|indexing/i,
+      /brain provider|agent|autonomous/i,
+    ]);
+
+    // QA & Testing patterns
+    teamPatterns.set('qa', [
+      /test|testing|qa|quality/i,
+      /e2e|integration test|unit test/i,
+      /cypress|playwright|jest/i,
+      /validation|verification/i,
+      /coverage|assertion/i,
+    ]);
+
+    // Match each task to the most appropriate team
+    for (const task of tasks) {
+      const taskText =
+        `${task.title} ${task.description} ${(task.requiredSkills || []).join(' ')}`.toLowerCase();
+
+      let bestTeam: Team | null = null;
+      let bestScore = 0;
+
+      for (const team of teams) {
+        let score = 0;
+        const teamDesc = team.description.toLowerCase();
+
+        // Try to identify team type from description
+        let patterns: RegExp[] = [];
+        if (
+          teamDesc.includes('backend') ||
+          teamDesc.includes('api') ||
+          teamDesc.includes('nestjs')
+        ) {
+          patterns = teamPatterns.get('backend') || [];
+        } else if (
+          teamDesc.includes('ai') ||
+          teamDesc.includes('data') ||
+          teamDesc.includes('rag')
+        ) {
+          patterns = teamPatterns.get('ai') || [];
+        } else if (
+          teamDesc.includes('qa') ||
+          teamDesc.includes('test') ||
+          teamDesc.includes('quality')
+        ) {
+          patterns = teamPatterns.get('qa') || [];
+        }
+
+        // Calculate match score
+        for (const pattern of patterns) {
+          if (pattern.test(taskText)) {
+            score++;
+          }
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestTeam = team;
+        }
+      }
+
+      // Assign to best matching team, or first team if no match
+      const targetTeam = bestTeam || teams[0];
+      teamTasksMap.get(targetTeam)!.push(task);
+    }
+
+    // Log distribution
+    for (const [team, assignedTasks] of teamTasksMap.entries()) {
+      this.logger.log(
+        `Team "${team.name}" assigned ${assignedTasks.length} tasks based on expertise`,
+      );
+    }
+
+    return teamTasksMap;
+  }
+
   private parseDecompositionResponse(response: string): ProjectDecomposition[] {
     try {
       // JSON 블록 추출
@@ -263,7 +370,6 @@ Please provide the decomposition in JSON format only, no additional text.`;
   ): Promise<DecompositionResult> {
     const createdProjects: Project[] = [];
     const createdTasks: Task[] = [];
-    const taskTitleToId = new Map<string, string>();
 
     // Phase 3.8: Get all teams for team-level assignment
     const teams = await this.teamRepo.find({
@@ -299,59 +405,32 @@ Please provide the decomposition in JSON format only, no additional text.`;
       const savedProject = await this.projectRepo.save(project);
       createdProjects.push(savedProject);
 
-      // Phase 3.8: Create Team Tasks (Level 0) if teams exist
-      // Otherwise fall back to individual hollon tasks
-      if (teams.length > 0 && options?.useTeamDistribution) {
-        // Group tasks by team (simple round-robin for now)
-        // In production, this would use intelligent team matching
-        const tasksPerTeam = Math.ceil(projectDef.tasks.length / teams.length);
+      // Phase 4: Create Team Tasks (Level 0) with intelligent team matching
+      // Match tasks to teams based on expertise
+      const teamTasksMap = this.matchTasksToTeams(projectDef.tasks, teams);
 
-        for (let i = 0; i < teams.length; i++) {
-          const team = teams[i];
-          const teamTasks = projectDef.tasks.slice(
-            i * tasksPerTeam,
-            (i + 1) * tasksPerTeam,
-          );
+      for (const [team, teamTasks] of teamTasksMap.entries()) {
+        if (teamTasks.length === 0) continue;
 
-          if (teamTasks.length === 0) continue;
+        // Create Team Task (Level 0) - TEAM_EPIC
+        const teamTask = this.taskRepo.create({
+          organizationId: goal.organizationId,
+          projectId: savedProject.id,
+          title: `${team.name}: ${projectDef.name}`,
+          description: this.formatTeamTaskDescription(teamTasks),
+          type: TaskType.TEAM_EPIC,
+          priority: this.mapPriority('P2'), // Team tasks default to P2
+          status: TaskStatus.PENDING,
+          assignedTeamId: team.id,
+          depth: 0, // Level 0
+        });
 
-          // Create Team Task (Level 0) - TEAM_EPIC
-          const teamTask = this.taskRepo.create({
-            organizationId: goal.organizationId,
-            projectId: savedProject.id,
-            title: `${team.name}: ${projectDef.name} - Batch ${i + 1}`,
-            description: this.formatTeamTaskDescription(teamTasks),
-            type: TaskType.TEAM_EPIC,
-            priority: this.mapPriority('P2'), // Team tasks default to P2
-            status: TaskStatus.PENDING,
-            assignedTeamId: team.id,
-            depth: 0, // Level 0
-          });
+        const savedTeamTask = await this.taskRepo.save(teamTask);
+        createdTasks.push(savedTeamTask);
 
-          const savedTeamTask = await this.taskRepo.save(teamTask);
-          createdTasks.push(savedTeamTask);
-
-          this.logger.log(
-            `Created Team Task "${savedTeamTask.title}" for team "${team.name}" with ${teamTasks.length} work items`,
-          );
-        }
-      } else {
-        // Fallback: Create individual tasks (original behavior)
-        for (const taskDef of projectDef.tasks) {
-          const task = this.taskRepo.create({
-            organizationId: goal.organizationId,
-            projectId: savedProject.id,
-            title: taskDef.title,
-            description: this.formatTaskDescription(taskDef),
-            priority: this.mapPriority(taskDef.priority),
-            status: TaskStatus.PENDING,
-            depth: 0,
-          });
-
-          const savedTask = await this.taskRepo.save(task);
-          createdTasks.push(savedTask);
-          taskTitleToId.set(taskDef.title, savedTask.id);
-        }
+        this.logger.log(
+          `Created Team Task "${savedTeamTask.title}" for team "${team.name}" with ${teamTasks.length} work items`,
+        );
       }
     }
 
@@ -396,23 +475,6 @@ Please provide the decomposition in JSON format only, no additional text.`;
         processingTime: 0, // Will be set by caller
       },
     };
-  }
-
-  /**
-   * Task description 포맷팅 (acceptance criteria 포함)
-   */
-  private formatTaskDescription(taskDef: TaskDecomposition): string {
-    let description = taskDef.description;
-
-    if (taskDef.dependencies && taskDef.dependencies.length > 0) {
-      description += `\n\n**Dependencies:**\n${taskDef.dependencies.map((d) => `- ${d}`).join('\n')}`;
-    }
-
-    if (taskDef.acceptanceCriteria && taskDef.acceptanceCriteria.length > 0) {
-      description += `\n\n**Acceptance Criteria:**\n${taskDef.acceptanceCriteria.map((c) => `- ${c}`).join('\n')}`;
-    }
-
-    return description;
   }
 
   /**
