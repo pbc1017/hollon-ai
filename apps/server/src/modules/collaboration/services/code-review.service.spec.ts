@@ -735,10 +735,12 @@ describe('CodeReviewService', () => {
       };
 
       mockPRRepository.findOne.mockResolvedValue(prWithTask);
-      // findOne is called twice:
-      // 1. First for getting author hollon info (in findAvailableTeammate)
-      // 2. Then for finding specialized CodeReviewer (in findOrCreateSpecializedReviewer)
+      // findOne is called three times:
+      // 1. First for findTeamManager() - checking author's team
+      // 2. Second for getting author hollon info (in findAvailableTeammate)
+      // 3. Third for finding specialized CodeReviewer (in findOrCreateSpecializedReviewer)
       mockHollonRepository.findOne
+        .mockResolvedValueOnce(mockAuthorHollon) // for findTeamManager (no team)
         .mockResolvedValueOnce(mockAuthorHollon) // for getting author team
         .mockResolvedValueOnce(codeReviewer); // for specialized reviewer lookup
 

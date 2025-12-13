@@ -660,6 +660,14 @@ Please review the changes.
       return null;
     }
 
+    // 3. 매니저가 author 본인인 경우 제외 (자기 자신의 코드를 리뷰할 수 없음)
+    if (manager.id === pr.authorHollonId) {
+      this.logger.log(
+        `Team manager ${manager.name} is the same as author, cannot self-review`,
+      );
+      return null;
+    }
+
     this.logger.log(
       `Found team manager ${manager.name} (${manager.id}) for author ${authorHollon.name}`,
     );
