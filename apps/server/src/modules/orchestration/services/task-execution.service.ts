@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { promisify } from 'util';
 import { exec } from 'child_process';
 import * as path from 'path';
-import { Task, TaskStatus } from '../../task/entities/task.entity';
+import { Task, TaskStatus, TaskType } from '../../task/entities/task.entity';
 import { Project } from '../../project/entities/project.entity';
 import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
 import { Team } from '../../team/entities/team.entity';
@@ -36,6 +36,7 @@ interface DecompositionWorkItem {
 
 interface DecompositionResult {
   workItems: DecompositionWorkItem[];
+  teamDistribution?: Record<string, DecompositionWorkItem[]>;
 }
 
 /**
@@ -104,6 +105,11 @@ export class TaskExecutionService {
 
     if (!hollon) {
       throw new Error(`Hollon ${hollonId} not found`);
+    }
+
+    // ✅ Phase 4: team_epic은 워크트리 없이 decomposition만 수행
+    if (task.type === TaskType.TEAM_EPIC) {
+      return await this.executeTeamEpicDecomposition(task, hollon);
     }
 
     // 1. Task별 Worktree 생성 (완전 격리 - Phase 3.12)
@@ -305,7 +311,7 @@ export class TaskExecutionService {
           creatorHollonId: hollon.id, // ✅ 에스컬레이션용
           title: `${childTeam.name}: ${task.title} - Batch ${i + 1}`,
           description: this.formatTeamTaskDescription(teamWorkItems),
-          type: 'team_epic',
+          type: TaskType.TEAM_EPIC,
           status: TaskStatus.PENDING,
           assignedTeamId: childTeam.id,
           depth: (task.depth || 0) + 1,
@@ -336,11 +342,11 @@ export class TaskExecutionService {
           creatorHollonId: hollon.id, // ✅ 에스컬레이션용
           title: workItem.title,
           description: workItem.description,
-          type: 'implementation',
+          type: TaskType.IMPLEMENTATION,
           status: TaskStatus.READY, // 즉시 실행 가능
           assignedHollonId: assignedHollon?.id,
           depth: (task.depth || 0) + 1,
-          priority: this.mapPriority(workItem.priority),
+          priority: this.mapPriority(workItem.priority || ''),
           acceptanceCriteria: workItem.acceptanceCriteria,
           requiredSkills: workItem.requiredSkills,
         });
@@ -360,7 +366,7 @@ export class TaskExecutionService {
     // 7. ✅ Manager Hollon은 IDLE로 해방
     await this.hollonRepo.update(hollon.id, {
       status: HollonStatus.IDLE,
-      currentTaskId: null,
+      currentTaskId: null as any,
     });
 
     this.logger.log(

@@ -882,6 +882,10 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
   ): Promise<void> {
     const { subtaskIds, reworkInstructions } = decision;
 
+    if (!subtaskIds || subtaskIds.length === 0) {
+      throw new Error('subtaskIds is required for rework action');
+    }
+
     const taskRepo = this.hollonRepo.manager.getRepository(Task);
 
     for (const subtaskId of subtaskIds) {
@@ -911,7 +915,11 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
   ): Promise<void> {
     const { newSubtasks } = decision;
 
-    await this.subtaskService.createSubtasks(task.id, newSubtasks);
+    if (!newSubtasks || newSubtasks.length === 0) {
+      throw new Error('newSubtasks is required for add_tasks action');
+    }
+
+    await this.subtaskService.createSubtasks(task.id, newSubtasks as any[]);
 
     // Parent task stays IN_PROGRESS (waiting for new subtasks)
     const taskRepo = this.hollonRepo.manager.getRepository(Task);
@@ -932,6 +940,10 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
     decision: ReviewDecision,
   ): Promise<void> {
     const { cancelSubtaskIds, newDirection } = decision;
+
+    if (!cancelSubtaskIds || cancelSubtaskIds.length === 0) {
+      throw new Error('cancelSubtaskIds is required for redirect action');
+    }
 
     const taskRepo = this.hollonRepo.manager.getRepository(Task);
 
