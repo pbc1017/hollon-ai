@@ -11,6 +11,8 @@ import { ResponseParserService } from './services/response-parser.service';
 import { BrainProviderConfigService } from './services/brain-provider-config.service';
 import { KnowledgeInjectionService } from './services/knowledge-injection.service';
 import { ClaudeCodeProvider } from './providers/claude-code.provider';
+import { OpenAIProvider } from './providers/openai.provider';
+import { KnowledgeExtractionService } from './services/knowledge-extraction.service';
 import { DocumentModule } from '../document/document.module';
 
 @Module({
@@ -27,13 +29,21 @@ import { DocumentModule } from '../document/document.module';
     ResponseParserService,
     BrainProviderConfigService,
     KnowledgeInjectionService, // Phase 3.5: 지식 주입
+    KnowledgeExtractionService, // Phase 4: LLM 기반 지식 추출
 
-    // Provider
+    // Providers
     ClaudeCodeProvider,
+    OpenAIProvider, // Phase 4: OpenAI LLM 통합
 
     // Main service
     BrainProviderService,
   ],
-  exports: [BrainProviderService, ClaudeCodeProvider, ProcessManagerService],
+  exports: [
+    BrainProviderService,
+    ClaudeCodeProvider,
+    OpenAIProvider,
+    ProcessManagerService,
+    KnowledgeExtractionService,
+  ],
 })
 export class BrainProviderModule {}
