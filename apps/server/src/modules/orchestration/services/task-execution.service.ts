@@ -165,6 +165,83 @@ export class TaskExecutionService {
         startedAt: new Date(),
       });
 
+      // Phase 4: Check if this is a resumed task (all subtasks completed)
+      const childTasks = await this.taskRepo.find({
+        where: { parentTaskId: taskId },
+      });
+
+      const isResumedTask =
+        childTasks.length > 0 &&
+        childTasks.every((child) => child.status === TaskStatus.COMPLETED);
+
+      if (isResumedTask) {
+        this.logger.log(
+          `Task ${taskId} is resumed after ${childTasks.length} subtasks completed, skipping Brain execution`,
+        );
+        // Skip Brain execution and go straight to PR creation
+        // Use empty brain result for document saving
+        const emptyBrainResult: BrainResponse = {
+          output: `Task completed through ${childTasks.length} subtasks:\n${childTasks.map((c) => `- ${c.title}`).join('\n')}`,
+          cost: { totalCostCents: 0, inputTokens: 0, outputTokens: 0 },
+        };
+
+        // Save result document
+        await this.saveResultDocument(
+          task,
+          hollonId,
+          emptyBrainResult.output,
+          0,
+        );
+
+        // Create PR and continue with normal flow
+        const prUrl = await this.createPullRequest(
+          task.project,
+          task,
+          worktreePath,
+        );
+        this.logger.log(`PR created for resumed task: ${prUrl}`);
+
+        // Wait for CI checks
+        this.logger.log(`Waiting for CI checks to complete for PR: ${prUrl}`);
+        await this.waitForCIChecks(prUrl, worktreePath);
+
+        // Check CI status
+        const ciResult = await this.checkCIStatus(prUrl, worktreePath);
+
+        if (!ciResult.passed) {
+          this.logger.error(
+            `CI checks failed for resumed task ${taskId}: ${ciResult.failedChecks.join(', ')}`,
+          );
+
+          const { shouldRetry, feedback } = await this.handleCIFailure(
+            task,
+            ciResult.failedChecks,
+            prUrl,
+            worktreePath,
+          );
+
+          if (shouldRetry) {
+            throw new Error(`CI_FAILURE_RETRY: ${feedback}`);
+          } else {
+            throw new Error(
+              `CI_FAILURE_MAX_RETRIES: Maximum CI retry attempts reached. ${feedback}`,
+            );
+          }
+        }
+
+        this.logger.log(`All CI checks passed for resumed task ${taskId}`);
+
+        // Request code review
+        await this.requestCodeReview(task, prUrl, hollonId, worktreePath);
+
+        // Mark as ready for review
+        await this.taskRepo.update(taskId, {
+          status: TaskStatus.READY_FOR_REVIEW,
+        });
+
+        return { prUrl, worktreePath };
+      }
+
       // 4. BrainProvider 실행 (worktree 경로에서)
       const brainResult = await this.executeBrainProvider(
         hollon,

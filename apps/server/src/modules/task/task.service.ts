@@ -204,7 +204,84 @@ export class TaskService {
       );
     });
 
+    // ✅ Phase 4: Check if parent task should resume (when all subtasks complete)
+    if (task.parentTaskId) {
+      this.checkAndResumeParentTask(task.parentTaskId).catch((error) => {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(
+          `Failed to check/resume parent task ${task.parentTaskId}: ${errorMessage}`,
+        );
+      });
+    }
+
     return savedTask;
+  }
+
+  /**
+   * Phase 4: Check if all child tasks are complete and resume parent if ready
+   * Called when a subtask completes
+   */
+  private async checkAndResumeParentTask(parentTaskId: string): Promise<void> {
+    const parentTask = await this.taskRepo.findOne({
+      where: { id: parentTaskId },
+      relations: ['assignedHollon'],
+    });
+
+    if (!parentTask) {
+      this.logger.warn(`Parent task ${parentTaskId} not found`);
+      return;
+    }
+
+    // Only resume if parent is in PENDING state (waiting for children)
+    if (parentTask.status !== TaskStatus.PENDING) {
+      this.logger.debug(
+        `Parent task ${parentTaskId} is ${parentTask.status}, not resuming`,
+      );
+      return;
+    }
+
+    // Get all child tasks
+    const childTasks = await this.taskRepo.find({
+      where: { parentTaskId: parentTaskId },
+    });
+
+    if (childTasks.length === 0) {
+      this.logger.warn(
+        `Parent task ${parentTaskId} has no children, cannot resume`,
+      );
+      return;
+    }
+
+    // Check if all children are completed
+    const allCompleted = childTasks.every(
+      (child) => child.status === TaskStatus.COMPLETED,
+    );
+
+    if (!allCompleted) {
+      const completedCount = childTasks.filter(
+        (child) => child.status === TaskStatus.COMPLETED,
+      ).length;
+      this.logger.debug(
+        `Parent task ${parentTaskId}: ${completedCount}/${childTasks.length} children completed, waiting...`,
+      );
+      return;
+    }
+
+    // ✅ All children completed - resume parent task
+    this.logger.log(
+      `All ${childTasks.length} subtasks completed for parent ${parentTaskId}, resuming parent`,
+    );
+
+    // Set parent back to READY so it can be picked up for execution
+    // The parent will continue from where it left off (creating PR)
+    await this.taskRepo.update(parentTaskId, {
+      status: TaskStatus.READY,
+    });
+
+    this.logger.log(
+      `✅ Parent task ${parentTaskId} resumed (READY state), will continue with PR creation`,
+    );
   }
 
   /**
