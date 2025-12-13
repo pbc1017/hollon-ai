@@ -8,6 +8,7 @@ import { GoalDecompositionService } from '../services/goal-decomposition.service
 import { TaskExecutionService } from '../../orchestration/services/task-execution.service';
 import { HollonOrchestratorService } from '../../orchestration/services/hollon-orchestrator.service';
 import { DecompositionStrategy } from '../dto/decomposition-options.dto';
+import { TaskService } from '../../task/task.service';
 
 /**
  * GoalAutomationListener: Goal-to-PR 워크플로우 자동화
@@ -37,6 +38,7 @@ export class GoalAutomationListener {
     private readonly goalDecompositionService: GoalDecompositionService,
     private readonly taskExecutionService: TaskExecutionService,
     private readonly hollonOrchestratorService: HollonOrchestratorService,
+    private readonly taskService: TaskService,
   ) {}
 
   /**
@@ -339,7 +341,7 @@ export class GoalAutomationListener {
               canExecuteResult.blockedBy.length > 0
             ) {
               this.logger.log(
-                `  Blocked by: ${canExecuteResult.blockedBy.map((t) => `${t.title} (${t.id})`).join(', ')}`,
+                `  Blocked by: ${canExecuteResult.blockedBy.map((t: Task) => `${t.title} (${t.id})`).join(', ')}`,
               );
             }
             continue;

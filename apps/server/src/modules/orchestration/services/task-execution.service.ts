@@ -184,8 +184,10 @@ export class TaskExecutionService {
         // Skip Brain execution and go straight to PR creation
         // Use empty brain result for document saving
         const emptyBrainResult: BrainResponse = {
+          success: true,
           output: `Task completed through ${childTasks.length} subtasks:\n${childTasks.map((c) => `- ${c.title}`).join('\n')}`,
           cost: { totalCostCents: 0, inputTokens: 0, outputTokens: 0 },
+          duration: 0,
         };
 
         // Save result document
