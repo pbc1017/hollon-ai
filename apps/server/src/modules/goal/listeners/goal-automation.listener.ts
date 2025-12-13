@@ -103,6 +103,88 @@ export class GoalAutomationListener {
   }
 
   /**
+   * Step 1.3: 자동 Manager 할당 (Phase 4)
+   * 매 1분마다 team_epic 태스크에 manager hollon 자동 할당
+   *
+   * 워크플로우:
+   * - team_epic이면서 assignedTeamId는 있지만 assignedHollonId가 없는 태스크 찾기
+   * - 해당 팀의 manager를 태스크에 할당
+   */
+  @Cron('*/1 * * * *') // 1분마다
+  async autoAssignManagersToTeamEpics(): Promise<void> {
+    try {
+      this.logger.debug(
+        'Checking for team epics needing manager assignment...',
+      );
+
+      // team_epic이면서 manager가 할당되지 않은 태스크 찾기
+      const unassignedEpics = await this.taskRepo
+        .createQueryBuilder('task')
+        .where('task.type = :type', { type: 'team_epic' })
+        .andWhere('task.assignedTeamId IS NOT NULL')
+        .andWhere('task.assignedHollonId IS NULL')
+        .andWhere('task.status != :completed', {
+          completed: TaskStatus.COMPLETED,
+        })
+        .leftJoinAndSelect('task.assignedTeam', 'team')
+        .leftJoinAndSelect('team.manager', 'manager')
+        .take(10) // 한 번에 최대 10개까지 처리
+        .getMany();
+
+      if (unassignedEpics.length === 0) {
+        this.logger.debug('No team epics need manager assignment');
+        return;
+      }
+
+      this.logger.log(
+        `Found ${unassignedEpics.length} team epics needing manager assignment`,
+      );
+
+      let assignedCount = 0;
+      for (const task of unassignedEpics) {
+        try {
+          if (!task.assignedTeam?.manager) {
+            this.logger.warn(
+              `Team ${task.assignedTeamId} has no manager - skipping task ${task.id}`,
+            );
+            continue;
+          }
+
+          const manager = task.assignedTeam.manager;
+
+          // Manager 할당
+          task.assignedHollonId = manager.id;
+          await this.taskRepo.save(task);
+
+          this.logger.log(
+            `✅ Assigned team epic "${task.title}" to manager ${manager.name}`,
+          );
+          assignedCount++;
+        } catch (error) {
+          const err = error as Error;
+          this.logger.error(
+            `Failed to assign manager to task ${task.id}: ${err.message}`,
+            err.stack,
+          );
+          // 에러가 발생해도 다음 태스크는 계속 처리
+        }
+      }
+
+      if (assignedCount > 0) {
+        this.logger.log(
+          `Successfully assigned ${assignedCount} team epics to managers`,
+        );
+      }
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Manager assignment automation failed: ${err.message}`,
+        err.stack,
+      );
+    }
+  }
+
+  /**
    * Step 1.5: 자동 Team Epic Decomposition (Phase 3.8+)
    * 매 1분 30초마다 team_epic 태스크를 찾아서 team manager에게 분해 요청
    *
