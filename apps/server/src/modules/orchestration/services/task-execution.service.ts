@@ -703,23 +703,8 @@ ${i + 1}. **${item.title}**
     );
 
     try {
-      // Phase 4: Create parent directory structure in .git/logs/refs/heads/
-      // This is needed for nested branch names like feature/TechLead-Alpha/task-xxx
-      const branchParts = branchName.split('/');
-      if (branchParts.length > 1) {
-        // Extract parent path (e.g., "feature/TechLead-Alpha" from "feature/TechLead-Alpha/task-xxx")
-        const parentPath = branchParts.slice(0, -1).join('/');
-        const gitLogPath = `${worktreePath}/.git/logs/refs/heads/${parentPath}`;
-
-        this.logger.debug(`Creating git log directory: ${gitLogPath}`);
-
-        // Create parent directory if it doesn't exist
-        await execAsync(`mkdir -p "${gitLogPath}"`, {
-          cwd: worktreePath,
-        });
-      }
-
       // The worktree was created with a temporary branch, now rename it to the feature branch
+      // Git automatically creates the necessary directory structure for nested branches
       await execAsync(`git branch -m ${branchName}`, {
         cwd: worktreePath,
       });
