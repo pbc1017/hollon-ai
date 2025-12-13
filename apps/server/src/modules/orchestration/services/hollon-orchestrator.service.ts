@@ -814,7 +814,7 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
             taskId: task.id,
             taskTitle: task.title,
             duration: Date.now() - startTime,
-            output: `➕ Added ${decision.newSubtasks.length} follow-up tasks: ${decision.reasoning}`,
+            output: `➕ Added ${decision.newSubtasks?.length || 0} follow-up tasks: ${decision.reasoning}`,
           };
 
         case 'redirect':

@@ -4,7 +4,12 @@ import { Repository } from 'typeorm';
 import { promisify } from 'util';
 import { exec } from 'child_process';
 import * as path from 'path';
-import { Task, TaskStatus, TaskType } from '../../task/entities/task.entity';
+import {
+  Task,
+  TaskStatus,
+  TaskType,
+  TaskPriority,
+} from '../../task/entities/task.entity';
 import { Project } from '../../project/entities/project.entity';
 import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
 import { Team } from '../../team/entities/team.entity';
@@ -82,7 +87,7 @@ export class TaskExecutionService {
   async executeTask(
     taskId: string,
     hollonId: string,
-  ): Promise<{ prUrl: string; worktreePath: string }> {
+  ): Promise<{ prUrl: string | null; worktreePath: string | null }> {
     this.logger.log(`Executing task ${taskId} by hollon ${hollonId}`);
 
     const task = await this.taskRepo.findOne({
@@ -265,6 +270,10 @@ export class TaskExecutionService {
     });
 
     // 2. Team 정보 조회 (자식 팀 포함)
+    if (!task.assignedTeamId) {
+      throw new Error(`Team epic task ${task.id} has no assigned team`);
+    }
+
     const team = await this.teamRepo.findOne({
       where: { id: task.assignedTeamId },
       relations: ['hollons', 'manager'],
@@ -557,15 +566,15 @@ ${i + 1}. **${item.title}**
   /**
    * Priority 매핑
    */
-  private mapPriority(priority: string): number {
-    const map: Record<string, number> = {
-      P0: 0,
-      P1: 1,
-      P2: 2,
-      P3: 3,
-      P4: 4,
+  private mapPriority(priority: string): TaskPriority {
+    const map: Record<string, TaskPriority> = {
+      P0: TaskPriority.P1_CRITICAL,
+      P1: TaskPriority.P1_CRITICAL,
+      P2: TaskPriority.P2_HIGH,
+      P3: TaskPriority.P3_MEDIUM,
+      P4: TaskPriority.P4_LOW,
     };
-    return map[priority] || 2;
+    return map[priority] || TaskPriority.P3_MEDIUM;
   }
 
   /**
