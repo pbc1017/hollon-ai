@@ -24,6 +24,7 @@ import { BrainResponse } from '../../brain-provider/interfaces/brain-provider.in
 import { ICodeReviewPort } from '../domain/ports/code-review.port';
 import { KnowledgeContext } from '../../brain-provider/services/knowledge-injection.service';
 import { QualityGateService } from './quality-gate.service';
+import { IHollonService } from '../../hollon/domain/hollon-service.interface';
 
 const execAsync = promisify(exec);
 
@@ -98,6 +99,8 @@ export class TaskExecutionService {
     private readonly qualityGateService: QualityGateService,
     @Inject('ICodeReviewPort')
     private readonly codeReviewPort: ICodeReviewPort,
+    @Inject('IHollonService')
+    private readonly hollonService: IHollonService,
   ) {}
 
   /**
@@ -1071,8 +1074,49 @@ ${i + 1}. **${item.title}**
   }
 
   /**
-   * Phase 4: Decompose task into subtasks
-   * Subtasks share the parent hollon's worktree (no temporary hollons created)
+   * Phase 4: Create temporary sub-hollon for a subtask
+   * Follows the pattern from HollonOrchestratorService.handleComplexTask()
+   */
+  private async createSubHollonForSubtask(
+    parentHollon: Hollon,
+    task: Task,
+    subtaskData: {
+      title: string;
+      description: string;
+      requiredSkills?: string[];
+    },
+  ): Promise<Hollon> {
+    // Determine appropriate role based on subtask skills or use a generic implementation role
+    // For now, we'll create a generic "Implementer" sub-hollon
+    // In the future, this could be enhanced to select roles based on requiredSkills
+
+    const subHollonName = `Impl-${task.id.substring(0, 8)}-${subtaskData.title.substring(0, 20).replace(/[^a-zA-Z0-9-]/g, '-')}`;
+
+    this.logger.log(
+      `Creating temporary sub-hollon ${subHollonName} for subtask "${subtaskData.title}"`,
+    );
+
+    // Create temporary sub-hollon using the service
+    const subHollon = await this.hollonService.createTemporaryHollon({
+      name: subHollonName,
+      organizationId: parentHollon.organizationId,
+      teamId: parentHollon.teamId || undefined,
+      roleId: parentHollon.roleId, // Use same role as parent for now
+      brainProviderId: parentHollon.brainProviderId || 'claude_code',
+      createdBy: parentHollon.id,
+    });
+
+    this.logger.log(
+      `Created temporary sub-hollon ${subHollon.id.slice(0, 8)} for "${subtaskData.title}"`,
+    );
+
+    return subHollon;
+  }
+
+  /**
+   * Phase 4: Decompose task into subtasks with temporary sub-hollons
+   * Each subtask is assigned to a temporary sub-hollon for precise execution
+   * Subtasks share the parent hollon's worktree for git operations
    */
   private async decomposeIntoSubtasks(
     task: Task,
@@ -1095,10 +1139,17 @@ ${i + 1}. **${item.title}**
       return;
     }
 
-    // Create subtasks
+    // Create subtasks with temporary sub-hollons (Phase 4)
     const subtasks: Task[] = [];
 
     for (const subtaskData of decompositionResult.subtasks) {
+      // ✅ Phase 4: Create temporary sub-hollon for each subtask
+      const subHollon = await this.createSubHollonForSubtask(
+        hollon,
+        task,
+        subtaskData,
+      );
+
       const subtask = this.taskRepo.create({
         organizationId: task.organizationId,
         projectId: task.projectId,
@@ -1108,7 +1159,7 @@ ${i + 1}. **${item.title}**
         description: subtaskData.description,
         type: TaskType.IMPLEMENTATION,
         status: TaskStatus.READY, // Ready to execute immediately
-        assignedHollonId: hollon.id, // Same hollon as parent (permanent team member hollon)
+        assignedHollonId: subHollon.id, // ✅ Assign to sub-hollon instead of parent
         depth: (task.depth || 0) + 1,
         priority: this.mapPriority(subtaskData.priority || ''),
         acceptanceCriteria: subtaskData.acceptanceCriteria,
@@ -1120,12 +1171,12 @@ ${i + 1}. **${item.title}**
       subtasks.push(savedSubtask);
 
       this.logger.log(
-        `Created subtask ${savedSubtask.id.slice(0, 8)}: ${savedSubtask.title}`,
+        `Created subtask ${savedSubtask.id.slice(0, 8)}: ${savedSubtask.title} → sub-hollon ${subHollon.id.slice(0, 8)}`,
       );
     }
 
     this.logger.log(
-      `Created ${subtasks.length} subtasks for task ${task.id.slice(0, 8)}, ` +
+      `✅ Created ${subtasks.length} subtasks for task ${task.id.slice(0, 8)} with temporary sub-hollons, ` +
         `all sharing worktree: ${worktreePath}`,
     );
   }
