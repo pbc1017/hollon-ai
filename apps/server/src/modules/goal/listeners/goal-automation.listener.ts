@@ -2,13 +2,18 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { promisify } from 'util';
+import { exec } from 'child_process';
 import { Goal, GoalStatus } from '../entities/goal.entity';
 import { Task, TaskStatus } from '../../task/entities/task.entity';
+import { TaskPullRequest } from '../../collaboration/entities/task-pull-request.entity';
 import { GoalDecompositionService } from '../services/goal-decomposition.service';
 import { TaskExecutionService } from '../../orchestration/services/task-execution.service';
 import { HollonOrchestratorService } from '../../orchestration/services/hollon-orchestrator.service';
 import { DecompositionStrategy } from '../dto/decomposition-options.dto';
 import { TaskService } from '../../task/task.service';
+
+const execAsync = promisify(exec);
 
 /**
  * GoalAutomationListener: Goal-to-PR 워크플로우 자동화
@@ -35,6 +40,8 @@ export class GoalAutomationListener {
     private readonly goalRepo: Repository<Goal>,
     @InjectRepository(Task)
     private readonly taskRepo: Repository<Task>,
+    @InjectRepository(TaskPullRequest)
+    private readonly prRepo: Repository<TaskPullRequest>,
     private readonly goalDecompositionService: GoalDecompositionService,
     private readonly taskExecutionService: TaskExecutionService,
     private readonly hollonOrchestratorService: HollonOrchestratorService,
@@ -472,6 +479,196 @@ export class GoalAutomationListener {
       const err = error as Error;
       this.logger.error(
         `Parent task review transition failed: ${err.message}`,
+        err.stack,
+      );
+    }
+  }
+
+  /**
+   * Phase 4: PR 생성 후 CI 상태 체크
+   *
+   * IN_REVIEW 상태이면서 PR이 있는 Task들의 CI 상태를 체크합니다.
+   * - CI 통과: READY_FOR_REVIEW로 전환 (매니저 리뷰 대기)
+   * - CI 실패: 재시도 로직 실행
+   *
+   * 워크플로우:
+   * 1. IN_REVIEW 상태 Task 중 PR이 있는 것들 찾기
+   * 2. 각 PR의 CI 상태 체크 (gh pr checks)
+   * 3. CI 통과 → READY_FOR_REVIEW로 전환
+   * 4. CI 실패 → handleCIFailure() 호출, 재시도
+   */
+  @Cron('*/1 * * * *') // 1분마다
+  async autoCheckPRCI(): Promise<void> {
+    try {
+      this.logger.debug('Checking CI status for PRs...');
+
+      // IN_REVIEW 상태이면서 PR이 있는 Task 찾기
+      const tasksWithPRs = await this.taskRepo
+        .createQueryBuilder('task')
+        .where('task.status = :status', { status: TaskStatus.IN_REVIEW })
+        .leftJoinAndSelect('task.assignedHollon', 'hollon')
+        .leftJoinAndSelect('task.project', 'project')
+        .take(5) // 한 번에 최대 5개까지 처리
+        .getMany();
+
+      if (tasksWithPRs.length === 0) {
+        this.logger.debug('No tasks with PRs in IN_REVIEW status');
+        return;
+      }
+
+      // 각 Task의 PR 찾기
+      for (const task of tasksWithPRs) {
+        try {
+          // Task에 연결된 PR 찾기
+          const prs = await this.prRepo.find({
+            where: { taskId: task.id },
+            order: { createdAt: 'DESC' },
+          });
+
+          if (prs.length === 0) {
+            this.logger.debug(`No PR found for task ${task.id}, skipping`);
+            continue;
+          }
+
+          const pr = prs[0]; // 가장 최근 PR 사용
+
+          // 테스트 환경에서는 CI 체크 스킵
+          if (process.env.NODE_ENV === 'test') {
+            this.logger.debug(
+              `Skipping CI check in test environment for task ${task.id}`,
+            );
+            // 테스트 환경에서는 바로 READY_FOR_REVIEW로 전환
+            task.status = TaskStatus.READY_FOR_REVIEW;
+            await this.taskRepo.save(task);
+            this.logger.log(
+              `✅ Task ${task.id} moved to READY_FOR_REVIEW (test mode)`,
+            );
+            continue;
+          }
+
+          this.logger.log(
+            `Checking CI status for PR #${pr.prNumber} (task ${task.id})`,
+          );
+
+          // gh pr checks로 CI 상태 확인
+          try {
+            const { stdout } = await execAsync(
+              `gh pr checks ${pr.prUrl} --json conclusion`,
+            );
+
+            const checks = JSON.parse(stdout.trim()) as Array<{
+              conclusion: string;
+            }>;
+
+            // 모든 체크가 성공했는지 확인
+            const hasFailedChecks = checks.some(
+              (check) => check.conclusion !== 'success',
+            );
+
+            const hasPendingChecks = checks.some(
+              (check) =>
+                check.conclusion === 'pending' ||
+                check.conclusion === 'in_progress' ||
+                check.conclusion === null,
+            );
+
+            if (hasPendingChecks) {
+              this.logger.debug(
+                `CI checks still pending for PR #${pr.prNumber}, will check again later`,
+              );
+              continue; // CI가 아직 진행 중이면 다음 크론 사이클에서 다시 체크
+            }
+
+            if (hasFailedChecks) {
+              // CI 실패 - 재시도 로직 실행
+              this.logger.warn(
+                `CI checks failed for PR #${pr.prNumber}, initiating retry logic`,
+              );
+
+              // Get task metadata
+              const metadata = (task.metadata || {}) as Record<string, unknown>;
+              const currentRetryCount = (metadata.ciRetryCount as number) || 0;
+              const maxRetries = 3;
+
+              if (currentRetryCount < maxRetries) {
+                // 재시도 가능
+                this.logger.log(
+                  `Retrying task ${task.id} (attempt ${currentRetryCount + 1}/${maxRetries})`,
+                );
+
+                // Task를 IN_PROGRESS로 되돌리고 재시도 카운트 증가
+                task.status = TaskStatus.IN_PROGRESS;
+                task.metadata = {
+                  ...metadata,
+                  ciRetryCount: currentRetryCount + 1,
+                  lastCIFailure: new Date().toISOString(),
+                } as Record<string, unknown>;
+                await this.taskRepo.save(task);
+
+                // Hollon에게 재실행 요청
+                if (task.assignedHollonId) {
+                  this.logger.log(
+                    `Re-executing task ${task.id} with hollon ${task.assignedHollonId}`,
+                  );
+                  await this.hollonOrchestratorService.runCycle(
+                    task.assignedHollonId,
+                  );
+                }
+              } else {
+                // 최대 재시도 횟수 초과
+                this.logger.error(
+                  `Task ${task.id} exceeded max retries (${maxRetries}), marking as FAILED`,
+                );
+                task.status = TaskStatus.FAILED;
+                task.metadata = {
+                  ...metadata,
+                  failureReason: 'CI checks failed after maximum retries',
+                } as Record<string, unknown>;
+                await this.taskRepo.save(task);
+              }
+            } else {
+              // CI 통과 - READY_FOR_REVIEW로 전환
+              this.logger.log(
+                `✅ All CI checks passed for PR #${pr.prNumber}, moving task ${task.id} to READY_FOR_REVIEW`,
+              );
+
+              task.status = TaskStatus.READY_FOR_REVIEW;
+              await this.taskRepo.save(task);
+
+              this.logger.log(
+                `Task ${task.id} is now ready for manager review`,
+              );
+            }
+          } catch (error) {
+            const err = error as Error;
+
+            // gh CLI 명령어 실패 (예: PR이 아직 CI 설정이 없는 경우)
+            if (err.message.includes('no checks reported')) {
+              this.logger.warn(
+                `No CI checks configured for PR #${pr.prNumber}, moving to READY_FOR_REVIEW`,
+              );
+              task.status = TaskStatus.READY_FOR_REVIEW;
+              await this.taskRepo.save(task);
+            } else {
+              this.logger.error(
+                `Failed to check CI status for PR #${pr.prNumber}: ${err.message}`,
+              );
+              // CI 상태 체크 실패해도 다음 사이클에서 재시도
+            }
+          }
+        } catch (error) {
+          const err = error as Error;
+          this.logger.error(
+            `Failed to process CI check for task ${task.id}: ${err.message}`,
+            err.stack,
+          );
+          // 에러가 발생해도 다음 Task는 계속 처리
+        }
+      }
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `PR CI check automation failed: ${err.message}`,
         err.stack,
       );
     }
