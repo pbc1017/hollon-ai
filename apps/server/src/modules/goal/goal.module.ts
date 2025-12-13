@@ -12,6 +12,7 @@ import { GoalTrackingService } from './services/goal-tracking.service';
 import { GoalReviewService } from './services/goal-review.service';
 import { GoalDecompositionService } from './services/goal-decomposition.service';
 import { GoalAutomationListener } from './listeners/goal-automation.listener';
+import { TaskPullRequest } from '../collaboration/entities/task-pull-request.entity';
 import { BrainProviderModule } from '../brain-provider/brain-provider.module';
 import { TaskModule } from '../task/task.module';
 import { OrchestrationModule } from '../orchestration/orchestration.module';
@@ -22,6 +23,7 @@ import { OrchestrationModule } from '../orchestration/orchestration.module';
       Goal,
       GoalProgressRecord,
       Task,
+      TaskPullRequest,
       Project,
       Organization,
       Team,
