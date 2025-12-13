@@ -6,7 +6,8 @@ import { exec } from 'child_process';
 import * as path from 'path';
 import { Task, TaskStatus } from '../../task/entities/task.entity';
 import { Project } from '../../project/entities/project.entity';
-import { Hollon } from '../../hollon/entities/hollon.entity';
+import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
+import { Team } from '../../team/entities/team.entity';
 import { Organization } from '../../organization/entities/organization.entity';
 import { OrganizationSettings } from '../../organization/interfaces/organization-settings.interface';
 import {
@@ -20,6 +21,22 @@ import { KnowledgeContext } from '../../brain-provider/services/knowledge-inject
 import { QualityGateService } from './quality-gate.service';
 
 const execAsync = promisify(exec);
+
+/**
+ * Phase 4: Team Epic Decomposition - Work Item Interface
+ */
+interface DecompositionWorkItem {
+  title: string;
+  description: string;
+  priority?: string;
+  estimatedHours?: number;
+  requiredSkills?: string[];
+  acceptanceCriteria?: string[];
+}
+
+interface DecompositionResult {
+  workItems: DecompositionWorkItem[];
+}
 
 /**
  * Phase 3.5: Task 실행 → Worktree → 코딩 → 커밋 → PR 생성
@@ -36,6 +53,8 @@ export class TaskExecutionService {
     private readonly taskRepo: Repository<Task>,
     @InjectRepository(Hollon)
     private readonly hollonRepo: Repository<Hollon>,
+    @InjectRepository(Team)
+    private readonly teamRepo: Repository<Team>,
     @InjectRepository(Organization)
     private readonly orgRepo: Repository<Organization>,
     @InjectRepository(Document)
@@ -215,6 +234,332 @@ export class TaskExecutionService {
 
       throw error;
     }
+  }
+
+  /**
+   * Phase 4: Team Epic Decomposition (워크트리 없이 분해만 수행)
+   *
+   * SSOT 정렬:
+   * - 부모 태스크는 PENDING 상태로 대기 (Line 185-186)
+   * - Manager Hollon은 IDLE로 해방 (다른 작업 가능)
+   * - 계층적 팀 구조 지원: 자식 팀 있으면 sub team_epic 생성
+   */
+  private async executeTeamEpicDecomposition(
+    task: Task,
+    hollon: Hollon,
+  ): Promise<{ prUrl: string | null; worktreePath: string | null }> {
+    this.logger.log(
+      `Manager ${hollon.name} decomposing team epic ${task.id.slice(0, 8)}`,
+    );
+
+    // 1. Task IN_PROGRESS로 변경
+    await this.taskRepo.update(task.id, {
+      status: TaskStatus.IN_PROGRESS,
+      startedAt: new Date(),
+    });
+
+    // 2. Team 정보 조회 (자식 팀 포함)
+    const team = await this.teamRepo.findOne({
+      where: { id: task.assignedTeamId },
+      relations: ['hollons', 'manager'],
+    });
+
+    if (!team) {
+      throw new Error(`Team ${task.assignedTeamId} not found`);
+    }
+
+    // 3. 자식 팀 조회 (계층적 구조)
+    const childTeams = await this.teamRepo.find({
+      where: { parentTeamId: team.id },
+      relations: ['manager'],
+    });
+
+    // 4. Brain Provider로 decomposition 수행
+    const brainResult = await this.executeBrainProviderForDecomposition(
+      hollon,
+      task,
+      team,
+      childTeams,
+    );
+
+    // 5. 자식 태스크 생성 (계층적)
+    const childTasks: Task[] = [];
+
+    if (childTeams.length > 0) {
+      // ✅ 하위 팀이 있으면 sub team_epic 생성 (재귀)
+      this.logger.log(
+        `Creating ${childTeams.length} sub team epics for child teams`,
+      );
+
+      for (let i = 0; i < childTeams.length; i++) {
+        const childTeam = childTeams[i];
+        const teamWorkItems =
+          brainResult.teamDistribution?.[childTeam.id] || [];
+
+        if (teamWorkItems.length === 0) continue;
+
+        const subTeamEpic = this.taskRepo.create({
+          organizationId: task.organizationId,
+          projectId: task.projectId,
+          parentTaskId: task.id, // ✅ 부모 참조
+          creatorHollonId: hollon.id, // ✅ 에스컬레이션용
+          title: `${childTeam.name}: ${task.title} - Batch ${i + 1}`,
+          description: this.formatTeamTaskDescription(teamWorkItems),
+          type: 'team_epic',
+          status: TaskStatus.PENDING,
+          assignedTeamId: childTeam.id,
+          depth: (task.depth || 0) + 1,
+          priority: task.priority,
+        });
+
+        const savedSubTeamEpic = await this.taskRepo.save(subTeamEpic);
+        childTasks.push(savedSubTeamEpic);
+
+        this.logger.log(
+          `Created sub team_epic for ${childTeam.name} with ${teamWorkItems.length} work items`,
+        );
+      }
+    } else {
+      // ✅ 말단 팀이면 implementation tasks 생성
+      this.logger.log(
+        `Creating ${brainResult.workItems?.length || 0} implementation tasks for team members`,
+      );
+
+      for (const workItem of brainResult.workItems || []) {
+        // 팀원 중 적절한 홀론 선택
+        const assignedHollon = await this.selectBestHollon(team, workItem);
+
+        const implTask = this.taskRepo.create({
+          organizationId: task.organizationId,
+          projectId: task.projectId,
+          parentTaskId: task.id, // ✅ 부모 참조
+          creatorHollonId: hollon.id, // ✅ 에스컬레이션용
+          title: workItem.title,
+          description: workItem.description,
+          type: 'implementation',
+          status: TaskStatus.READY, // 즉시 실행 가능
+          assignedHollonId: assignedHollon?.id,
+          depth: (task.depth || 0) + 1,
+          priority: this.mapPriority(workItem.priority),
+          acceptanceCriteria: workItem.acceptanceCriteria,
+          requiredSkills: workItem.requiredSkills,
+        });
+
+        const savedImplTask = await this.taskRepo.save(implTask);
+        childTasks.push(savedImplTask);
+      }
+
+      this.logger.log(`Created ${childTasks.length} implementation tasks`);
+    }
+
+    // 6. ✅ SSOT Line 185-186: 부모는 PENDING으로 대기
+    await this.taskRepo.update(task.id, {
+      status: TaskStatus.PENDING, // 자식들이 완료될 때까지 대기
+    });
+
+    // 7. ✅ Manager Hollon은 IDLE로 해방
+    await this.hollonRepo.update(hollon.id, {
+      status: HollonStatus.IDLE,
+      currentTaskId: null,
+    });
+
+    this.logger.log(
+      `✅ Manager ${hollon.name} freed. Team epic ${task.id.slice(0, 8)} ` +
+        `waiting for ${childTasks.length} children (PENDING state)`,
+    );
+
+    // 8. team_epic은 PR 생성 안함
+    return { prUrl: null, worktreePath: null };
+  }
+
+  /**
+   * Brain Provider로 team epic decomposition 수행
+   */
+  private async executeBrainProviderForDecomposition(
+    hollon: Hollon,
+    task: Task,
+    team: Team,
+    childTeams: Team[],
+  ): Promise<DecompositionResult> {
+    const prompt = this.buildDecompositionPrompt(task, team, childTeams);
+
+    const result = await this.brainProvider.executeWithTracking(
+      {
+        prompt,
+        systemPrompt: hollon.role?.systemPrompt || hollon.systemPrompt,
+        context: {
+          workingDirectory: process.cwd(), // 워크트리 없음
+        },
+      },
+      {
+        organizationId: task.organizationId,
+      },
+    );
+
+    // JSON 응답 파싱
+    return this.parseDecompositionResponse(result.output);
+  }
+
+  /**
+   * Decomposition 프롬프트 생성
+   */
+  private buildDecompositionPrompt(
+    task: Task,
+    team: Team,
+    childTeams: Team[],
+  ): string {
+    const hasChildTeams = childTeams.length > 0;
+
+    return `
+You are a ${team.name} manager decomposing a team epic task.
+
+# Team Epic Task
+${task.title}
+
+${task.description || ''}
+
+# Team Structure
+${
+  hasChildTeams
+    ? `This team has ${childTeams.length} sub-teams:
+${childTeams.map((t) => `- ${t.name}`).join('\n')}
+
+Please distribute work items among these sub-teams.
+`
+    : `This is a leaf team with ${team.hollons?.length || 0} members.
+
+Please create implementation tasks for individual team members.`
+}
+
+# Output Format
+Return a JSON object with this structure:
+
+${
+  hasChildTeams
+    ? `{
+  "teamDistribution": {
+    "${childTeams[0]?.id}": [
+      {
+        "title": "Work item title",
+        "description": "Detailed description",
+        "priority": "P1",
+        "acceptanceCriteria": ["criterion 1", "criterion 2"],
+        "requiredSkills": ["skill1", "skill2"]
+      }
+    ]
+  }
+}`
+    : `{
+  "workItems": [
+    {
+      "title": "Task title",
+      "description": "Detailed description",
+      "priority": "P1",
+      "acceptanceCriteria": ["criterion 1", "criterion 2"],
+      "requiredSkills": ["TypeScript", "NestJS"]
+    }
+  ]
+}`
+}
+
+Return ONLY the JSON, no other text.
+`.trim();
+  }
+
+  /**
+   * Decomposition 응답 파싱
+   */
+  private parseDecompositionResponse(output: string): DecompositionResult {
+    // Extract JSON from markdown code blocks or plain text
+    const jsonMatch =
+      output.match(/```(?:json)?\s*([\s\S]*?)\s*```/) ||
+      output.match(/\{[\s\S]*\}/);
+
+    if (!jsonMatch) {
+      throw new Error('Failed to parse decomposition response: No JSON found');
+    }
+
+    const jsonStr = jsonMatch[1] || jsonMatch[0];
+    return JSON.parse(jsonStr);
+  }
+
+  /**
+   * 팀원 중 최적의 홀론 선택
+   */
+  private async selectBestHollon(
+    team: Team,
+    _workItem: unknown,
+  ): Promise<Hollon | null> {
+    if (!team.hollons || team.hollons.length === 0) {
+      return null;
+    }
+
+    // 간단한 라운드로빈 (향후 스킬 매칭으로 개선)
+    const idleHollons = team.hollons.filter(
+      (h) => h.status === HollonStatus.IDLE,
+    );
+
+    if (idleHollons.length === 0) {
+      // 모두 바쁘면 첫 번째 홀론에 할당 (큐잉)
+      return team.hollons[0];
+    }
+
+    // 가장 적게 할당된 홀론 선택
+    const hollonTaskCounts = await Promise.all(
+      idleHollons.map(async (h) => ({
+        hollon: h,
+        taskCount: await this.taskRepo.count({
+          where: {
+            assignedHollonId: h.id,
+            status: TaskStatus.IN_PROGRESS,
+          },
+        }),
+      })),
+    );
+
+    hollonTaskCounts.sort((a, b) => a.taskCount - b.taskCount);
+    return hollonTaskCounts[0].hollon;
+  }
+
+  /**
+   * Team task description 포맷팅
+   */
+  private formatTeamTaskDescription(
+    workItems: DecompositionWorkItem[],
+  ): string {
+    return `This is a Team Task containing ${workItems.length} work items.
+
+The team manager will distribute these items to team members as subtasks.
+
+**Work Items:**
+
+${workItems
+  .map((item, i) =>
+    `
+${i + 1}. **${item.title}**
+   ${item.description}
+   Priority: ${item.priority}
+   Required Skills: ${item.requiredSkills?.join(', ') || 'N/A'}
+   Acceptance Criteria:
+   ${item.acceptanceCriteria?.map((c) => `- ${c}`).join('\n   ') || '- N/A'}
+`.trim(),
+  )
+  .join('\n\n')}
+`.trim();
+  }
+
+  /**
+   * Priority 매핑
+   */
+  private mapPriority(priority: string): number {
+    const map: Record<string, number> = {
+      P0: 0,
+      P1: 1,
+      P2: 2,
+      P3: 3,
+      P4: 4,
+    };
+    return map[priority] || 2;
   }
 
   /**
