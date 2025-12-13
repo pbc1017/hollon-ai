@@ -424,13 +424,19 @@ Please review the changes.
       return this.findOrCreateSpecializedReviewer('PerformanceReviewer', pr);
     }
 
-    // 3. 일반 PR: 같은 팀의 가용한 홀론
+    // 3. Phase 4: 일반 PR - 팀 매니저에게 리뷰 요청
+    const manager = await this.findTeamManager(pr);
+    if (manager) {
+      return { hollonId: manager.id, type: ReviewerType.TEAM_MANAGER };
+    }
+
+    // 4. Fallback: 팀 매니저가 없으면 같은 팀의 가용한 홀론
     const teammate = await this.findAvailableTeammate(pr);
     if (teammate) {
       return { hollonId: teammate.id, type: ReviewerType.TEAM_MEMBER };
     }
 
-    // 4. Fallback: 일반 CodeReviewer
+    // 5. Fallback: 일반 CodeReviewer
     return this.findOrCreateSpecializedReviewer('CodeReviewer', pr);
   }
 
@@ -610,6 +616,55 @@ Please review the changes.
     // 현재는 간단히 첫 번째 가용 팀원 반환
     // TODO: 향후 활성 리뷰 수 기반 부하 분산 로직 추가
     return availableTeammates[0];
+  }
+
+  /**
+   * Phase 4: 팀 매니저 찾기
+   *
+   * Author hollon의 팀 매니저를 리뷰어로 반환
+   * 재귀적 팀 구조를 지원하여, 각 팀의 매니저가 해당 팀원의 PR을 리뷰
+   */
+  private async findTeamManager(pr: TaskPullRequest): Promise<Hollon | null> {
+    if (!pr.authorHollonId) {
+      this.logger.log('PR has no author hollon, cannot find team manager');
+      return null;
+    }
+
+    // 1. Author hollon의 팀 정보 가져오기
+    const authorHollon = await this.hollonRepo.findOne({
+      where: { id: pr.authorHollonId },
+      relations: ['team'],
+    });
+
+    if (!authorHollon?.team) {
+      this.logger.log(
+        `Author hollon ${pr.authorHollonId} has no team, cannot assign manager`,
+      );
+      return null;
+    }
+
+    if (!authorHollon.team.managerHollonId) {
+      this.logger.log(`Team ${authorHollon.team.id} has no manager assigned`);
+      return null;
+    }
+
+    // 2. 팀 매니저 조회
+    const manager = await this.hollonRepo.findOne({
+      where: { id: authorHollon.team.managerHollonId },
+    });
+
+    if (!manager) {
+      this.logger.warn(
+        `Team manager ${authorHollon.team.managerHollonId} not found in database`,
+      );
+      return null;
+    }
+
+    this.logger.log(
+      `Found team manager ${manager.name} (${manager.id}) for author ${authorHollon.name}`,
+    );
+
+    return manager;
   }
 
   /**

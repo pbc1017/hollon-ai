@@ -14,6 +14,7 @@ export enum PullRequestStatus {
 
 export enum ReviewerType {
   TEAM_MEMBER = 'team_member',
+  TEAM_MANAGER = 'team_manager', // Phase 4: Manager review workflow
   SECURITY_REVIEWER = 'security_reviewer',
   ARCHITECTURE_REVIEWER = 'architecture_reviewer',
   PERFORMANCE_REVIEWER = 'performance_reviewer',
