@@ -290,16 +290,24 @@ export class GoalAutomationListener {
     try {
       this.logger.debug('Checking for tasks ready for execution...');
 
-      // PENDING 상태이고 Hollon에게 할당된 Task 찾기
+      // READY 상태이고 Hollon에게 할당된 Task 찾기
       const readyTasks = await this.taskRepo
         .createQueryBuilder('task')
-        .where('task.status = :status', { status: TaskStatus.PENDING })
+        .where('task.status = :status', { status: TaskStatus.READY })
         .andWhere('task.assignedHollonId IS NOT NULL')
         .andWhere('task.type != :teamEpic', { teamEpic: 'team_epic' })
         .leftJoinAndSelect('task.project', 'project')
         .leftJoinAndSelect('task.assignedHollon', 'hollon')
         .take(5) // 한 번에 최대 5개 Task까지만 실행 (병렬 실행 방지)
         .getMany();
+
+      this.logger.log(`🔍 Query returned ${readyTasks.length} tasks`);
+
+      if (readyTasks.length > 0) {
+        this.logger.log(
+          `First task: ${readyTasks[0].id}, project: ${readyTasks[0].project?.id}, workingDir: ${readyTasks[0].project?.workingDirectory}`,
+        );
+      }
 
       if (readyTasks.length === 0) {
         this.logger.debug('No tasks ready for execution');

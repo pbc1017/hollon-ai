@@ -45,7 +45,7 @@ export default () => {
 
     brain: {
       claudeCodePath: process.env.CLAUDE_CODE_PATH || 'claude',
-      timeoutMs: parseInt(process.env.BRAIN_TIMEOUT_MS || '300000', 10),
+      timeoutMs: parseInt(process.env.BRAIN_TIMEOUT_MS || '1200000', 10), // 20 minutes (Phase 4 dogfooding needs longer time)
       // Test mode uses mock API keys
       anthropicApiKey: isTest
         ? 'test-key-not-used'

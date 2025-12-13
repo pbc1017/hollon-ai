@@ -53,6 +53,35 @@ interface DecompositionResult {
 @Injectable()
 export class TaskExecutionService {
   private readonly logger = new Logger(TaskExecutionService.name);
+  // Git operation locks to prevent concurrent access to .git/config
+  private static gitLocks: Map<string, Promise<void>> = new Map();
+
+  private async withGitLock<T>(
+    repoPath: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    // Wait for any existing lock on this repository
+    while (TaskExecutionService.gitLocks.has(repoPath)) {
+      await TaskExecutionService.gitLocks.get(repoPath);
+      await new Promise((resolve) => setTimeout(resolve, 100)); // Small delay before retry
+    }
+
+    // Create new lock
+    let resolve: () => void;
+    const lockPromise = new Promise<void>((r) => {
+      resolve = r;
+    });
+    TaskExecutionService.gitLocks.set(repoPath, lockPromise);
+
+    try {
+      // Execute the operation
+      return await operation();
+    } finally {
+      // Release the lock
+      TaskExecutionService.gitLocks.delete(repoPath);
+      resolve!();
+    }
+  }
 
   constructor(
     @InjectRepository(Task)
@@ -227,7 +256,6 @@ export class TaskExecutionService {
       await this.requestCodeReview(task, prUrl, hollonId, worktreePath);
 
       // 11. Task를 READY_FOR_REVIEW로 변경 (Phase 3.16: Manager review 대기)
-      // Manager hollon이 이 status를 감지하고 temporary review hollon 생성
       await this.taskRepo.update(taskId, {
         status: TaskStatus.READY_FOR_REVIEW,
       });
@@ -628,51 +656,54 @@ ${i + 1}. **${item.title}**
       `Creating task worktree for ${hollon.name} / task ${task.id.slice(0, 8)} from ${baseBranch}`,
     );
 
-    try {
-      // Ensure parent directory exists
-      const hollonDir = path.join(
-        project.workingDirectory,
-        '..',
-        '.git-worktrees',
-        `hollon-${hollon.id.slice(0, 8)}`,
-      );
-      await execAsync(`mkdir -p ${hollonDir}`);
+    // Use git lock to prevent concurrent git operations
+    await this.withGitLock(project.workingDirectory, async () => {
+      try {
+        // Ensure parent directory exists
+        const hollonDir = path.join(
+          project.workingDirectory,
+          '..',
+          '.git-worktrees',
+          `hollon-${hollon.id.slice(0, 8)}`,
+        );
+        await execAsync(`mkdir -p ${hollonDir}`);
 
-      // Phase 4: Fetch latest from origin to ensure we have up-to-date base branch
-      this.logger.log(`Fetching latest from origin for ${baseBranch}`);
-      await execAsync('git fetch origin', {
-        cwd: project.workingDirectory,
-      });
-
-      // Create unique temporary branch name for worktree
-      const tempBranch = `wt-hollon-${hollon.id.slice(0, 8)}-task-${task.id.slice(0, 8)}`;
-
-      // Create worktree from origin/baseBranch to ensure latest code
-      // This avoids depending on potentially outdated local branch
-      await execAsync(
-        `git worktree add -b ${tempBranch} ${worktreePath} origin/${baseBranch}`,
-        {
+        // Phase 4: Fetch latest from origin to ensure we have up-to-date base branch
+        this.logger.log(`Fetching latest from origin for ${baseBranch}`);
+        await execAsync('git fetch origin', {
           cwd: project.workingDirectory,
-        },
-      );
+        });
 
-      this.logger.log(
-        `Task worktree created: hollon-${hollon.id.slice(0, 8)}/task-${task.id.slice(0, 8)} from origin/${baseBranch}`,
-      );
-    } catch (error: unknown) {
-      const err = error as Error & { stderr?: string };
-      const errorMessage = err?.message || 'Unknown error';
-      const stderr = err?.stderr || '';
-      const fullError = stderr
-        ? `${errorMessage}\nstderr: ${stderr}`
-        : errorMessage;
-      this.logger.error(
-        `Failed to create task worktree from ${baseBranch}: ${fullError}`,
-      );
-      throw new Error(
-        `Task worktree creation failed from ${baseBranch}: ${fullError}`,
-      );
-    }
+        // Create unique temporary branch name for worktree
+        const tempBranch = `wt-hollon-${hollon.id.slice(0, 8)}-task-${task.id.slice(0, 8)}`;
+
+        // Create worktree from origin/baseBranch to ensure latest code
+        // This avoids depending on potentially outdated local branch
+        await execAsync(
+          `git worktree add -b ${tempBranch} ${worktreePath} origin/${baseBranch}`,
+          {
+            cwd: project.workingDirectory,
+          },
+        );
+
+        this.logger.log(
+          `Task worktree created: hollon-${hollon.id.slice(0, 8)}/task-${task.id.slice(0, 8)} from origin/${baseBranch}`,
+        );
+      } catch (error: unknown) {
+        const err = error as Error & { stderr?: string };
+        const errorMessage = err?.message || 'Unknown error';
+        const stderr = err?.stderr || '';
+        const fullError = stderr
+          ? `${errorMessage}\\nstderr: ${stderr}`
+          : errorMessage;
+        this.logger.error(
+          `Failed to create task worktree from ${baseBranch}: ${fullError}`,
+        );
+        throw new Error(
+          `Task worktree creation failed from ${baseBranch}: ${fullError}`,
+        );
+      }
+    });
 
     // Phase 3.12: Save worktree path to task entity
     await this.taskRepo.update(task.id, {
