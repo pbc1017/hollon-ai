@@ -15,6 +15,7 @@ import { Project } from '../../project/entities/project.entity';
 import { Cycle } from '../../project/entities/cycle.entity';
 import { Hollon } from '../../hollon/entities/hollon.entity';
 import { Team } from '../../team/entities/team.entity';
+import { Knowledge } from '../../knowledge/entities/knowledge.entity';
 
 export enum TaskStatus {
   PENDING = 'pending',
@@ -268,4 +269,13 @@ export class Task extends BaseEntity {
   // 이 태스크에 의존하는 태스크들 (후행 태스크)
   @ManyToMany(() => Task, (task) => task.dependencies)
   dependentTasks: Task[];
+
+  // Knowledge entries associated with this task
+  @ManyToMany(() => Knowledge, (knowledge) => knowledge.tasks)
+  @JoinTable({
+    name: 'task_knowledge',
+    joinColumn: { name: 'task_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'knowledge_id', referencedColumnName: 'id' },
+  })
+  knowledgeEntries?: Knowledge[];
 }
