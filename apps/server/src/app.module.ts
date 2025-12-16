@@ -26,6 +26,7 @@ import { ConflictResolutionModule } from './modules/conflict-resolution/conflict
 import { GoalModule } from './modules/goal/goal.module';
 import { DddProvidersModule } from './modules/ddd-providers/ddd-providers.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
+import { UserModule } from './modules/user/user.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { KnowledgeModule } from './modules/knowledge/knowledge.module';
     HealthModule,
     OrganizationModule,
     RoleModule,
+    UserModule,
     TeamModule,
     HollonModule,
     ProjectModule,
