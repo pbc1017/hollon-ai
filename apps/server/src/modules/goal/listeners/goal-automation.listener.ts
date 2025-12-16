@@ -284,6 +284,122 @@ export class GoalAutomationListener {
   }
 
   /**
+   * Step 4: 자동 Implementation Task 할당 (Phase 4)
+   * 매 1분마다 PENDING 상태의 Implementation Task를 팀원에게 자동 할당
+   *
+   * 워크플로우:
+   * - PENDING 상태의 implementation 태스크 찾기
+   * - 해당 태스크의 부모 Team Epic에서 매니저 확인
+   * - 매니저의 팀원(subordinates) 목록 조회
+   * - 워크로드 밸런싱: 각 팀원의 IN_PROGRESS 태스크 수 확인
+   * - 가장 여유로운 팀원에게 할당 및 status → READY로 변경
+   */
+  @Cron('*/1 * * * *') // 1분마다
+  async autoAssignTasks(): Promise<void> {
+    try {
+      this.logger.debug(
+        'Checking for implementation tasks needing assignment...',
+      );
+
+      // PENDING 상태이면서 팀원에게 할당되지 않은 implementation 태스크 찾기
+      const unassignedTasks = await this.taskRepo
+        .createQueryBuilder('task')
+        .where('task.status = :status', { status: TaskStatus.PENDING })
+        .andWhere('task.type != :teamEpic', { teamEpic: 'team_epic' })
+        .andWhere('task.assignedHollonId IS NULL')
+        .andWhere('task.parentTaskId IS NOT NULL') // 부모 Team Epic이 있는 태스크만
+        .leftJoinAndSelect('task.parentTask', 'parentTask')
+        .leftJoinAndSelect('parentTask.assignedHollon', 'manager')
+        .leftJoinAndSelect('manager.subordinates', 'subordinates')
+        .take(10) // 한 번에 최대 10개까지 처리
+        .getMany();
+
+      if (unassignedTasks.length === 0) {
+        this.logger.debug('No implementation tasks need assignment');
+        return;
+      }
+
+      this.logger.log(
+        `Found ${unassignedTasks.length} implementation tasks needing assignment`,
+      );
+
+      let assignedCount = 0;
+      for (const task of unassignedTasks) {
+        try {
+          // 부모 Team Epic의 매니저 확인
+          if (!task.parentTask?.assignedHollon) {
+            this.logger.warn(
+              `Task ${task.id} has no parent task manager - skipping`,
+            );
+            continue;
+          }
+
+          const manager = task.parentTask.assignedHollon;
+
+          // 매니저의 팀원(subordinates) 확인
+          if (!manager.subordinates || manager.subordinates.length === 0) {
+            this.logger.warn(
+              `Manager ${manager.name} has no subordinates - skipping task ${task.id}`,
+            );
+            continue;
+          }
+
+          // 워크로드 밸런싱: 각 팀원의 현재 IN_PROGRESS 태스크 수 확인
+          const workloads = await Promise.all(
+            manager.subordinates.map(async (subordinate) => {
+              const inProgressCount = await this.taskRepo.count({
+                where: {
+                  assignedHollonId: subordinate.id,
+                  status: TaskStatus.IN_PROGRESS,
+                },
+              });
+
+              return {
+                hollon: subordinate,
+                workload: inProgressCount,
+              };
+            }),
+          );
+
+          // 가장 여유로운 팀원 찾기 (IN_PROGRESS 태스크가 가장 적은 팀원)
+          const selectedMember = workloads.reduce((min, current) =>
+            current.workload < min.workload ? current : min,
+          );
+
+          // 태스크 할당 및 상태 변경
+          task.assignedHollonId = selectedMember.hollon.id;
+          task.status = TaskStatus.READY;
+          await this.taskRepo.save(task);
+
+          this.logger.log(
+            `✅ Assigned task "${task.title}" to ${selectedMember.hollon.name} (workload: ${selectedMember.workload})`,
+          );
+          assignedCount++;
+        } catch (error) {
+          const err = error as Error;
+          this.logger.error(
+            `Failed to assign task ${task.id}: ${err.message}`,
+            err.stack,
+          );
+          // 에러가 발생해도 다음 태스크는 계속 처리
+        }
+      }
+
+      if (assignedCount > 0) {
+        this.logger.log(
+          `Successfully assigned ${assignedCount} implementation tasks to team members`,
+        );
+      }
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Task assignment automation failed: ${err.message}`,
+        err.stack,
+      );
+    }
+  }
+
+  /**
    * Step 2: 자동 Task Execution
    * 매 2분마다 할당되었지만 아직 실행되지 않은 Task를 찾아서 자동으로 실행
    *

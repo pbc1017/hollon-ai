@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { DocumentService } from '../../document/document.service';
 import { DocumentType } from '../../document/entities/document.entity';
 import { Task } from '../../task/entities/task.entity';
+import { KnowledgeRetrievalService } from '../../knowledge/services/knowledge-retrieval.service';
+import { KnowledgeEntry } from '../../knowledge/entities/knowledge-entry.entity';
 
 export interface KnowledgeContext {
   task?: Task;
@@ -15,7 +17,10 @@ export interface KnowledgeContext {
 export class KnowledgeInjectionService {
   private readonly logger = new Logger(KnowledgeInjectionService.name);
 
-  constructor(private readonly documentService: DocumentService) {}
+  constructor(
+    private readonly documentService: DocumentService,
+    private readonly knowledgeRetrieval: KnowledgeRetrievalService,
+  ) {}
 
   /**
    * Phase 3.5: Task 실행 시 관련 지식을 프롬프트에 주입
@@ -38,7 +43,7 @@ export class KnowledgeInjectionService {
         return basePrompt;
       }
 
-      // 2. 조직 지식 문서 검색
+      // 2. 조직 지식 문서 검색 (Document-based)
       const knowledgeDocs = await this.documentService.searchByTags(
         context.organizationId,
         skillsAndTags,
@@ -48,11 +53,6 @@ export class KnowledgeInjectionService {
           limit: 5, // 최대 5개 문서
         },
       );
-
-      if (knowledgeDocs.length === 0) {
-        this.logger.debug('No knowledge documents found');
-        return basePrompt;
-      }
 
       // 3. 프로젝트 관련 문서도 검색 (있으면)
       const projectDocs = context.projectId
@@ -67,13 +67,30 @@ export class KnowledgeInjectionService {
           )
         : [];
 
-      // 4. 지식 주입 섹션 생성
+      // 4. KnowledgeEntry 검색 (새로운 지식 시스템)
+      const knowledgeEntries = await this.knowledgeRetrieval.retrieveForContext(
+        {
+          tags: skillsAndTags,
+          taskDescription: context.task?.description,
+          type: context.task?.type,
+          priority: context.task?.priority,
+        },
+        context.organizationId,
+        {
+          teamId: context.task?.assignedTeamId,
+          projectId: context.projectId,
+          limit: 5,
+        },
+      );
+
+      // 5. 지식 주입 섹션 생성
       const knowledgeSection = this.buildKnowledgeSection(
         knowledgeDocs,
         projectDocs,
+        knowledgeEntries,
       );
 
-      // 5. 프롬프트에 지식 주입
+      // 6. 프롬프트에 지식 주입
       const enhancedPrompt = this.injectIntoPrompt(
         basePrompt,
         knowledgeSection,
@@ -82,7 +99,7 @@ export class KnowledgeInjectionService {
 
       this.logger.log(
         `✅ Knowledge injected: ${knowledgeDocs.length} org docs, ` +
-          `${projectDocs.length} project docs`,
+          `${projectDocs.length} project docs, ${knowledgeEntries.length} knowledge entries`,
       );
 
       return enhancedPrompt;
@@ -128,7 +145,11 @@ export class KnowledgeInjectionService {
   /**
    * 지식 문서를 프롬프트 섹션으로 변환
    */
-  private buildKnowledgeSection(orgDocs: any[], projectDocs: any[]): string {
+  private buildKnowledgeSection(
+    orgDocs: Array<{ title: string; content: string; tags?: string[] }>,
+    projectDocs: Array<{ title: string; content: string; tags?: string[] }>,
+    knowledgeEntries: KnowledgeEntry[],
+  ): string {
     const sections: string[] = [];
 
     sections.push('# 🔑 Available Organization Knowledge\n');
@@ -137,15 +158,48 @@ export class KnowledgeInjectionService {
         'Use them as reference when making decisions or implementing solutions.\n',
     );
 
-    // 조직 지식
+    // 추출된 지식 엔트리 (우선순위 높음)
+    if (knowledgeEntries.length > 0) {
+      sections.push('## Extracted Knowledge & Best Practices\n');
+      for (const entry of knowledgeEntries) {
+        sections.push(`### ${entry.title}\n`);
+        sections.push(
+          `**Type**: ${entry.type} | **Category**: ${entry.category} | **Confidence**: ${entry.confidenceScore}%\n`,
+        );
+        sections.push(`**Tags**: ${entry.tags?.join(', ') || 'None'}\n`);
+        sections.push('**Content**:');
+        sections.push('```');
+        const content =
+          entry.content.length > 2000
+            ? entry.content.substring(0, 2000) + '\n... (truncated)'
+            : entry.content;
+        sections.push(content);
+        sections.push('```');
+
+        // 메타데이터가 있으면 추가
+        if (
+          entry.metadata?.codeSnippets &&
+          entry.metadata.codeSnippets.length > 0
+        ) {
+          sections.push('\n**Code Examples**:');
+          for (const snippet of entry.metadata.codeSnippets.slice(0, 2)) {
+            sections.push('```');
+            sections.push(snippet);
+            sections.push('```');
+          }
+        }
+        sections.push('\n');
+      }
+    }
+
+    // 조직 지식 문서
     if (orgDocs.length > 0) {
-      sections.push('## Organization-wide Knowledge\n');
+      sections.push('## Organization-wide Documentation\n');
       for (const doc of orgDocs) {
         sections.push(`### ${doc.title}\n`);
         sections.push(`**Tags**: ${doc.tags?.join(', ') || 'None'}\n`);
         sections.push('**Content**:');
         sections.push('```');
-        // 문서 내용이 너무 길면 잘라내기 (2000자 제한)
         const content =
           doc.content.length > 2000
             ? doc.content.substring(0, 2000) + '\n... (truncated)'
@@ -155,9 +209,9 @@ export class KnowledgeInjectionService {
       }
     }
 
-    // 프로젝트 지식
+    // 프로젝트 지식 문서
     if (projectDocs.length > 0) {
-      sections.push('## Project-specific Knowledge\n');
+      sections.push('## Project-specific Documentation\n');
       for (const doc of projectDocs) {
         sections.push(`### ${doc.title}\n`);
         sections.push(`**Tags**: ${doc.tags?.join(', ') || 'None'}\n`);

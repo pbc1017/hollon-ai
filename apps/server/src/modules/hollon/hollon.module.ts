@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Hollon } from './entities/hollon.entity';
 import { HollonService } from './hollon.service';
 import { HollonController } from './hollon.controller';
+import { HollonCleanupListener } from './listeners/hollon-cleanup.listener';
 import { ApprovalModule } from '../approval/approval.module';
 import { RoleModule } from '../role/role.module';
 import { TeamModule } from '../team/team.module';
@@ -25,7 +26,7 @@ import { Task } from '../task/entities/task.entity';
     BrainProviderModule,
   ],
   controllers: [HollonController],
-  providers: [HollonService],
+  providers: [HollonService, HollonCleanupListener],
   exports: [HollonService],
 })
 export class HollonModule {}

@@ -14,6 +14,7 @@ import { Project } from '../../project/entities/project.entity';
 import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
 import { Team } from '../../team/entities/team.entity';
 import { Organization } from '../../organization/entities/organization.entity';
+import { Role } from '../../role/entities/role.entity';
 import { OrganizationSettings } from '../../organization/interfaces/organization-settings.interface';
 import {
   Document,
@@ -95,6 +96,8 @@ export class TaskExecutionService {
     private readonly orgRepo: Repository<Organization>,
     @InjectRepository(Document)
     private readonly documentRepo: Repository<Document>,
+    @InjectRepository(Role)
+    private readonly roleRepo: Repository<Role>,
     private readonly brainProvider: BrainProviderService,
     private readonly qualityGateService: QualityGateService,
     @Inject('ICodeReviewPort')
@@ -1079,6 +1082,52 @@ ${i + 1}. **${item.title}**
    * Phase 4: Create temporary sub-hollon for a subtask
    * Follows the pattern from HollonOrchestratorService.handleComplexTask()
    */
+
+  /**
+   * Phase 4: Get system prompt for sub-hollon based on type
+   * Reads prompt templates from the prompts/ directory
+   */
+  /**
+   * Phase 4: Get appropriate Role for sub-hollon based on type
+   * Finds specialized roles from the database
+   */
+  private async getRoleForSubHollonType(
+    type: 'planning' | 'implementation' | 'testing' | 'integration',
+    organizationId: string,
+  ): Promise<Role | null> {
+    const roleNameMap = {
+      planning: 'PlanningSpecialist',
+      implementation: 'ImplementationSpecialist',
+      testing: 'TestingSpecialist',
+      integration: 'IntegrationSpecialist',
+    };
+
+    const roleName = roleNameMap[type];
+
+    try {
+      const role = await this.roleRepo.findOne({
+        where: {
+          name: roleName,
+          organizationId,
+          availableForTemporaryHollon: true,
+        },
+      });
+
+      if (!role) {
+        this.logger.warn(
+          `Role ${roleName} not found for organization ${organizationId}`,
+        );
+      }
+
+      return role;
+    } catch (error) {
+      this.logger.error(
+        `Failed to load role for ${type}: ${(error as Error).message}`,
+      );
+      return null;
+    }
+  }
+
   private async createSubHollonForSubtask(
     parentHollon: Hollon,
     task: Task,
@@ -1086,16 +1135,26 @@ ${i + 1}. **${item.title}**
       title: string;
       description: string;
       requiredSkills?: string[];
+      subHollonType?: 'planning' | 'implementation' | 'testing' | 'integration';
     },
   ): Promise<Hollon> {
-    // Determine appropriate role based on subtask skills or use a generic implementation role
-    // For now, we'll create a generic "Implementer" sub-hollon
-    // In the future, this could be enhanced to select roles based on requiredSkills
+    // Phase 4: Determine sub-hollon type (default to 'implementation')
+    const subHollonType = subtaskData.subHollonType || 'implementation';
 
-    const subHollonName = `Impl-${task.id.substring(0, 8)}-${subtaskData.title.substring(0, 20).replace(/[^a-zA-Z0-9-]/g, '-')}`;
+    // Phase 4: Get specialized role for the sub-hollon type
+    const specializedRole = await this.getRoleForSubHollonType(
+      subHollonType,
+      parentHollon.organizationId,
+    );
+
+    // Fallback to parent's role if specialized role not found
+    const roleId = specializedRole?.id || parentHollon.roleId;
+    const systemPrompt = specializedRole?.systemPrompt || undefined;
+
+    const subHollonName = `${subHollonType.substring(0, 4)}-${task.id.substring(0, 8)}-${subtaskData.title.substring(0, 20).replace(/[^a-zA-Z0-9-]/g, '-')}`;
 
     this.logger.log(
-      `Creating temporary sub-hollon ${subHollonName} for subtask "${subtaskData.title}"`,
+      `Creating temporary sub-hollon ${subHollonName} (type: ${subHollonType}, role: ${specializedRole?.name || 'fallback'}) for subtask "${subtaskData.title}"`,
     );
 
     // Create temporary sub-hollon using the service
@@ -1103,13 +1162,14 @@ ${i + 1}. **${item.title}**
       name: subHollonName,
       organizationId: parentHollon.organizationId,
       teamId: parentHollon.teamId || undefined,
-      roleId: parentHollon.roleId, // Use same role as parent for now
+      roleId, // ✅ Phase 4: Use specialized role ID
       brainProviderId: parentHollon.brainProviderId || 'claude_code',
       createdBy: parentHollon.id,
+      systemPrompt, // ✅ Phase 4: Inject role's system prompt
     });
 
     this.logger.log(
-      `Created temporary sub-hollon ${subHollon.id.slice(0, 8)} for "${subtaskData.title}"`,
+      `Created temporary sub-hollon ${subHollon.id.slice(0, 8)} with ${specializedRole?.name || 'default'} role for "${subtaskData.title}"`,
     );
 
     return subHollon;
