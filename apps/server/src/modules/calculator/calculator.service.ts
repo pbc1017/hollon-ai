@@ -46,4 +46,36 @@ export class CalculatorService {
     this.validateNumber(b, 'Second parameter');
     return a - b;
   }
+
+  /**
+   * Multiplies two numbers together
+   * @param a - The first number
+   * @param b - The second number
+   * @returns The product of a and b
+   * @throws Error if either input is not a valid number
+   */
+  multiply(a: number, b: number): number {
+    this.validateNumber(a, 'First parameter');
+    this.validateNumber(b, 'Second parameter');
+    return a * b;
+  }
+
+  /**
+   * Divides the first number by the second
+   * @param a - The dividend (number to be divided)
+   * @param b - The divisor (number to divide by)
+   * @returns The quotient of a divided by b
+   * @throws Error if either input is not a valid number
+   * @throws Error if attempting to divide by zero
+   */
+  divide(a: number, b: number): number {
+    this.validateNumber(a, 'First parameter');
+    this.validateNumber(b, 'Second parameter');
+    
+    if (b === 0) {
+      throw new Error('Cannot divide by zero');
+    }
+    
+    return a / b;
+  }
 }
