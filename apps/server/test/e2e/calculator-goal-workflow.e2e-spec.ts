@@ -281,14 +281,16 @@ describe('Calculator Goal Workflow (E2E)', () => {
         // ========== Step 6: Implementation Tasks → Team Member Assignment ==========
         console.log('\n👥 Step 6: Getting Ready Tasks...');
 
-        // Get READY implementation tasks (they're already assigned by the decomposition)
-        const readyTasks = await taskRepo.find({
-          where: {
-            type: TaskType.IMPLEMENTATION,
-            status: TaskStatus.READY,
-          },
-          take: 3, // Get first 3 tasks
-        });
+        // Get READY implementation tasks from the epics we just decomposed
+        // Note: Goal decomposition creates new projects, so we filter by parentTaskId instead
+        const epicIds = assignedEpics.map((e) => e.id);
+        const readyTasks = await taskRepo
+          .createQueryBuilder('task')
+          .where('task.parentTaskId IN (:...epicIds)', { epicIds })
+          .andWhere('task.type = :type', { type: TaskType.IMPLEMENTATION })
+          .andWhere('task.status = :status', { status: TaskStatus.READY })
+          .take(3)
+          .getMany();
 
         console.log(`✅ Found ${readyTasks.length} READY tasks for execution`);
         for (const task of readyTasks.slice(0, 3)) {
@@ -311,9 +313,10 @@ describe('Calculator Goal Workflow (E2E)', () => {
           console.log(`   Executing: "${taskToExecute.title}"...`);
 
           try {
+            // Use devBravo as the executor (Implementation tasks from Epic decomposition don't have assignedHollonId yet)
             await taskExecutionService.executeTask(
               taskToExecute.id,
-              taskToExecute.assignedHollonId,
+              devBravo.id,
             );
             console.log(`   ✅ Task execution completed`);
 

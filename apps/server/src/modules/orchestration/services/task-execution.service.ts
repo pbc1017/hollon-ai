@@ -799,24 +799,38 @@ ${i + 1}. **${item.title}**
 
         // Phase 4: Fetch latest from origin to ensure we have up-to-date base branch
         this.logger.log(`Fetching latest from origin for ${baseBranch}`);
-        await execAsync('git fetch origin', {
-          cwd: project.workingDirectory,
-        });
+        let useOriginBranch = true;
+        try {
+          await execAsync('git fetch origin', {
+            cwd: project.workingDirectory,
+          });
+          this.logger.log('✅ Git fetch succeeded');
+        } catch (fetchError) {
+          const err = fetchError as Error & { stderr?: string };
+          this.logger.warn(
+            `Failed to fetch from origin (${err.message}). Will use local branch instead.`,
+          );
+          useOriginBranch = false;
+        }
 
         // Create unique temporary branch name for worktree
         const tempBranch = `wt-hollon-${hollon.id.slice(0, 8)}-task-${task.id.slice(0, 8)}`;
 
-        // Create worktree from origin/baseBranch to ensure latest code
-        // This avoids depending on potentially outdated local branch
+        // Create worktree from origin/baseBranch or local baseBranch
+        // Prefer origin branch to ensure latest code, but fall back to local if fetch failed
+        const branchRef = useOriginBranch ? `origin/${baseBranch}` : baseBranch;
+        this.logger.log(
+          `Creating worktree from ${branchRef} for task ${task.id.slice(0, 8)}`,
+        );
         await execAsync(
-          `git worktree add -b ${tempBranch} ${worktreePath} origin/${baseBranch}`,
+          `git worktree add -b ${tempBranch} ${worktreePath} ${branchRef}`,
           {
             cwd: project.workingDirectory,
           },
         );
 
         this.logger.log(
-          `Task worktree created: hollon-${hollon.id.slice(0, 8)}/task-${task.id.slice(0, 8)} from origin/${baseBranch}`,
+          `Task worktree created: hollon-${hollon.id.slice(0, 8)}/task-${task.id.slice(0, 8)} from ${branchRef}`,
         );
       } catch (error: unknown) {
         const err = error as Error & { stderr?: string };
