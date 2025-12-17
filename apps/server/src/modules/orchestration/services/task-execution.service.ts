@@ -410,6 +410,12 @@ export class TaskExecutionService {
     task: Task,
     hollon: Hollon,
   ): Promise<{ prUrl: string | null; worktreePath: string | null }> {
+    if (!task.id) {
+      throw new Error(
+        `Task object is missing id property. Task: ${JSON.stringify(task)}`,
+      );
+    }
+
     this.logger.log(
       `Manager ${hollon.name} decomposing team epic ${task.id.slice(0, 8)}`,
     );
@@ -929,8 +935,8 @@ ${i + 1}. **${item.title}**
     task: Task,
     worktreePath: string,
   ): Promise<BrainResponse> {
-    // 프롬프트 구성
-    const prompt = this.buildTaskPrompt(task);
+    // 프롬프트 구성 (Phase 4: Pass hollon for depth-aware prompting)
+    const prompt = this.buildTaskPrompt(task, hollon);
 
     // Knowledge Context 구성 (Phase 3.5)
     const knowledgeContext: KnowledgeContext = {
@@ -1020,7 +1026,7 @@ ${i + 1}. **${item.title}**
    * Task 프롬프트 생성
    * Phase 4: Ask Brain if decomposition is needed for complex tasks
    */
-  private buildTaskPrompt(task: Task): string {
+  private buildTaskPrompt(task: Task, hollon?: Hollon): string {
     const sections: string[] = [];
 
     sections.push(`# Task: ${task.title}\n`);
@@ -1037,37 +1043,236 @@ ${i + 1}. **${item.title}**
       sections.push(`## Affected Files\n${task.affectedFiles.join('\n')}\n`);
     }
 
-    sections.push(
-      `## Instructions\n` +
-        `Please implement the task described above. ` +
-        `Make sure to:\n` +
-        `1. Write clean, maintainable code\n` +
-        `2. Follow the project's coding standards\n` +
-        `3. Add appropriate tests if needed\n` +
-        `4. Update documentation if required\n` +
-        `5. Commit your changes with a descriptive message\n\n` +
-        `## Task Decomposition (Phase 4)\n` +
-        `If this task is complex and would benefit from being broken down into smaller subtasks ` +
-        `(e.g., needs planning phase, exploration phase, and implementation phase), ` +
-        `you can suggest decomposition by starting your response with:\n` +
-        `"DECOMPOSE_TASK: <reason>"\n\n` +
-        `Then provide a JSON object with this structure:\n` +
-        `{\n` +
-        `  "subtasks": [\n` +
-        `    {\n` +
-        `      "title": "Subtask title",\n` +
-        `      "description": "Detailed description",\n` +
-        `      "priority": "P1",\n` +
-        `      "acceptanceCriteria": ["criterion 1", "criterion 2"],\n` +
-        `      "requiredSkills": ["skill1", "skill2"]\n` +
-        `    }\n` +
-        `  ]\n` +
-        `}\n\n` +
-        `Only suggest decomposition if the task is truly complex. ` +
-        `For simple tasks, just implement them directly.\n`,
+    // Phase 4: Analyze task complexity and hollon depth
+    const analysis = this.analyzeTaskComplexity(task);
+    const isPermanentHollon = hollon && hollon.depth === 0;
+
+    // Phase 4.1: MANDATORY decomposition if estimated commits >= 2
+    const mustDecompose = isPermanentHollon && analysis.estimatedCommits >= 2;
+    const shouldRecommendDecomposition =
+      isPermanentHollon && !mustDecompose && analysis.level === 'medium';
+
+    // Log prompt decision
+    console.log(
+      `\n🎯 Phase 4: Prompt decision for task "${task.title}":\n` +
+        `   Hollon depth: ${hollon?.depth ?? 'undefined'}\n` +
+        `   Is permanent hollon: ${isPermanentHollon}\n` +
+        `   Complexity: ${analysis.level}\n` +
+        `   Estimated commits: ${analysis.estimatedCommits}\n` +
+        `   Must decompose: ${mustDecompose}\n` +
+        `   Should recommend decomposition: ${shouldRecommendDecomposition}\n` +
+        `   Prompt branch: ${mustDecompose ? 'MANDATORY_DECOMPOSITION' : shouldRecommendDecomposition ? 'RECOMMENDED_DECOMPOSITION' : isPermanentHollon ? 'DIRECT_IMPLEMENTATION' : 'TEMPORARY_DIRECT_ONLY'}\n`,
     );
 
+    if (mustDecompose) {
+      // For tasks requiring multiple commits: MANDATORY decomposition
+      sections.push(
+        `## Instructions\n` +
+          `🚨 MANDATORY DECOMPOSITION REQUIRED 🚨\n\n` +
+          `This task is estimated to require ${analysis.estimatedCommits} commits, which means it should be broken down into ${analysis.estimatedCommits} subtasks.\n\n` +
+          `**You MUST decompose this task. Direct implementation is NOT allowed.**\n\n` +
+          `Start your response with:\n` +
+          `"DECOMPOSE_TASK: This task requires ${analysis.estimatedCommits} separate commits"\n\n` +
+          `Then provide a JSON object with this structure:\n` +
+          `{\n` +
+          `  "subtasks": [\n` +
+          `    {\n` +
+          `      "title": "Subtask title (e.g., 'Implement entity layer')",\n` +
+          `      "description": "What this subtask accomplishes (should result in 1 commit)",\n` +
+          `      "priority": "P1",\n` +
+          `      "acceptanceCriteria": ["criterion 1", "criterion 2"],\n` +
+          `      "requiredSkills": ["skill1", "skill2"]\n` +
+          `    }\n` +
+          `  ]\n` +
+          `}\n\n` +
+          `**Guidelines for decomposition:**\n` +
+          `- Each subtask should represent ONE logical commit\n` +
+          `- Split by architectural layers (e.g., entity → service → controller → tests)\n` +
+          `- Each subtask should be independently testable\n` +
+          `- Subtasks will be executed in parallel by specialized sub-hollons\n`,
+      );
+    } else if (shouldRecommendDecomposition) {
+      // For medium complexity: Recommend but not mandatory
+      sections.push(
+        `## Instructions\n` +
+          `This task appears to be ${analysis.level} complexity.\n` +
+          `While it could be implemented directly, decomposition is recommended for better code quality.\n\n` +
+          `**Option 1: Decompose (Recommended)**\n` +
+          `Start your response with "DECOMPOSE_TASK: <reason>" and provide subtask JSON.\n\n` +
+          `**Option 2: Implement directly**\n` +
+          `If you believe this can be done in a single, focused commit:\n` +
+          `1. Write clean, maintainable code\n` +
+          `2. Follow the project's coding standards\n` +
+          `3. Add appropriate tests if needed\n` +
+          `4. Update documentation if required\n` +
+          `5. Create ONE commit with all changes\n`,
+      );
+    } else if (isPermanentHollon) {
+      // For low complexity: Direct implementation preferred
+      sections.push(
+        `## Instructions\n` +
+          `Please implement the task described above. ` +
+          `Make sure to:\n` +
+          `1. Write clean, maintainable code\n` +
+          `2. Follow the project's coding standards\n` +
+          `3. Add appropriate tests if needed\n` +
+          `4. Update documentation if required\n` +
+          `5. Commit your changes with a descriptive message\n\n` +
+          `Note: This task is estimated to require ${analysis.estimatedCommits} commit(s).\n`,
+      );
+    } else {
+      // For temporary hollons (depth >= 1): Direct implementation only
+      sections.push(
+        `## Instructions\n` +
+          `You are a temporary sub-hollon responsible for executing this specific subtask.\n` +
+          `Please implement the task described above directly. DO NOT attempt to decompose further.\n\n` +
+          `Make sure to:\n` +
+          `1. Write clean, maintainable code\n` +
+          `2. Follow the project's coding standards\n` +
+          `3. Add appropriate tests if needed\n` +
+          `4. Update documentation if required\n` +
+          `5. Commit your changes with a descriptive message\n`,
+      );
+    }
+
     return sections.join('\n');
+  }
+
+  /**
+   * Phase 4: Analyze task complexity to determine if decomposition should be recommended
+   *
+   * Complexity heuristics:
+   * - High complexity: Long description, multiple acceptance criteria, many affected files
+   * - Medium complexity: Moderate requirements
+   * - Low complexity: Simple, focused task
+   */
+  private analyzeTaskComplexity(task: Task): {
+    level: 'high' | 'medium' | 'low';
+    estimatedCommits: number;
+  } {
+    let complexityScore = 0;
+    const scoreBreakdown: string[] = [];
+
+    // Estimate number of commits based on task characteristics
+    let estimatedCommits = 1;
+
+    // Check description length
+    if (task.description) {
+      const descLength = task.description.length;
+      if (descLength > 500) {
+        complexityScore += 3;
+        scoreBreakdown.push(`Description length (${descLength}): +3`);
+      } else if (descLength > 200) {
+        complexityScore += 2;
+        scoreBreakdown.push(`Description length (${descLength}): +2`);
+      } else if (descLength > 100) {
+        complexityScore += 1;
+        scoreBreakdown.push(`Description length (${descLength}): +1`);
+      }
+    }
+
+    // Check acceptance criteria - each criterion could be a separate commit
+    if (task.acceptanceCriteria && Array.isArray(task.acceptanceCriteria)) {
+      const criteriaCount = task.acceptanceCriteria.length;
+      if (criteriaCount > 5) {
+        complexityScore += 3;
+        scoreBreakdown.push(`Acceptance criteria (${criteriaCount}): +3`);
+        // 5+ criteria likely needs 3+ commits (e.g., entity, service, controller, tests, docs)
+        estimatedCommits = Math.max(
+          estimatedCommits,
+          Math.ceil(criteriaCount / 2),
+        );
+      } else if (criteriaCount > 3) {
+        complexityScore += 2;
+        scoreBreakdown.push(`Acceptance criteria (${criteriaCount}): +2`);
+        // 4-5 criteria likely needs 2 commits
+        estimatedCommits = Math.max(estimatedCommits, 2);
+      } else if (criteriaCount > 1) {
+        complexityScore += 1;
+        scoreBreakdown.push(`Acceptance criteria (${criteriaCount}): +1`);
+      }
+    }
+
+    // Check affected files - multiple files across different concerns = multiple commits
+    if (task.affectedFiles && task.affectedFiles.length > 0) {
+      const fileCount = task.affectedFiles.length;
+      if (fileCount > 5) {
+        complexityScore += 3;
+        scoreBreakdown.push(`Affected files (${fileCount}): +3`);
+        // 5+ files likely span multiple concerns (entity, service, controller, DTOs, tests)
+        estimatedCommits = Math.max(estimatedCommits, 3);
+      } else if (fileCount > 3) {
+        complexityScore += 2;
+        scoreBreakdown.push(`Affected files (${fileCount}): +2`);
+        // 4-5 files likely need 2 commits (e.g., implementation + tests)
+        estimatedCommits = Math.max(estimatedCommits, 2);
+      } else if (fileCount > 1) {
+        complexityScore += 1;
+        scoreBreakdown.push(`Affected files (${fileCount}): +1`);
+      }
+    }
+
+    // Check required skills
+    if (task.requiredSkills && task.requiredSkills.length > 3) {
+      complexityScore += 2;
+      scoreBreakdown.push(
+        `Required skills (${task.requiredSkills.length}): +2`,
+      );
+    }
+
+    // Keywords indicating complexity
+    const complexKeywords = [
+      'implement complete',
+      'full system',
+      'entire module',
+      'end-to-end',
+      'comprehensive',
+    ];
+    const titleKeywords = task.title
+      ? complexKeywords.filter((keyword) =>
+          task.title.toLowerCase().includes(keyword),
+        )
+      : [];
+    const descKeywords = task.description
+      ? complexKeywords.filter((keyword) =>
+          task.description.toLowerCase().includes(keyword),
+        )
+      : [];
+
+    if (titleKeywords.length > 0) {
+      complexityScore += 2;
+      scoreBreakdown.push(`Title keywords (${titleKeywords.join(', ')}): +2`);
+      // "Complete" or "Full" systems need multiple commits
+      estimatedCommits = Math.max(estimatedCommits, 3);
+    }
+    if (descKeywords.length > 0) {
+      complexityScore += 2;
+      scoreBreakdown.push(
+        `Description keywords (${descKeywords.join(', ')}): +2`,
+      );
+    }
+
+    // Classify based on score
+    let complexityLevel: 'high' | 'medium' | 'low';
+    if (complexityScore >= 7) {
+      complexityLevel = 'high';
+    } else if (complexityScore >= 4) {
+      complexityLevel = 'medium';
+    } else {
+      complexityLevel = 'low';
+    }
+
+    // Log the analysis using console.log to ensure it appears in test output
+    console.log(
+      `\n📊 Phase 4: Task complexity analysis for "${task.title}":\n` +
+        `   Score breakdown:\n` +
+        scoreBreakdown.map((s) => `     - ${s}`).join('\n') +
+        `\n   Total score: ${complexityScore}\n` +
+        `   Complexity level: ${complexityLevel.toUpperCase()}\n` +
+        `   Estimated commits: ${estimatedCommits}\n`,
+    );
+
+    return { level: complexityLevel, estimatedCommits };
   }
 
   /**
@@ -1075,7 +1280,17 @@ ${i + 1}. **${item.title}**
    */
   private shouldDecomposeTask(brainOutput: string, _task: Task): boolean {
     // Look for decomposition marker in Brain's output
-    return brainOutput.trim().startsWith('DECOMPOSE_TASK:');
+    const shouldDecompose = brainOutput.trim().startsWith('DECOMPOSE_TASK:');
+
+    // Log Brain's decision
+    const firstLine = brainOutput.split('\n')[0].substring(0, 100);
+    console.log(
+      `\n🤖 Phase 4: Brain's decomposition decision:\n` +
+        `   Should decompose: ${shouldDecompose}\n` +
+        `   Response starts with: "${firstLine}${brainOutput.length > 100 ? '...' : ''}"\n`,
+    );
+
+    return shouldDecompose;
   }
 
   /**

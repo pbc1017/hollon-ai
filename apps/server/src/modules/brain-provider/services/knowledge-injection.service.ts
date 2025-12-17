@@ -77,7 +77,7 @@ export class KnowledgeInjectionService {
         },
         context.organizationId,
         {
-          teamId: context.task?.assignedTeamId,
+          teamId: context.task?.assignedTeamId ?? undefined,
           projectId: context.projectId,
           limit: 5,
         },

@@ -172,7 +172,7 @@ export class HollonService implements IHollonService {
    * Phase 3.7: 최대 1단계 깊이까지만 임시 홀론 생성 가능 (depth=1 제약)
    */
   async createTemporary(config: CreateTemporaryHollonDto): Promise<Hollon> {
-    const MAX_TEMPORARY_HOLLON_DEPTH = 1; // Phase 3.7: depth=1 제약
+    const MAX_TEMPORARY_HOLLON_DEPTH = 1; // Phase 4: depth=1 제약 (temporary hollon은 1단계까지만)
 
     let depth = 0;
 
@@ -241,7 +241,7 @@ export class HollonService implements IHollonService {
       }
 
       // 안전장치: 최대 깊이 체크
-      // Phase 3.7: depth >= 1인 홀론(임시 홀론 포함)은 더 이상 임시 홀론을 생성할 수 없음
+      // Phase 4: depth >= 1인 홀론(임시 홀론)은 더 이상 임시 홀론을 생성할 수 없음
       if (parentHollon.depth >= MAX_TEMPORARY_HOLLON_DEPTH) {
         throw new BadRequestException(
           `Maximum temporary hollon depth (${MAX_TEMPORARY_HOLLON_DEPTH}) exceeded`,

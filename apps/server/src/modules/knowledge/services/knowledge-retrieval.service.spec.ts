@@ -309,8 +309,22 @@ describe('KnowledgeRetrievalService', () => {
     it('should return insights for an organization', async () => {
       const stats = {
         totalEntries: 10,
-        byType: { [KnowledgeEntryType.BEST_PRACTICE]: 5 },
-        byCategory: { [KnowledgeCategory.TECHNICAL]: 7 },
+        byType: {
+          [KnowledgeEntryType.LESSON_LEARNED]: 0,
+          [KnowledgeEntryType.BEST_PRACTICE]: 5,
+          [KnowledgeEntryType.TECHNICAL_DECISION]: 0,
+          [KnowledgeEntryType.ERROR_PATTERN]: 0,
+          [KnowledgeEntryType.OPTIMIZATION_INSIGHT]: 0,
+          [KnowledgeEntryType.PROCESS_IMPROVEMENT]: 0,
+        },
+        byCategory: {
+          [KnowledgeCategory.TECHNICAL]: 7,
+          [KnowledgeCategory.PROCESS]: 0,
+          [KnowledgeCategory.COLLABORATION]: 0,
+          [KnowledgeCategory.QUALITY]: 0,
+          [KnowledgeCategory.PERFORMANCE]: 0,
+          [KnowledgeCategory.ARCHITECTURE]: 0,
+        },
         averageConfidence: 80,
       };
 
@@ -332,8 +346,22 @@ describe('KnowledgeRetrievalService', () => {
     it('should calculate top tags correctly', async () => {
       const stats = {
         totalEntries: 3,
-        byType: {},
-        byCategory: {},
+        byType: {
+          [KnowledgeEntryType.LESSON_LEARNED]: 0,
+          [KnowledgeEntryType.BEST_PRACTICE]: 0,
+          [KnowledgeEntryType.TECHNICAL_DECISION]: 0,
+          [KnowledgeEntryType.ERROR_PATTERN]: 0,
+          [KnowledgeEntryType.OPTIMIZATION_INSIGHT]: 0,
+          [KnowledgeEntryType.PROCESS_IMPROVEMENT]: 0,
+        },
+        byCategory: {
+          [KnowledgeCategory.TECHNICAL]: 0,
+          [KnowledgeCategory.PROCESS]: 0,
+          [KnowledgeCategory.COLLABORATION]: 0,
+          [KnowledgeCategory.QUALITY]: 0,
+          [KnowledgeCategory.PERFORMANCE]: 0,
+          [KnowledgeCategory.ARCHITECTURE]: 0,
+        },
         averageConfidence: 75,
       };
 
