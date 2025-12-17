@@ -568,16 +568,26 @@ describe('Calculator Goal Workflow (E2E)', () => {
 
                   // Step 1: Request review (assigns reviewer and sends REVIEW_REQUEST message)
                   console.log('      📝 Requesting review from manager...');
-                  await codeReviewService.requestReview(prEntity.id);
+                  const prWithReviewer = await codeReviewService.requestReview(
+                    prEntity.id,
+                  );
 
-                  // Step 2: Perform automated review using CodeReviewService
+                  // Step 2: Perform automated review using the assigned reviewer
                   // This calls Brain Provider (or simple heuristics in Phase 3.5)
+                  const assignedReviewerId = prWithReviewer.reviewerHollonId;
+                  if (!assignedReviewerId) {
+                    console.log(
+                      '      ⚠️  No reviewer assigned, skipping review',
+                    );
+                    continue;
+                  }
+
                   console.log(
-                    '      🤖 Manager performing automated review...',
+                    `      🤖 Reviewer (${assignedReviewerId.slice(0, 8)}) performing automated review...`,
                   );
                   await codeReviewService.performAutomatedReview(
                     prEntity.id,
-                    techLead.id,
+                    assignedReviewerId,
                   );
 
                   reviewedCount++;
@@ -613,8 +623,9 @@ describe('Calculator Goal Workflow (E2E)', () => {
                       );
                     }
 
-                    // Verify reviewer was assigned
-                    expect(finalPR.reviewerHollonId).toBe(techLead.id);
+                    // Verify reviewer was assigned (should be the team manager)
+                    expect(finalPR.reviewerHollonId).toBe(assignedReviewerId);
+                    expect(assignedReviewerId).toBe(techLead.id);
                   }
                 } else {
                   console.log('      ⚠️  PR entity not found');
@@ -1982,6 +1993,10 @@ describe('Calculator Goal Workflow (E2E)', () => {
         teamIds: [backendTeam.id],
       }),
     );
+
+    // Set techLead as the team manager for proper code review workflow
+    backendTeam.managerHollonId = techLead.id;
+    await teamRepo.save(backendTeam);
 
     devBravo = await hollonRepo.save(
       hollonRepo.create({
