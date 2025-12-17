@@ -286,6 +286,23 @@ export class CodeReviewService implements ICodeReviewService {
 
     this.logger.log(`Closing PR ${prId}`);
 
+    // Close PR on GitHub if prUrl exists
+    if (pr.prUrl) {
+      try {
+        const closeComment = reason || 'Closing PR';
+        await execAsync(
+          `gh pr close "${pr.prUrl}" --comment "${closeComment}"`,
+          { cwd: pr.task.workingDirectory || process.cwd() },
+        );
+        this.logger.log(`Closed PR on GitHub: ${pr.prUrl}`);
+      } catch (error) {
+        this.logger.error(
+          `Failed to close PR on GitHub: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+        // Continue with database update even if GitHub close fails
+      }
+    }
+
     // PR 상태 업데이트
     pr.status = PullRequestStatus.CLOSED;
     if (reason) {

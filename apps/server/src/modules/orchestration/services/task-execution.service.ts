@@ -1520,12 +1520,6 @@ ${i + 1}. **${item.title}**
   ): Promise<string> {
     this.logger.debug(`Creating PR for task ${task.id}`);
 
-    // Skip PR creation in test environment (no GitHub remote)
-    if (process.env.NODE_ENV === 'test') {
-      this.logger.debug(`Skipping PR creation in test environment`);
-      return `https://github.com/test/repo/pull/${Math.floor(Math.random() * 1000)}`;
-    }
-
     try {
       // 1. Get current branch name
       const { stdout: branchName } = await execAsync(
