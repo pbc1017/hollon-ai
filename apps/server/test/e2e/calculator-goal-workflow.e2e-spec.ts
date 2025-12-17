@@ -1990,7 +1990,7 @@ describe('Calculator Goal Workflow (E2E)', () => {
         organizationId: organization.id,
         roleId: techLeadRole.id,
         managerId: cto.id,
-        teamIds: [backendTeam.id],
+        teamId: backendTeam.id,
       }),
     );
 
@@ -2004,7 +2004,7 @@ describe('Calculator Goal Workflow (E2E)', () => {
         organizationId: organization.id,
         roleId: developerRole.id,
         managerId: techLead.id,
-        teamIds: [backendTeam.id],
+        teamId: backendTeam.id,
       }),
     );
 
