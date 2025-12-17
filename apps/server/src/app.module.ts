@@ -25,6 +25,7 @@ import { IncidentModule } from './modules/incident/incident.module';
 import { ConflictResolutionModule } from './modules/conflict-resolution/conflict-resolution.module';
 import { GoalModule } from './modules/goal/goal.module';
 import { DddProvidersModule } from './modules/ddd-providers/ddd-providers.module';
+import { CalculatorModule } from './modules/calculator/calculator.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { DddProvidersModule } from './modules/ddd-providers/ddd-providers.module
 
     // ✅ DDD: Global Port Providers Module
     DddProvidersModule,
+    CalculatorModule,
   ],
 })
 export class AppModule {}
