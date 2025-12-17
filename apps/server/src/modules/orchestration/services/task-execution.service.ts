@@ -1557,9 +1557,14 @@ ${i + 1}. **${item.title}**
       return prUrl;
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to create PR: ${errorMessage}`);
-      throw new Error(`PR creation failed: ${errorMessage}`);
+        error instanceof Error ? error.message : String(error);
+      const stderr = (error as any)?.stderr || '';
+      this.logger.error(
+        `Failed to create PR: ${errorMessage}${stderr ? `\nStderr: ${stderr}` : ''}`,
+      );
+      throw new Error(
+        `PR creation failed: ${errorMessage}${stderr ? ` (${stderr})` : ''}`,
+      );
     }
   }
 
