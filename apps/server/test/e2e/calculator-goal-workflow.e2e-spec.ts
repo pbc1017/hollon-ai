@@ -503,7 +503,7 @@ describe('Calculator Goal Workflow (E2E)', () => {
             );
           }
 
-          // ========== Step 10: CI Status Check ==========
+          // ========== Step 10: CI Status Check & Failure Handling ==========
           console.log('\n🔍 Step 10: Checking CI Status for PRs...\n');
 
           for (const result of prsCreated) {
@@ -526,6 +526,92 @@ describe('Calculator Goal Workflow (E2E)', () => {
                   console.log(
                     `      Failed checks: ${ciResult.failedChecks.slice(0, 3).join(', ')}`,
                   );
+
+                  // ========== Step 10.5: CI Failure Recovery ==========
+                  console.log(
+                    '\n⚠️  Step 10.5: CI Failure - Testing Recovery...\n',
+                  );
+
+                  // Find the task for this PR
+                  const task = await taskRepo.findOne({
+                    where: { id: result.taskId },
+                  });
+
+                  if (task) {
+                    console.log(
+                      '   🔧 Handling CI failure with retry logic...',
+                    );
+
+                    // Call handleCIFailure (stores feedback in metadata)
+                    const { shouldRetry, feedback } =
+                      await taskExecutionService.handleCIFailure(
+                        task,
+                        ciResult.failedChecks,
+                        result.prUrl,
+                        result.workingDirectory,
+                      );
+
+                    console.log(
+                      `   Retry decision: ${shouldRetry ? 'RETRY' : 'FAILED'}`,
+                    );
+                    console.log(
+                      `   Feedback preview: ${feedback.slice(0, 100)}...`,
+                    );
+
+                    if (shouldRetry) {
+                      // Reset task to READY (triggers retry)
+                      await taskRepo.update(task.id, {
+                        status: TaskStatus.READY,
+                      });
+
+                      console.log(
+                        '\n   🧠 Brain receiving CI feedback and retrying...',
+                      );
+                      console.log(
+                        '   (Brain should receive CI feedback in prompt)',
+                      );
+
+                      // Re-execute task with CI feedback
+                      const retryResult =
+                        await taskExecutionService.executeTask(
+                          task.id,
+                          task.assignedHollonId,
+                        );
+
+                      console.log(`   ✅ Retry execution completed`);
+                      console.log(`   New PR: ${retryResult.prUrl || 'None'}`);
+
+                      // Check CI again after retry
+                      if (retryResult.prUrl) {
+                        const retryCIResult =
+                          await taskExecutionService.checkCIStatus(
+                            retryResult.prUrl,
+                            retryResult.worktreePath,
+                          );
+
+                        console.log(
+                          `   Retry CI Status: ${retryCIResult.passed ? '✅ PASSED' : '❌ FAILED'}`,
+                        );
+
+                        if (retryCIResult.passed) {
+                          console.log(
+                            '   ✅ CI passed after Brain recovery!\n',
+                          );
+                          // Update result for next steps
+                          result.prUrl = retryResult.prUrl;
+                          result.workingDirectory = retryResult.worktreePath;
+                        } else {
+                          console.log('   ⚠️  CI still failing after retry\n');
+                        }
+                      }
+                    } else {
+                      // Max retries reached
+                      console.log(
+                        '   ❌ Max retries reached, task marked as FAILED\n',
+                      );
+                      expect(task.status).toBe(TaskStatus.FAILED);
+                    }
+                  }
                 }
               } catch (error) {
                 console.log(
