@@ -25,6 +25,7 @@ import { CostRecord } from '../cost-tracking/entities/cost-record.entity';
 import { GoalDecompositionService } from '../goal/services/goal-decomposition.service';
 import { ApprovalRequest } from '../approval/entities/approval-request.entity';
 import { Role } from '../role/entities/role.entity';
+import { TaskPullRequest } from '../collaboration/entities/task-pull-request.entity';
 // DDD: Port Adapters
 import { HollonManagementAdapter } from './infrastructure/adapters/hollon-management.adapter';
 import { CodeReviewAdapter } from './infrastructure/adapters/code-review.adapter';
@@ -42,6 +43,7 @@ import { MessagingAdapter } from './infrastructure/adapters/messaging.adapter';
       CostRecord,
       ApprovalRequest,
       Role,
+      TaskPullRequest,
     ]),
     BrainProviderModule,
     // ✅ DDD: CollaborationModule, HollonModule import 제거 (Port 사용)

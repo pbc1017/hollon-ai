@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import configuration from './config/configuration';
 import { databaseConfig } from './config/database.config';
 import { HealthModule } from './modules/health/health.module';
@@ -49,6 +50,7 @@ import { UserModule } from './modules/user/user.module';
     ...(process.env.DISABLE_SCHEDULER !== 'true'
       ? [ScheduleModule.forRoot()]
       : []),
+    EventEmitterModule.forRoot(),
     PostgresListenerModule,
 
     // Feature modules

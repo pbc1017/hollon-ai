@@ -1,8 +1,10 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { promisify } from 'util';
 import { exec } from 'child_process';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 const execAsync = promisify(exec);
 import {
@@ -38,6 +40,8 @@ export class CodeReviewService implements ICodeReviewService {
     private readonly roleRepo: Repository<Role>,
     private readonly hollonService: HollonService,
     private readonly messageService: MessageService,
+    private readonly moduleRef: ModuleRef,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -261,12 +265,194 @@ export class CodeReviewService implements ICodeReviewService {
     await this.taskRepo.save(pr.task);
 
     this.logger.log(`PR merged: ${prId}, Task completed: ${pr.taskId}`);
+
+    // Dependency System: Unblock dependent tasks
+    await this.unblockDependentTasks(pr.task);
+
+    // Phase 3: Check if this is a subtask and trigger parent task if all subtasks are complete
+    await this.checkAndTriggerParentTask(pr.task);
+  }
+
+  /**
+   * Dependency System: Unblock dependent tasks when a task is completed
+   *
+   * When a task is marked as COMPLETED:
+   * 1. Find all tasks that depend on this task (in BLOCKED status)
+   * 2. For each dependent task, check if ALL its dependencies are now COMPLETED
+   * 3. If yes, change status from BLOCKED to READY and emit task.assigned event
+   */
+  private async unblockDependentTasks(completedTask: Task): Promise<void> {
+    this.logger.log(
+      `Checking for dependent tasks of completed task ${completedTask.id.slice(0, 8)}...`,
+    );
+
+    // Find all tasks that have this task as a dependency and are currently BLOCKED
+    const dependentTasks = await this.taskRepo
+      .createQueryBuilder('task')
+      .innerJoin('task.dependencies', 'dependency')
+      .where('dependency.id = :completedTaskId', {
+        completedTaskId: completedTask.id,
+      })
+      .andWhere('task.status = :status', { status: TaskStatus.BLOCKED })
+      .leftJoinAndSelect('task.dependencies', 'allDeps')
+      .getMany();
+
+    if (dependentTasks.length === 0) {
+      this.logger.log(
+        `No BLOCKED dependent tasks found for task ${completedTask.id.slice(0, 8)}`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `Found ${dependentTasks.length} BLOCKED dependent tasks for task ${completedTask.id.slice(0, 8)}`,
+    );
+
+    // Check each dependent task to see if ALL its dependencies are now COMPLETED
+    for (const dependentTask of dependentTasks) {
+      const allDepsCompleted = dependentTask.dependencies.every(
+        (dep) => dep.status === TaskStatus.COMPLETED,
+      );
+
+      if (allDepsCompleted) {
+        this.logger.log(
+          `All dependencies completed for task ${dependentTask.id.slice(0, 8)}, unblocking...`,
+        );
+
+        // Change status from BLOCKED to READY
+        await this.taskRepo.update(dependentTask.id, {
+          status: TaskStatus.READY,
+        });
+
+        // Emit task.assigned event to trigger automatic execution
+        this.eventEmitter.emit('task.assigned', {
+          taskId: dependentTask.id,
+          hollonId: dependentTask.assignedHollonId,
+        });
+
+        this.logger.log(
+          `✅ Unblocked dependent task ${dependentTask.id.slice(0, 8)}: ${dependentTask.title}`,
+        );
+      } else {
+        const incompleteDeps = dependentTask.dependencies.filter(
+          (dep) => dep.status !== TaskStatus.COMPLETED,
+        );
+        this.logger.log(
+          `Task ${dependentTask.id.slice(0, 8)} still has ${incompleteDeps.length} incomplete dependencies, ` +
+            `remains BLOCKED`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Phase 3: Check if subtask completed and trigger parent task if all subtasks done
+   *
+   * When a subtask is marked as COMPLETED:
+   * 1. Check if this task has a parent task (is a subtask)
+   * 2. Query all sibling subtasks
+   * 3. If all subtasks are COMPLETED, automatically trigger parent task execution
+   * 4. Parent task will resume with team member hollon and create PR
+   */
+  private async checkAndTriggerParentTask(completedTask: Task): Promise<void> {
+    // Check if this is a subtask
+    if (!completedTask.parentTaskId) {
+      this.logger.log(
+        `Task ${completedTask.id} is not a subtask, no parent to trigger`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `Subtask ${completedTask.id.slice(0, 8)} completed, checking if all siblings are done...`,
+    );
+
+    // Get parent task
+    const parentTask = await this.taskRepo.findOne({
+      where: { id: completedTask.parentTaskId },
+      relations: ['assignedHollon'],
+    });
+
+    if (!parentTask) {
+      this.logger.error(
+        `Parent task ${completedTask.parentTaskId} not found for subtask ${completedTask.id}`,
+      );
+      return;
+    }
+
+    // Check if all sibling subtasks are completed
+    const allSubtasks = await this.taskRepo.find({
+      where: { parentTaskId: parentTask.id },
+    });
+
+    const allSubtasksCompleted = allSubtasks.every(
+      (subtask) => subtask.status === TaskStatus.COMPLETED,
+    );
+
+    if (!allSubtasksCompleted) {
+      const remainingCount = allSubtasks.filter(
+        (subtask) => subtask.status !== TaskStatus.COMPLETED,
+      ).length;
+      this.logger.log(
+        `Not all subtasks completed yet. ${remainingCount} remaining out of ${allSubtasks.length}`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `🎉 All ${allSubtasks.length} subtasks completed! Triggering parent task ${parentTask.id.slice(0, 8)} to resume...`,
+    );
+
+    // Get TaskExecutionService lazily to avoid circular dependency
+    const taskExecutionService = await this.moduleRef.get(
+      'TaskExecutionService',
+      { strict: false },
+    );
+
+    if (!taskExecutionService) {
+      this.logger.error('TaskExecutionService not found in module');
+      return;
+    }
+
+    // Trigger parent task execution (will be resumed with team member hollon)
+    const assignedHollonId =
+      parentTask.assignedHollonId || parentTask.assignedHollon?.id;
+
+    if (!assignedHollonId) {
+      this.logger.error(
+        `Parent task ${parentTask.id} has no assigned hollon, cannot trigger execution`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `Triggering parent task ${parentTask.id.slice(0, 8)} with hollon ${assignedHollonId.slice(0, 8)}`,
+    );
+
+    // Execute parent task asynchronously (don't await to avoid blocking PR merge)
+    taskExecutionService
+      .executeTask(parentTask.id, assignedHollonId)
+      .then(() => {
+        this.logger.log(
+          `✅ Parent task ${parentTask.id.slice(0, 8)} resumed and PR creation initiated`,
+        );
+      })
+      .catch((error: Error) => {
+        this.logger.error(
+          `Failed to execute parent task ${parentTask.id}: ${error.message}`,
+          error.stack,
+        );
+      });
   }
 
   /**
    * PR 닫기 (머지 없이)
    */
-  async closePullRequest(prId: string, reason?: string): Promise<void> {
+  async closePullRequest(
+    prId: string,
+    reason?: string,
+    markAsCompleted?: boolean,
+  ): Promise<void> {
     const pr = await this.prRepo.findOne({
       where: { id: prId },
       relations: ['task'],
@@ -284,7 +470,9 @@ export class CodeReviewService implements ICodeReviewService {
       throw new Error(`PR ${prId} is already closed`);
     }
 
-    this.logger.log(`Closing PR ${prId}`);
+    this.logger.log(
+      `Closing PR ${prId}${markAsCompleted ? ' (marking task as COMPLETED)' : ''}`,
+    );
 
     // Close PR on GitHub if prUrl exists
     if (pr.prUrl) {
@@ -312,9 +500,25 @@ export class CodeReviewService implements ICodeReviewService {
     }
     await this.prRepo.save(pr);
 
-    // Task 상태를 다시 IN_PROGRESS로 변경 (새 PR 생성 가능)
-    pr.task.status = TaskStatus.IN_PROGRESS;
-    await this.taskRepo.save(pr.task);
+    // Dependency System: Task 상태 결정
+    if (markAsCompleted) {
+      // Test 환경이나 특수한 경우: Task를 COMPLETED로 변경
+      pr.task.status = TaskStatus.COMPLETED;
+      pr.task.completedAt = new Date();
+      await this.taskRepo.save(pr.task);
+
+      this.logger.log(`PR closed and task completed: ${pr.taskId}`);
+
+      // Unblock dependent tasks
+      await this.unblockDependentTasks(pr.task);
+
+      // Check if subtask and trigger parent
+      await this.checkAndTriggerParentTask(pr.task);
+    } else {
+      // 기본 동작: Task 상태를 다시 IN_PROGRESS로 변경 (새 PR 생성 가능)
+      pr.task.status = TaskStatus.IN_PROGRESS;
+      await this.taskRepo.save(pr.task);
+    }
 
     // 작성자에게 알림
     if (pr.authorHollonId) {
@@ -1125,6 +1329,8 @@ _Automated review by Hollon AI_`;
       this.logger.log(`Cleaning up task worktree: ${worktreePath}`);
       await execAsync(`git worktree remove ${worktreePath} --force`, {
         cwd: gitCwd,
+        shell: process.env.SHELL || '/bin/bash',
+        env: { ...process.env },
       });
       this.logger.log(`Task worktree cleaned up: ${worktreePath}`);
     } catch (error) {
