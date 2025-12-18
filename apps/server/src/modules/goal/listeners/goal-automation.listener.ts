@@ -482,6 +482,31 @@ export class GoalAutomationListener {
           this.logger.log(`✅ Task executed: PR created at ${result.prUrl}`);
         } catch (error) {
           const err = error as Error;
+
+          // CI 실패 retry 처리
+          if (err.message.startsWith('CI_FAILURE_RETRY:')) {
+            this.logger.warn(
+              `Task ${task.id} CI failed, will retry: ${err.message}`,
+            );
+            // Task를 READY로 되돌려서 다음 cycle에 재실행
+            await this.taskRepo.update(task.id, {
+              status: TaskStatus.READY,
+            });
+            continue; // 다음 task로
+          }
+
+          // 최대 retry 초과
+          if (err.message.startsWith('CI_FAILURE_MAX_RETRIES:')) {
+            this.logger.error(
+              `Task ${task.id} failed after max retries: ${err.message}`,
+            );
+            await this.taskRepo.update(task.id, {
+              status: TaskStatus.FAILED,
+            });
+            continue;
+          }
+
+          // 일반 에러
           this.logger.error(
             `Failed to execute task ${task.id}: ${err.message}`,
             err.stack,

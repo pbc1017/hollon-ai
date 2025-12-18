@@ -462,7 +462,10 @@ export class CodeReviewService implements ICodeReviewService {
       throw new NotFoundException(`PR ${prId} not found`);
     }
 
-    if (pr.status === PullRequestStatus.MERGED) {
+    // Test mode: Allow closing MERGED PRs (DB-only merge, GitHub PR still open)
+    const isTestMode = process.env.NODE_ENV === 'test';
+
+    if (pr.status === PullRequestStatus.MERGED && !isTestMode) {
       throw new Error(`PR ${prId} is already merged and cannot be closed`);
     }
 
