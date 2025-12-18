@@ -419,6 +419,70 @@ describe('Calculator Goal Workflow (E2E)', () => {
                     }
                   }
                 }
+
+                // Execute ALL subtasks to complete parent task and generate PR
+                console.log(
+                  `      🔄 Executing all ${subtasks.length} subtask(s) to complete parent task...`,
+                );
+
+                for (const subtask of subtasks) {
+                  const subHollon = await hollonRepo.findOne({
+                    where: { id: subtask.assignedHollonId },
+                  });
+
+                  if (subHollon) {
+                    try {
+                      console.log(
+                        `         - Executing: "${subtask.title.slice(0, 40)}..."`,
+                      );
+                      await taskExecutionService.executeTask(
+                        subtask.id,
+                        subHollon.id,
+                      );
+                      console.log(`         ✅ Completed`);
+                    } catch (subtaskError) {
+                      console.log(
+                        `         ⚠️  Error: ${(subtaskError as Error).message}`,
+                      );
+                    }
+                  }
+                }
+
+                // After all subtasks complete, parent task should be completed
+                // Check if PR was created for the parent task
+                console.log(
+                  `      🔍 Checking if parent task completed and PR created...`,
+                );
+                const updatedParentTask = await taskRepo.findOne({
+                  where: { id: task.id },
+                });
+
+                if (updatedParentTask?.status === 'completed') {
+                  console.log(`      ✅ Parent task completed!`);
+
+                  const TaskPullRequest =
+                    require('../../src/modules/collaboration/entities/task-pull-request.entity').TaskPullRequest;
+                  const prRepo = dataSource.getRepository(TaskPullRequest);
+                  const pr = await prRepo.findOne({
+                    where: { taskId: task.id },
+                  });
+
+                  if (pr) {
+                    result.prCreated = true;
+                    result.prUrl = pr.prUrl;
+                    console.log(`      ✅ PR created: ${pr.prUrl}`);
+                    expect(pr.prUrl).toContain('github.com');
+                    createdPRs.push(pr.id);
+                  } else {
+                    console.log(
+                      `      ⚠️  No PR found for completed parent task`,
+                    );
+                  }
+                } else {
+                  console.log(
+                    `      ⚠️  Parent task status: ${updatedParentTask?.status}`,
+                  );
+                }
               } else {
                 // Task was executed directly (no decomposition)
                 result.decomposed = false;
