@@ -1091,6 +1091,30 @@ ${i + 1}. **${item.title}**
 
     sections.push(`# Task: ${task.title}\n`);
 
+    // Check for CI failure feedback
+    const metadata = (task.metadata || {}) as Record<string, unknown>;
+    const ciFeedback = metadata.lastCIFeedback as string | undefined;
+
+    if (ciFeedback) {
+      sections.push(`## ⚠️ CI FAILURE FEEDBACK\n${ciFeedback}\n`);
+      sections.push(
+        `## Recovery Options\n` +
+          `You have TWO options to fix this CI failure:\n\n` +
+          `**Option 1: Self-Correction (Recommended for simple fixes)**\n` +
+          `- Review the CI errors above\n` +
+          `- Fix the issues directly in your code (linting, types, tests, etc.)\n` +
+          `- Commit the fixes\n` +
+          `- Start your response with "SELF_CORRECT: <brief reason>"\n\n` +
+          `**Option 2: Decompose into Subtasks (For complex issues)**\n` +
+          `- If the CI failures indicate that the task is too complex\n` +
+          `- Break down the fix into smaller, manageable subtasks\n` +
+          `- Start your response with "DECOMPOSE_TASK: <reason>"\n` +
+          `- Provide subtask JSON as described in the Instructions section below\n\n` +
+          `**Choose wisely:** Use Option 1 for quick fixes (typos, missing imports, simple test fixes). ` +
+          `Use Option 2 if you need to restructure code or the issue is complex.\n`,
+      );
+    }
+
     if (task.description) {
       sections.push(`## Description\n${task.description}\n`);
     }
@@ -1734,13 +1758,14 @@ Make sure to:
 3. Ensure all tests pass locally before committing
 `.trim();
 
-    // Update task metadata with retry count
+    // Update task metadata with retry count and feedback
     await this.taskRepo.update(task.id, {
       metadata: {
         ...metadata,
         ciRetryCount: retryCount,
         lastCIFailure: new Date().toISOString(),
         lastCIFailedChecks: failedChecks,
+        lastCIFeedback: feedback, // Store feedback for next execution
       } as any,
     });
 
