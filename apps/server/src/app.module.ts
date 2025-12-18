@@ -24,6 +24,7 @@ import { CrossTeamCollaborationModule } from './modules/cross-team-collaboration
 import { IncidentModule } from './modules/incident/incident.module';
 import { ConflictResolutionModule } from './modules/conflict-resolution/conflict-resolution.module';
 import { GoalModule } from './modules/goal/goal.module';
+import { CalculatorModule } from './modules/calculator/calculator.module';
 import { DddProvidersModule } from './modules/ddd-providers/ddd-providers.module';
 
 @Module({
@@ -69,6 +70,7 @@ import { DddProvidersModule } from './modules/ddd-providers/ddd-providers.module
     IncidentModule,
     ConflictResolutionModule,
     GoalModule,
+    CalculatorModule,
 
     // ✅ DDD: Global Port Providers Module
     DddProvidersModule,
