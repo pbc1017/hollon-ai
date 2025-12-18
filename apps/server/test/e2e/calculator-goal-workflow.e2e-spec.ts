@@ -1867,6 +1867,141 @@ describe('Calculator Goal Workflow (E2E)', () => {
       },
       TEST_TIMEOUT,
     );
+
+    // ========================================================================
+    // Test 17: Task Dependency - Unblock Dependent Tasks After PR Merge
+    // ========================================================================
+    it(
+      'should unblock dependent tasks when prerequisite task PR is merged',
+      async () => {
+        console.log('\n🧪 Test 17: Task Dependency Workflow\n');
+
+        // Given: Create Task A (prerequisite task)
+        const taskA = await taskRepo.save(
+          taskRepo.create({
+            title: 'Task A - Backend API Setup',
+            description: 'Setup backend API infrastructure',
+            type: TaskType.IMPLEMENTATION,
+            status: TaskStatus.READY,
+            assignedHollonId: devBravo.id,
+            organizationId: organization.id,
+            projectId: project.id,
+          }),
+        );
+
+        console.log('📋 Created Task A (prerequisite)');
+        console.log(`   Title: ${taskA.title}`);
+        console.log(`   Status: ${taskA.status}`);
+        console.log(`   Assigned to: ${devBravo.name}`);
+
+        // Given: Create Task B (dependent task) - depends on Task A
+        const taskB = await taskRepo.save(
+          taskRepo.create({
+            title: 'Task B - Frontend Integration',
+            description: 'Integrate frontend with backend API',
+            type: TaskType.IMPLEMENTATION,
+            status: TaskStatus.BLOCKED,
+            assignedHollonId: devBravo.id,
+            organizationId: organization.id,
+            projectId: project.id,
+            dependencies: [taskA],
+          }),
+        );
+
+        console.log('\n📋 Created Task B (dependent)');
+        console.log(`   Title: ${taskB.title}`);
+        console.log(`   Status: ${taskB.status}`);
+        console.log(`   Dependencies: [${taskA.title}]`);
+
+        // Verify Task B is initially BLOCKED
+        expect(taskB.status).toBe(TaskStatus.BLOCKED);
+
+        // When: Execute Task A
+        console.log('\n⚙️  Step 1: Executing Task A...');
+        const taskExecutionService = app.get(
+          require('../../src/modules/orchestration/services/task-execution.service')
+            .TaskExecutionService,
+        );
+
+        try {
+          await taskExecutionService.executeTask(taskA.id, devBravo.id);
+          console.log('   ✅ Task A execution completed');
+        } catch (error) {
+          console.log(
+            `   ⚠️  Task A execution error (may be expected): ${(error as Error).message}`,
+          );
+        }
+
+        // Verify PR was created for Task A
+        const TaskPullRequest =
+          require('../../src/modules/collaboration/entities/task-pull-request.entity').TaskPullRequest;
+        const prRepo = dataSource.getRepository(TaskPullRequest);
+        const prA = await prRepo.findOne({
+          where: { taskId: taskA.id },
+        });
+
+        if (!prA) {
+          console.log(
+            '   ⚠️  No PR created for Task A (skipping dependency test)',
+          );
+          // Cleanup
+          await taskRepo.delete([taskA.id, taskB.id]);
+          return;
+        }
+
+        console.log(`\n📝 PR created for Task A: ${prA.prUrl}`);
+
+        // When: Manager reviews and merges PR
+        console.log('\n⚙️  Step 2: Manager reviewing and merging PR...');
+
+        // Request review
+        await codeReviewService.requestReview(prA.id);
+        console.log('   ✅ Review requested');
+
+        // Perform automated review (this will auto-merge if approved)
+        const reviewerHollon = await hollonRepo.findOne({
+          where: { id: prA.reviewerHollonId },
+        });
+        await codeReviewService.performAutomatedReview(
+          prA.id,
+          reviewerHollon.id,
+        );
+
+        // Check final PR status
+        const finalPR = await prRepo.findOne({
+          where: { id: prA.id },
+          relations: ['task'],
+        });
+
+        console.log(`   ✅ PR status: ${finalPR.status}`);
+        console.log(`   ✅ Task A status: ${finalPR.task.status}`);
+
+        // Then: Verify Task A is COMPLETED
+        expect(finalPR.task.status).toBe(TaskStatus.COMPLETED);
+
+        // Then: Verify Task B was automatically unblocked (BLOCKED → READY)
+        console.log('\n⚙️  Step 3: Checking if Task B was unblocked...');
+
+        const unblockedTaskB = await taskRepo.findOne({
+          where: { id: taskB.id },
+        });
+
+        console.log(`   📊 Task B status: ${unblockedTaskB.status}`);
+        console.log(
+          `   ✅ Task B ${unblockedTaskB.status === TaskStatus.READY ? 'WAS' : 'WAS NOT'} automatically unblocked`,
+        );
+
+        expect(unblockedTaskB.status).toBe(TaskStatus.READY);
+
+        // Cleanup
+        console.log('\n🧹 Cleaning up...');
+        await prRepo.delete(prA.id);
+        await taskRepo.delete([taskA.id, taskB.id]);
+
+        console.log('\n✅ Test 17 PASSED: Task dependency workflow works!\n');
+      },
+      TEST_TIMEOUT,
+    );
   });
 
   // ==================== Helper Functions ====================

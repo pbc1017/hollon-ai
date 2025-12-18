@@ -1095,21 +1095,30 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
 
       const [, owner, repo, prNumber] = match;
 
-      // gh pr merge 실행
-      this.logger.log(
-        `Executing: gh pr merge ${prNumber} --repo ${owner}/${repo} --squash --auto`,
-      );
+      // 테스트 환경에서는 실제 gh pr merge 명령을 skip (DB만 업데이트)
+      const isTestMode = process.env.NODE_ENV === 'test';
 
-      const { stdout, stderr } = await execAsync(
-        `gh pr merge ${prNumber} --repo ${owner}/${repo} --squash --auto`,
-        {
-          timeout: 30000, // 30초 타임아웃
-        },
-      );
+      if (isTestMode) {
+        this.logger.log(
+          `[TEST MODE] Skipping actual gh pr merge for PR #${prNumber} (DB will be updated only)`,
+        );
+      } else {
+        // gh pr merge 실행
+        this.logger.log(
+          `Executing: gh pr merge ${prNumber} --repo ${owner}/${repo} --squash --auto`,
+        );
 
-      this.logger.log(`Merge output: ${stdout}`);
-      if (stderr) {
-        this.logger.warn(`Merge stderr: ${stderr}`);
+        const { stdout, stderr } = await execAsync(
+          `gh pr merge ${prNumber} --repo ${owner}/${repo} --squash --auto`,
+          {
+            timeout: 30000, // 30초 타임아웃
+          },
+        );
+
+        this.logger.log(`Merge output: ${stdout}`);
+        if (stderr) {
+          this.logger.warn(`Merge stderr: ${stderr}`);
+        }
       }
 
       // PR 상태를 MERGED로 업데이트
