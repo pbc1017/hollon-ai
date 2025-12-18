@@ -1110,9 +1110,27 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
       const isTestMode = process.env.NODE_ENV === 'test';
 
       if (isTestMode) {
+        // Test mode: Close PR on GitHub instead of merging
+        // This prevents test PRs from accumulating as OPEN
+        // DB will still show MERGED to simulate production behavior
         this.logger.log(
-          `[TEST MODE] Skipping actual gh pr merge for PR #${prNumber} (DB will be updated only)`,
+          `[TEST MODE] Closing PR #${prNumber} on GitHub (DB will be marked as MERGED)`,
         );
+
+        try {
+          const { stdout } = await execAsync(
+            `gh pr close ${prNumber} --repo ${owner}/${repo}`,
+            {
+              timeout: 10000, // 10초 타임아웃
+            },
+          );
+          this.logger.log(`PR close output: ${stdout}`);
+        } catch (closeError) {
+          // PR close 실패해도 테스트는 계속 진행 (이미 closed일 수 있음)
+          this.logger.warn(
+            `Failed to close PR #${prNumber}: ${closeError instanceof Error ? closeError.message : 'Unknown error'}`,
+          );
+        }
       } else {
         // gh pr merge 실행
         this.logger.log(
@@ -1146,6 +1164,19 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
       this.logger.log(
         `PR #${prNumber} successfully merged and task ${pr.taskId} marked as DONE`,
       );
+
+      // Unblock dependent tasks
+      const completedTask = await this.taskRepo.findOne({
+        where: { id: pr.taskId },
+      });
+      if (completedTask) {
+        await this.unblockDependentTasks(completedTask);
+      }
+
+      // Phase 3: Check if this is a subtask and trigger parent task if all subtasks are complete
+      if (completedTask) {
+        await this.checkAndTriggerParentTask(completedTask);
+      }
 
       // Phase 3.12: Task worktree 정리
       if (pr.authorHollonId) {
