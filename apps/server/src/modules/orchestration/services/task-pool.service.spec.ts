@@ -159,6 +159,48 @@ describe('TaskPoolService', () => {
       expect(result.task).toBeNull();
       expect(result.reason).toBe('No available tasks');
     });
+
+    it('should allow managers to execute regular implementation tasks', async () => {
+      const mockManagerHollon = {
+        id: 'manager-1',
+        name: 'Manager Alpha',
+        teamId: 'team-1',
+        assignedTasks: [],
+      };
+
+      const mockImplementationTask = {
+        id: 'task-1',
+        title: 'Implementation Task',
+        status: TaskStatus.READY,
+        assignedHollonId: 'manager-1',
+        affectedFiles: [],
+      };
+
+      mockHollonRepo.findOne.mockResolvedValue(mockManagerHollon);
+      mockTaskRepo.find.mockResolvedValueOnce([]); // locked files
+      mockTaskRepo.find.mockResolvedValueOnce([]); // review ready tasks
+      mockTaskRepo.find.mockResolvedValueOnce([mockImplementationTask]); // direct tasks
+
+      const mockQueryBuilder = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 1 }),
+      };
+
+      mockTaskRepo.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      mockTaskRepo.findOne.mockResolvedValue({
+        ...mockImplementationTask,
+        project: { id: 'project-1' },
+      });
+
+      const result = await service.pullNextTask('manager-1');
+
+      expect(result.task).toBeDefined();
+      expect(result.task?.id).toBe('task-1');
+      expect(result.reason).toBe('Directly assigned');
+    });
   });
 
   describe('completeTask', () => {

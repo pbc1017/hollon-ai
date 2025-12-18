@@ -57,14 +57,6 @@ export class TaskPoolService {
     const lockedFiles = await this.getLockedFiles(hollonId);
     const now = new Date();
 
-    // Check if this hollon is a manager (Phase 4)
-    const managedTeams = await this.hollonRepo.manager
-      .getRepository(Team)
-      .find({
-        where: { managerHollonId: hollon.id },
-      });
-    const isManager = managedTeams.length > 0;
-
     // Priority 0: Review tasks (highest priority - Phase 3.10)
     let task = await this.findReviewReadyTask(hollonId);
     if (task) {
@@ -92,26 +84,22 @@ export class TaskPoolService {
       );
     }
 
-    // Phase 4: Managers ONLY handle team_epic tasks (Priority 2)
-    // Skip implementation/review task assignment for managers
-    if (!isManager) {
-      // Priority 3: Same-file tasks (continuation of work)
-      task = await this.findSameFileTask(hollon, lockedFiles, now);
-      if (task) {
-        return this.claimTask(task, hollon, 'Same-file continuation');
-      }
+    // Priority 3: Same-file tasks (continuation of work)
+    task = await this.findSameFileTask(hollon, lockedFiles, now);
+    if (task) {
+      return this.claimTask(task, hollon, 'Same-file continuation');
+    }
 
-      // Priority 4: Team unassigned tasks
-      task = await this.findTeamUnassignedTask(hollon, lockedFiles, now);
-      if (task) {
-        return this.claimTask(task, hollon, 'Team unassigned');
-      }
+    // Priority 4: Team unassigned tasks
+    task = await this.findTeamUnassignedTask(hollon, lockedFiles, now);
+    if (task) {
+      return this.claimTask(task, hollon, 'Team unassigned');
+    }
 
-      // Priority 5: Role matching tasks across organization
-      task = await this.findRoleMatchingTask(hollon, lockedFiles, now);
-      if (task) {
-        return this.claimTask(task, hollon, 'Role matching');
-      }
+    // Priority 5: Role matching tasks across organization
+    task = await this.findRoleMatchingTask(hollon, lockedFiles, now);
+    if (task) {
+      return this.claimTask(task, hollon, 'Role matching');
     }
 
     this.logger.log(`No available tasks for hollon: ${hollonId}`);
