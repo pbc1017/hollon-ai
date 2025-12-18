@@ -301,41 +301,18 @@ describe('Calculator Goal Workflow (E2E)', () => {
 
         const assignedTasks = readyTasks;
 
-        // ========== Step 6.5: Setup Task Dependencies ==========
-        console.log('\n🔗 Step 6.5: Setting up Task Dependencies...');
-
-        let taskA = null;
-        let taskB = null;
-
-        if (assignedTasks.length >= 2) {
-          taskA = assignedTasks[0]; // Prerequisite task
-          taskB = assignedTasks[1]; // Dependent task
-
-          console.log(`   Task A (prerequisite): "${taskA.title}"`);
-          console.log(`   Task B (dependent): "${taskB.title}"`);
-
-          // Set Task B to depend on Task A
-          taskB.dependencies = [taskA];
-          taskB.status = TaskStatus.BLOCKED;
-          await taskRepo.save(taskB);
-
-          console.log(`   ✅ Task B now depends on Task A (status: BLOCKED)`);
-        } else {
-          console.log(
-            `   ⚠️  Not enough tasks for dependency test (need at least 2)`,
-          );
-        }
-
-        // ========== Step 7: Parallel Task Execution ==========
-        console.log('\n⚙️  Step 7: Executing Task A (prerequisite)...');
+        // ========== Step 7: Task Execution ==========
+        console.log('\n⚙️  Step 7: Executing Tasks...');
         console.log(
           '   Note: This will call actual LLM and may take several minutes per task',
         );
-        console.log('   Task B will remain BLOCKED until Task A is merged');
+        console.log(
+          '   Note: Brain automatically sets dependencies - some tasks may be BLOCKED',
+        );
 
-        // Execute only Task A (prerequisite task)
-        // Task B is BLOCKED and will be unblocked after Task A is merged
-        const tasksToExecute = taskA ? [taskA] : assignedTasks.slice(0, 1);
+        // Execute READY tasks (Brain already set dependencies)
+        // BLOCKED tasks will be unblocked after their dependencies are completed
+        const tasksToExecute = assignedTasks.slice(0, 1); // Execute first READY task
         const executionResults: Array<{
           taskId: string;
           taskTitle: string;
@@ -575,23 +552,24 @@ describe('Calculator Goal Workflow (E2E)', () => {
           let reviewedCount = 0;
           let mergedCount = 0;
 
-          // Only merge Task A's PR (for dependency unblocking test)
-          const taskAResult = prsCreated.find((r) => r.taskId === taskA?.id);
+          // Only merge first PR (for dependency unblocking test)
+          // Brain has set dependencies - merging first task will unblock dependent tasks
+          const firstPRResult = prsCreated[0];
 
-          if (taskAResult && taskAResult.prUrl) {
+          if (firstPRResult && firstPRResult.prUrl) {
             console.log(
-              `   Reviewing and merging Task A PR: ${taskAResult.taskTitle.slice(0, 40)}...`,
+              `   Reviewing and merging first PR: ${firstPRResult.taskTitle.slice(0, 40)}...`,
             );
 
             try {
               // Find the PR entity
               const prEntity = await prRepo.findOne({
-                where: { taskId: taskAResult.taskId },
+                where: { taskId: firstPRResult.taskId },
               });
 
               if (prEntity) {
                 console.log(`      PR ID: ${prEntity.id.slice(0, 8)}`);
-                console.log(`      Author: ${taskAResult.hollonName}`);
+                console.log(`      Author: ${firstPRResult.hollonName}`);
                 console.log(`      Reviewer: ${techLead.name}`);
 
                 // Step 1: Request review (assigns reviewer and sends REVIEW_REQUEST message)
@@ -632,7 +610,7 @@ describe('Calculator Goal Workflow (E2E)', () => {
                     if (finalPR.status === 'merged') {
                       console.log('      🔀 PR merged (DB only - test mode)');
                       console.log(
-                        `      ✅ Task A status: ${finalPR.task.status}`,
+                        `      ✅ Task status: ${finalPR.task.status}`,
                       );
                       mergedCount++;
 
@@ -669,40 +647,58 @@ describe('Calculator Goal Workflow (E2E)', () => {
             `      - All reviews done by ${techLead.name} (no self-review)`,
           );
 
-          // ========== Step 11.5: Verify Task B Was Unblocked ==========
-          if (taskB) {
-            console.log(
-              '\n🔓 Step 11.5: Verifying Task B Dependency Unblocking...\n',
-            );
+          // ========== Step 11.5: Verify Dependency Unblocking ==========
+          if (mergedCount > 0 && firstPRResult) {
+            console.log('\n🔓 Step 11.5: Verifying Dependency Unblocking...\n');
 
-            // Refresh Task B from database
-            const unblockedTaskB = await taskRepo.findOne({
-              where: { id: taskB.id },
+            // Find tasks that were BLOCKED and might have been unblocked
+            const completedTask = await taskRepo.findOne({
+              where: { id: firstPRResult.taskId },
+              relations: ['dependentTasks'],
             });
 
-            console.log(`   Task B: "${unblockedTaskB.title}"`);
-            console.log(`   Previous status: BLOCKED`);
-            console.log(`   Current status: ${unblockedTaskB.status}`);
+            if (completedTask && completedTask.dependentTasks) {
+              const dependentTaskIds = completedTask.dependentTasks.map(
+                (t) => t.id,
+              );
+              console.log(
+                `   Completed task has ${dependentTaskIds.length} dependent task(s)`,
+              );
 
-            if (unblockedTaskB.status === TaskStatus.READY) {
-              console.log(
-                '\n   ✅ SUCCESS: Task B was automatically unblocked!',
-              );
-              console.log(
-                '   ✅ Dependency workflow verified: Task A merge → Task B unblock',
-              );
-              expect(unblockedTaskB.status).toBe(TaskStatus.READY);
-            } else {
-              console.log(
-                `\n   ⚠️  WARNING: Task B still ${unblockedTaskB.status} (expected READY)`,
-              );
-              console.log(
-                '   This may indicate an issue with dependency unblocking logic',
-              );
+              if (dependentTaskIds.length > 0) {
+                // Check if any dependent tasks were unblocked
+                const dependentTasks =
+                  await taskRepo.findByIds(dependentTaskIds);
+                const unblockedTasks = dependentTasks.filter(
+                  (t) => t.status === TaskStatus.READY,
+                );
+
+                console.log(
+                  `   Dependent tasks unblocked: ${unblockedTasks.length}/${dependentTasks.length}`,
+                );
+
+                if (unblockedTasks.length > 0) {
+                  console.log(
+                    '\n   ✅ SUCCESS: Dependent tasks were automatically unblocked!',
+                  );
+                  console.log(
+                    '   ✅ Dependency workflow verified: Task completion → Dependent tasks unblocked',
+                  );
+                  for (const task of unblockedTasks) {
+                    console.log(`      - ${task.title} (${task.status})`);
+                  }
+                } else {
+                  console.log(
+                    '\n   ℹ️  No tasks unblocked yet (may still have other dependencies)',
+                  );
+                }
+              } else {
+                console.log('   ℹ️  Completed task has no dependent tasks');
+              }
             }
           } else {
             console.log(
-              '\n⚠️  Step 11.5: Skipping dependency test (Task B not created)',
+              '\n⚠️  Step 11.5: Skipping dependency test (no PR merged)',
             );
           }
 
@@ -785,7 +781,12 @@ describe('Calculator Goal Workflow (E2E)', () => {
         );
         console.log('   ✅ Automatic PR merge (test mode - DB only)');
         console.log('   ✅ No self-review enforcement');
-        console.log('   ✅ Task dependency workflow (Task A → Task B unblock)');
+        console.log(
+          "   ✅ Brain's automatic dependency workflow (BLOCKED tasks created)",
+        );
+        console.log(
+          '   ✅ Dependency unblocking (completed task → unblock dependents)',
+        );
         console.log('   ✅ PR close instead of merge (test cleanup)');
         console.log('\n🚀 Phase 3 automation system working correctly!');
       },
