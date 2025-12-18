@@ -39,6 +39,7 @@ interface DecompositionWorkItem {
   estimatedHours?: number;
   requiredSkills?: string[];
   acceptanceCriteria?: string[];
+  dependencies?: string[]; // Task titles that must complete before this task
 }
 
 interface DecompositionResult {
@@ -497,6 +498,10 @@ export class TaskExecutionService {
         `Creating ${brainResult.workItems?.length || 0} implementation tasks for team members`,
       );
 
+      // Task title → Task 객체 매핑 (dependency resolution용)
+      const taskMap = new Map<string, Task>();
+
+      // First pass: Create all tasks without dependencies
       for (const workItem of brainResult.workItems || []) {
         // 팀원 중 적절한 홀론 선택
         const assignedHollon = await this.selectBestHollon(team, workItem);
@@ -509,7 +514,7 @@ export class TaskExecutionService {
           title: workItem.title,
           description: workItem.description,
           type: TaskType.IMPLEMENTATION,
-          status: TaskStatus.READY, // 즉시 실행 가능
+          status: TaskStatus.READY, // Will be updated if has dependencies
           assignedHollonId: assignedHollon?.id,
           depth: (task.depth || 0) + 1,
           priority: this.mapPriority(workItem.priority || ''),
@@ -518,10 +523,41 @@ export class TaskExecutionService {
         });
 
         const savedImplTask = await this.taskRepo.save(implTask);
+        taskMap.set(workItem.title, savedImplTask);
         childTasks.push(savedImplTask);
       }
 
-      this.logger.log(`Created ${childTasks.length} implementation tasks`);
+      // Second pass: Resolve and set dependencies
+      let blockedCount = 0;
+      for (const workItem of brainResult.workItems || []) {
+        const currentTask = taskMap.get(workItem.title);
+        if (!currentTask) continue;
+
+        // Parse dependencies
+        const dependencyTitles = workItem.dependencies || [];
+        const dependencyTasks = dependencyTitles
+          .map((depTitle: string) => taskMap.get(depTitle))
+          .filter((t: Task | undefined): t is Task => t != null);
+
+        if (dependencyTasks.length > 0) {
+          // Set dependencies (many-to-many relation)
+          currentTask.dependencies = dependencyTasks;
+
+          // Update status to BLOCKED
+          currentTask.status = TaskStatus.BLOCKED;
+
+          await this.taskRepo.save(currentTask);
+          blockedCount++;
+
+          this.logger.log(
+            `Task "${currentTask.title}" → BLOCKED (depends on ${dependencyTasks.length} task(s))`,
+          );
+        }
+      }
+
+      this.logger.log(
+        `Created ${childTasks.length} implementation tasks (${blockedCount} BLOCKED, ${childTasks.length - blockedCount} READY)`,
+      );
     }
 
     // 6. ✅ SSOT Line 185-186: 부모는 PENDING으로 대기
@@ -600,7 +636,9 @@ Please distribute work items among these sub-teams.
 `
     : `This is a leaf team with ${team.hollons?.length || 0} members.
 
-Please create implementation tasks for individual team members.`
+Please create implementation tasks for individual team members.
+
+IMPORTANT: Identify task dependencies - which tasks must be completed before others can start.`
 }
 
 # Output Format
@@ -616,7 +654,8 @@ ${
         "description": "Detailed description",
         "priority": "P1",
         "acceptanceCriteria": ["criterion 1", "criterion 2"],
-        "requiredSkills": ["skill1", "skill2"]
+        "requiredSkills": ["skill1", "skill2"],
+        "dependencies": ["Exact title of task that must complete first"]
       }
     ]
   }
@@ -628,11 +667,18 @@ ${
       "description": "Detailed description",
       "priority": "P1",
       "acceptanceCriteria": ["criterion 1", "criterion 2"],
-      "requiredSkills": ["TypeScript", "NestJS"]
+      "requiredSkills": ["TypeScript", "NestJS"],
+      "dependencies": ["Exact title of task that must complete first"]
     }
   ]
 }`
 }
+
+IMPORTANT:
+- Use "dependencies" array to specify which tasks must be completed before this task can start
+- Dependencies should reference exact task titles from the same workItems array
+- If a task has no dependencies, use an empty array: "dependencies": []
+- Tasks with dependencies will be marked as BLOCKED until their dependencies complete
 
 Return ONLY the JSON, no other text.
 `.trim();
