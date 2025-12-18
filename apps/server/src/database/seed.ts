@@ -589,6 +589,10 @@ test: Add [component-name] tests
 
 특별 지침:
 - Team Epic을 Implementation Tasks로 분해
+  * 각 태스크는 실제 코드 변경을 포함하는 PR 단위로 생성
+  * 단순히 디렉토리만 생성하거나 파일만 생성하는 태스크는 지양
+  * 각 태스크는 독립적으로 리뷰 가능하고 의미있는 단위여야 함
+  * 예: "디렉토리 생성" 대신 "Calculator 엔티티 구현 (디렉토리 + 엔티티 파일 + 기본 로직)"
 - 팀원들에게 Task 분배 (Developer-Bravo, Developer-Charlie)
 - 팀원들의 스킬과 워크로드 고려
 - 코드 리뷰 및 PR 승인
@@ -609,6 +613,10 @@ test: Add [component-name] tests
 
 특별 지침:
 - Team Epic을 Implementation Tasks로 분해
+  * 각 태스크는 실제 코드 변경을 포함하는 PR 단위로 생성
+  * 단순히 디렉토리만 생성하거나 파일만 생성하는 태스크는 지양
+  * 각 태스크는 독립적으로 리뷰 가능하고 의미있는 단위여야 함
+  * 예: "디렉토리 생성" 대신 "Vector 임베딩 서비스 구현 (디렉토리 + 서비스 파일 + 기본 로직)"
 - 팀원들에게 Task 분배 (AIEngineer-Delta, DataEngineer-Gamma)
 - NLP/Vector/Graph 작업 적절히 분배
 - 코드 리뷰 및 PR 승인
@@ -629,6 +637,10 @@ test: Add [component-name] tests
 
 특별 지침:
 - Team Epic을 Implementation Tasks로 분해
+  * 각 태스크는 실제 코드 변경을 포함하는 PR 단위로 생성
+  * 단순히 디렉토리만 생성하거나 파일만 생성하는 태스크는 지양
+  * 각 태스크는 독립적으로 리뷰 가능하고 의미있는 단위여야 함
+  * 예: "디렉토리 생성" 대신 "Docker 컨테이너 설정 구현 (디렉토리 + Dockerfile + docker-compose.yml)"
 - 팀원들에게 Task 분배 (DevOps-Golf)
 - CI/CD, 인프라, 모니터링 작업 분배
 - 코드 리뷰 및 PR 승인
