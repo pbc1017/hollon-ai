@@ -175,25 +175,32 @@ describe('Calculator Goal Workflow (E2E)', () => {
         console.log('📋 Step 1: Creating Calculator Goal...');
         const goal = await goalRepo.save(
           goalRepo.create({
-            title: 'Build Calculator Module with GUI',
-            description: `Create a new calculator module for the Hollon AI project with the following requirements:
+            title: 'Build Calculator Module with Dependencies',
+            description: `Create a new calculator module for the Hollon AI project with the following requirements.
 
-              1. Backend Calculator Service:
-                 - Basic arithmetic operations (add, subtract, multiply, divide)
-                 - History tracking of calculations
-                 - RESTful API endpoints
+              IMPORTANT: Tasks must be executed IN ORDER with proper dependencies:
 
-              2. Frontend Calculator UI:
-                 - Simple GUI with number buttons and operation buttons
-                 - Display for current calculation
-                 - History panel showing past calculations
+              1. Module Foundation (no dependencies):
+                 - Create calculator module structure with NestJS
+                 - Set up basic module configuration
 
-              3. Integration:
-                 - Connect frontend to backend API
-                 - Add to main application
+              2. Service Layer (depends on Foundation):
+                 - Create calculator service with basic operations
+                 - Implement add, subtract, multiply, divide methods
+                 - Add calculation history tracking
 
-              This is a complete feature that should be developed in the hollon-ai repository.
-              Each team member should work in their own worktree for isolation.`,
+              3. API Layer (depends on Service):
+                 - Create calculator controller
+                 - Implement RESTful API endpoints
+                 - Add request/response DTOs
+
+              4. Testing (depends on API):
+                 - Write unit tests for service
+                 - Write integration tests for API
+                 - Verify all functionality
+
+              CRITICAL: Brain must set up task dependencies so later tasks are BLOCKED until earlier tasks are completed.
+              This tests the dependency unblocking workflow.`,
             status: GoalStatus.DRAFT,
             organizationId: organization.id,
             teamId: backendTeam.id, // Assign to backend team
