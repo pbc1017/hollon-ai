@@ -1471,6 +1471,199 @@ async cleanupExpiredSubHollons() { ... }
 
 ## 1. 통합 테스트 (단계별 자동화 검증)
 
+---
+
+## 구현 상태 요약 (Updated 2025-12-18)
+
+### 전체 워크플로우 구현 상태
+
+```
+Goal → Team Epic → Implementation Tasks → Task Execution → PR → CI → Review → Merge
+  ✅       ✅               ✅                  ✅          ✅   ⚠️   ✅      ✅
+```
+
+**범례**:
+
+- ✅ 완전 구현 및 테스트 완료
+- ⚠️ 부분 구현 (개선 필요)
+- ❌ 미구현
+
+### 1.1-1.4: Goal Decomposition & Task Distribution
+
+| 케이스                                 | 상태 | 구현 위치                           | 비고                                        |
+| -------------------------------------- | ---- | ----------------------------------- | ------------------------------------------- |
+| 1.1.1 Goal → Team Epic                 | ✅   | `goal-decomposition.service.ts`     | E2E 테스트 통과                             |
+| 1.1.2 DRAFT/COMPLETED skip             | ✅   | `goal-decomposition.service.ts`     | E2E 테스트 통과                             |
+| 1.1.3 이미 분해된 Goal skip            | ✅   | `goal-decomposition.service.ts`     | E2E 테스트 통과                             |
+| 1.2.1 Epic → Manager 할당              | ✅   | `task-execution.service.ts`         | E2E 테스트 통과                             |
+| 1.2.2 이미 할당된 Epic skip            | ✅   | `task-execution.service.ts`         | E2E 테스트 통과                             |
+| 1.3.1 Epic → Impl Tasks                | ✅   | `task-execution.service.ts:409-560` | E2E 테스트 통과, **Dependency 지원 추가됨** |
+| 1.3.2 매니저에게 구현 태스크 할당 방지 | ✅   | `task-execution.service.ts:502`     | 팀원에게만 할당                             |
+| 1.4.1 매니저가 팀원에게 분배           | ✅   | `task-execution.service.ts`         | 자동 분배                                   |
+| 1.4.2 팀원에게 고르게 분배             | ✅   | `selectBestHollon()`                | Round-robin                                 |
+
+### 1.5: Task Execution
+
+| 케이스                          | 상태 | 구현 위치                           | 비고                                |
+| ------------------------------- | ---- | ----------------------------------- | ----------------------------------- |
+| 1.5.1 READY 태스크 실행         | ✅   | `task-execution.service.ts:145-244` | E2E 테스트 통과                     |
+| 1.5.2 매니저 태스크 실행 방지   | ✅   | E2E test 검증                       | "Manager Should Not Execute" 테스트 |
+| 1.5.3 동시 실행 제한            | ⚠️   | TODO                                | 현재 순차 실행만 지원               |
+| 1.5.4 서브 에이전트 실행 추적   | ✅   | `hollon-orchestrator.service.ts`    | Subtask metadata 추적               |
+| 1.5.5 서브 에이전트 실패 재시도 | ⚠️   | `hollon-orchestrator.service.ts`    | 부분 구현                           |
+| 1.5.6 Hollon 상태 관리          | ✅   | `task-execution.service.ts`         | IN_PROGRESS 유지                    |
+
+### 1.6: PR Creation & Branch Management
+
+| 케이스                  | 상태 | 구현 위치                             | 비고                     |
+| ----------------------- | ---- | ------------------------------------- | ------------------------ |
+| 1.6.1 PR 생성           | ✅   | `task-execution.service.ts:1443-1534` | E2E 테스트 통과 (PR #36) |
+| 1.6.2 중복 브랜치 방지  | ✅   | `task-execution.service.ts`           | E2E 테스트 통과          |
+| 1.6.3 커밋 없는 PR 방지 | ✅   | `task-execution.service.ts`           | Error 처리               |
+
+### 1.7: CI Check ⚠️ **부분 구현**
+
+| 케이스                           | 상태 | 구현 위치                                      | 비고                                       |
+| -------------------------------- | ---- | ---------------------------------------------- | ------------------------------------------ |
+| 1.7.1 CI 성공 → READY_FOR_REVIEW | ✅   | `task-execution.service.ts:218, 244`           | E2E 테스트 통과                            |
+| 1.7.2 CI 실패 → 재시도           | ⚠️   | `task-execution.service.ts:225-238, 1683-1758` | **Error throw만, retry trigger 확인 필요** |
+| 1.7.3 CI pending → 대기          | ✅   | `task-execution.service.ts:1764-1820`          | Test mode에서 skip                         |
+| 1.7.4 최대 재시도 초과 → FAILED  | ⚠️   | `task-execution.service.ts:1683-1758`          | **Retry count 관리만, FAILED 전환 미확인** |
+
+**1.7.2 CI 실패 처리 상세**:
+
+```typescript
+// ✅ 구현됨
+- CI check: checkCIStatus() - line 1621
+- CI 통과 시 Manager review: requestCodeReview() - line 244
+- CI 실패 처리: handleCIFailure() - line 1683
+  - Retry count 관리 (max 3)
+  - Feedback 생성
+  - Error throw: "CI_FAILURE_RETRY: ..." 또는 "CI_FAILURE_MAX_RETRIES: ..."
+
+// ❓ 확인 필요
+- Error를 누가 catch하고 retry를 trigger하는가?
+  → HollonExecutionService 또는 TaskPoolService 확인 필요
+
+// ❌ 미구현
+- 서브 홀론 생성으로 CI 에러 수정
+- 자기 자신이 CI 에러 수정 (피드백 반영한 재실행)
+```
+
+### 1.8: Manager Review
+
+| 케이스                       | 상태 | 구현 위치                | 비고            |
+| ---------------------------- | ---- | ------------------------ | --------------- |
+| 1.8.1 Manager PR 리뷰 & 병합 | ✅   | `code-review.service.ts` | E2E 테스트 통과 |
+| 1.8.2 자기 PR 병합 방지      | ✅   | `code-review.service.ts` | E2E 테스트 통과 |
+
+### 2. E2E Workflow Tests
+
+| 테스트                      | 상태 | 테스트 파일                            | 비고                     |
+| --------------------------- | ---- | -------------------------------------- | ------------------------ |
+| 2.1 완전한 8단계 자동화     | ✅   | `calculator-goal-workflow.e2e-spec.ts` | **269초 통과**           |
+| 2.2 간단한 Goal→Merge       | ✅   | `calculator-goal-workflow.e2e-spec.ts` | Main test                |
+| 2.3 CI 실패 → 재시도 → 성공 | ⚠️   | `calculator-goal-workflow.e2e-spec.ts` | **Retry trigger 미확인** |
+| 2.4 병렬 팀 실행            | ❌   | TODO                                   | 미구현                   |
+
+### 11. Task Dependency Workflow (신규 - 2025-12-18)
+
+| 기능                       | 상태 | 구현 위치                                  | 비고                                      |
+| -------------------------- | ---- | ------------------------------------------ | ----------------------------------------- |
+| 11.1 BLOCKED tasks 생성    | ✅   | `task-execution.service.ts:529-560`        | **E2E 통과: 24개 중 1 READY, 23 BLOCKED** |
+| 11.2 Dependency unblocking | ✅   | `code-review.service.ts:284-346`           | **3 dependent tasks 확인됨**              |
+| 11.3 CI check & retry      | ⚠️   | `task-execution.service.ts:218-244`        | 부분 구현                                 |
+| 11.4 Test PR cleanup       | ❌   | `calculator-goal-workflow.e2e-spec.ts:713` | **Test mode에서 GitHub PR 여전히 open**   |
+
+### 구현 우선순위 (다음 단계)
+
+#### 🔴 최우선 (Critical)
+
+1. **CI 실패 처리 완성** (1.7.2, 1.7.4)
+   - [ ] Error catch & retry trigger 확인/구현
+   - [ ] 서브 홀론 생성으로 CI 에러 수정
+   - [ ] 자기 수정 (CI 피드백 반영)
+   - [ ] 최대 retry 초과 시 FAILED 상태 전환
+
+   **파일**: `task-execution.service.ts`, `hollon-execution.service.ts`
+
+2. **Test PR Auto Cleanup** (11.4)
+   - [ ] Test mode에서도 실제 GitHub PR close
+   - [ ] afterAll cleanup 개선
+
+   **파일**: `calculator-goal-workflow.e2e-spec.ts`, `code-review.service.ts`
+
+#### 🟡 중요 (High Priority)
+
+3. **병렬 실행** (1.5.3, 2.4)
+   - [ ] 여러 READY tasks 동시 실행
+   - [ ] 동시 실행 제한 (max 5)
+   - [ ] 병렬 팀 실행 지원
+
+   **파일**: `task-pool.service.ts`, `hollon-execution.service.ts`
+
+4. **서브 에이전트 재시도 개선** (1.5.5)
+   - [ ] 개별 서브 에이전트 재시도
+   - [ ] 재시도 이력 metadata 저장
+
+   **파일**: `hollon-orchestrator.service.ts`
+
+#### 🟢 Nice to Have
+
+5. **Dependency Visualization**
+   - [ ] Task dependency graph API
+   - [ ] BLOCKED tasks의 blocking 이유 표시
+
+6. **Performance Monitoring**
+   - [ ] 각 단계별 소요 시간 측정
+   - [ ] Bottleneck 식별
+
+### 테스트 파일 위치
+
+**Integration Tests**:
+
+- `test/integration/goal-decomposition.integration-spec.ts` - Goal decomposition
+- `test/integration/task-execution.integration-spec.ts` - Task execution
+- `test/integration/pr-creation.integration-spec.ts` - PR creation
+- `test/integration/ci-checking.integration-spec.ts` - CI checking
+
+**E2E Tests**:
+
+- `test/e2e/calculator-goal-workflow.e2e-spec.ts` - **Main E2E test (269s PASS)**
+- `test/e2e/goal-decomposition-llm.e2e-spec.ts` - Goal decomposition with LLM
+- `test/e2e/phase3.11-project-workflow.e2e-spec.ts` - Project workflow
+- `test/e2e/phase3.12-goal-to-pr-workflow.e2e-spec.ts` - Goal to PR
+
+### 최근 구현 (2025-12-18)
+
+**커밋**:
+
+- `3fa6114` - feat: add task dependency support to Implementation Tasks
+- `6a57d13` - docs: add Task Dependency Workflow to Phase 3 test plan
+
+**구현 내용**:
+
+1. ✅ `DecompositionWorkItem`에 `dependencies` 필드 추가
+2. ✅ Brain prompt에 dependency 식별 지시
+3. ✅ Two-pass Implementation Task 생성
+4. ✅ BLOCKED tasks 자동 생성
+5. ✅ Dependency unblocking 로직
+6. ✅ E2E test 검증 (24 tasks: 1 READY, 23 BLOCKED)
+
+**테스트 결과**:
+
+```
+✅ PASSED (269s)
+✅ Goal → Team Epic decomposition
+✅ Epic → Implementation Task decomposition (24 tasks)
+✅ BLOCKED tasks created (23 BLOCKED, 1 READY)
+✅ Completed task has 3 dependent task(s)
+✅ PR creation (#36)
+✅ CI check passed
+✅ Manager review and merge (test mode - DB only)
+⚠️ Dependent tasks not yet unblocked (have other dependencies)
+```
+
 ### 1.1 Goal 분해 테스트
 
 **테스트 파일**: `test/integration/goal-decomposition.integration-spec.ts`
