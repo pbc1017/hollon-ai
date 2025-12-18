@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { promisify } from 'util';
 import { exec } from 'child_process';
+import { existsSync } from 'fs';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
 const execAsync = promisify(exec);
@@ -481,9 +482,16 @@ export class CodeReviewService implements ICodeReviewService {
     if (pr.prUrl) {
       try {
         const closeComment = reason || 'Closing PR';
+
+        // Use worktree path if it exists, otherwise use current directory
+        const cwd =
+          pr.task.workingDirectory && existsSync(pr.task.workingDirectory)
+            ? pr.task.workingDirectory
+            : process.cwd();
+
         await execAsync(
           `gh pr close "${pr.prUrl}" --comment "${closeComment}"`,
-          { cwd: pr.task.workingDirectory || process.cwd() },
+          { cwd },
         );
         this.logger.log(`Closed PR on GitHub: ${pr.prUrl}`);
       } catch (error) {
