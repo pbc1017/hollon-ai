@@ -2,8 +2,10 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule } from '@nestjs/throttler';
 import configuration from './config/configuration';
 import { databaseConfig } from './config/database.config';
+import { throttlerConfig } from './config/throttler.config';
 import { HealthModule } from './modules/health/health.module';
 import { OrganizationModule } from './modules/organization/organization.module';
 import { RoleModule } from './modules/role/role.module';
@@ -47,6 +49,7 @@ import { DddProvidersModule } from './modules/ddd-providers/ddd-providers.module
     ...(process.env.DISABLE_SCHEDULER !== 'true'
       ? [ScheduleModule.forRoot()]
       : []),
+    ThrottlerModule.forRoot(throttlerConfig),
     PostgresListenerModule,
 
     // Feature modules
