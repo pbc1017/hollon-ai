@@ -27,7 +27,7 @@ const execAsync = promisify(exec);
 const USE_MOCK_LLM = process.env.HOLLON_E2E_MOCK_LLM === 'true';
 const TEST_TIMEOUT = USE_MOCK_LLM ? 120000 : 1200000; // Mock: 2min, Real: 20min
 
-describe('Calculator Goal Workflow (E2E)', () => {
+describe('Phase 3 Complete Workflow (E2E)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
 
@@ -56,7 +56,9 @@ describe('Calculator Goal Workflow (E2E)', () => {
   const currentRepoPath = path.join(__dirname, '..', '..', '..', '..');
 
   beforeAll(async () => {
-    console.log('🔵 [beforeAll] Starting Calculator Goal test setup...');
+    console.log(
+      '🔵 [beforeAll] Starting Phase 3 Complete Workflow test setup...',
+    );
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -81,7 +83,9 @@ describe('Calculator Goal Workflow (E2E)', () => {
     // Setup test data
     await setupTestData();
 
-    console.log('🎉 [beforeAll] Calculator Goal test setup complete!');
+    console.log(
+      '🎉 [beforeAll] Phase 3 Complete Workflow test setup complete!',
+    );
   }, TEST_TIMEOUT);
 
   afterAll(async () => {
@@ -167,14 +171,14 @@ describe('Calculator Goal Workflow (E2E)', () => {
    * - Sub-agent tracking
    * - Edge cases
    */
-  describe('Complete Calculator Goal Workflow', () => {
+  describe('Complete Phase 3 Workflow', () => {
     it(
       'should execute full workflow: Goal → Team Epic → Implementation → PR',
       async () => {
-        console.log('\n🧪 Starting Calculator Goal Workflow Test...\n');
+        console.log('\n🧪 Starting Phase 3 Complete Workflow Test...\n');
 
         // ========== Step 1: Create Goal ==========
-        console.log('📋 Step 1: Creating Calculator Goal...');
+        console.log('📋 Step 1: Creating Goal...');
         const goal = await goalRepo.save(
           goalRepo.create({
             title: 'Build Calculator Module with Dependencies',
@@ -896,7 +900,7 @@ describe('Calculator Goal Workflow (E2E)', () => {
         }
 
         // ========== Final Verification ==========
-        console.log('\n🎉 Calculator Goal Workflow Test COMPLETED!');
+        console.log('\n🎉 Phase 3 Complete Workflow Test COMPLETED!');
         console.log('   Summary:');
         console.log(`   - Goal: ${goal.title}`);
         console.log(`   - Team Epics: ${teamEpics.length}`);
