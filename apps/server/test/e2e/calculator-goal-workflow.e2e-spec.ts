@@ -95,7 +95,9 @@ describe('Calculator Goal Workflow (E2E)', () => {
           const prRepo = dataSource.getRepository(TaskPullRequest);
           const pr = await prRepo.findOne({ where: { id: prId } });
 
-          if (pr && pr.status !== 'closed' && pr.status !== 'merged') {
+          // In test mode, close PR even if it's MERGED in DB
+          // (DB-only merge, GitHub PR is still open)
+          if (pr && pr.status !== 'closed') {
             await codeReviewService.closePullRequest(
               prId,
               'Test cleanup - closing remaining PR',

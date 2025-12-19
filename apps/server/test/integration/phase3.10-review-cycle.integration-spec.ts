@@ -529,6 +529,12 @@ describe('Phase 3.10 Parent Hollon Review Cycle (integration)', () => {
     beforeEach(async () => {
       await createTestContext();
       await createParentTaskWithCompletedSubtasks();
+
+      // Clean up any leftover tasks assigned to this hollon from other tests
+      await dataSource.query(
+        'DELETE FROM tasks WHERE assigned_hollon_id = $1 AND id != $2',
+        [parentHollonId, parentTaskId],
+      );
     });
 
     afterEach(async () => {
