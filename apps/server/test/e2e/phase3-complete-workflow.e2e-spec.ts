@@ -83,41 +83,6 @@ describe('Phase 3 Complete Workflow (E2E)', () => {
     // Setup test data
     await setupTestData();
 
-    // Clean up any existing test PRs from previous runs
-    console.log('🧹 Cleaning up existing test PRs from previous runs...');
-    try {
-      const { stdout } = await execAsync(
-        'gh pr list --state open --json number,title,author --limit 50',
-      );
-      const prs = JSON.parse(stdout) as Array<{
-        number: number;
-        title: string;
-        author: { login: string };
-      }>;
-      const testPRs = prs.filter(
-        (pr) =>
-          pr.title.toLowerCase().includes('calculator') ||
-          pr.title.toLowerCase().includes('hollon ai'),
-      );
-
-      for (const pr of testPRs) {
-        try {
-          await execAsync(
-            `gh pr close ${pr.number} --comment "E2E test cleanup - closing stale test PR"`,
-          );
-          console.log(`  ✅ Closed stale PR #${pr.number}: ${pr.title}`);
-        } catch {
-          console.warn(`  ⚠️  Failed to close PR #${pr.number}`);
-        }
-      }
-
-      if (testPRs.length === 0) {
-        console.log('  ℹ️  No stale test PRs found');
-      }
-    } catch (error) {
-      console.warn('  ⚠️  Failed to clean up stale PRs:', error);
-    }
-
     console.log(
       '🎉 [beforeAll] Phase 3 Complete Workflow test setup complete!',
     );
