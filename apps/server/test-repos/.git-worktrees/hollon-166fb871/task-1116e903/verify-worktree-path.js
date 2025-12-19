@@ -53,7 +53,9 @@ function verifyWorktreePath(worktreePath) {
     test: 'Contains hollon-{id} pattern',
     passed: hasHollonId,
     expected: 'Path should contain hollon-{8 hex chars}',
-    actual: hasHollonId ? `Found: hollon-${hollonMatch[1]}` : 'Missing hollon-{id}',
+    actual: hasHollonId
+      ? `Found: hollon-${hollonMatch[1]}`
+      : 'Missing hollon-{id}',
   });
   allPassed = allPassed && hasHollonId;
 
@@ -97,7 +99,9 @@ function verifyWorktreePath(worktreePath) {
       test: '.git file contains gitdir reference',
       passed: hasGitdir,
       expected: '.git file should start with "gitdir:"',
-      actual: hasGitdir ? `Found: ${gitFileContent.substring(0, 50)}...` : 'No gitdir reference',
+      actual: hasGitdir
+        ? `Found: ${gitFileContent.substring(0, 50)}...`
+        : 'No gitdir reference',
     });
     allPassed = allPassed && hasGitdir;
   }

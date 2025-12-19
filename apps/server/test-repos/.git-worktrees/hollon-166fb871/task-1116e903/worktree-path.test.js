@@ -31,7 +31,8 @@ describe('Worktree Path Format', () => {
     });
 
     it('should follow the complete pattern: .git-worktrees/hollon-{id}/task-{id}/', () => {
-      const fullPattern = /\.git-worktrees\/hollon-[a-f0-9]{8}\/task-[a-f0-9]{8}/;
+      const fullPattern =
+        /\.git-worktrees\/hollon-[a-f0-9]{8}\/task-[a-f0-9]{8}/;
       expect(currentPath).toMatch(fullPattern);
     });
   });
@@ -116,7 +117,9 @@ describe('Worktree Path Format', () => {
       // 2. Different tasks for the same hollon get different directories (task-{id})
 
       const pathParts = currentPath.split(path.sep);
-      const worktreeIndex = pathParts.findIndex(part => part === '.git-worktrees');
+      const worktreeIndex = pathParts.findIndex(
+        (part) => part === '.git-worktrees',
+      );
 
       expect(worktreeIndex).toBeGreaterThan(-1);
       expect(pathParts[worktreeIndex + 1]).toMatch(/^hollon-[a-f0-9]{8}$/);
