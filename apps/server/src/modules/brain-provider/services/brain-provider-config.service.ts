@@ -62,8 +62,8 @@ export class BrainProviderConfigService {
    * Validate configuration values
    */
   async validateConfig(config: BrainProviderConfig): Promise<void> {
-    if (config.timeoutSeconds < 5 || config.timeoutSeconds > 600) {
-      throw new BadRequestException('Timeout must be between 5-600 seconds');
+    if (config.timeoutSeconds < 5 || config.timeoutSeconds > 1200) {
+      throw new BadRequestException('Timeout must be between 5-1200 seconds');
     }
 
     if (
