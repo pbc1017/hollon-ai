@@ -79,6 +79,42 @@ export class GoalAutomationListener {
 
       for (const goal of pendingGoals) {
         try {
+          // Phase 4: Edge case check - ensure goal is still ACTIVE
+          if (goal.status !== GoalStatus.ACTIVE) {
+            this.logger.debug(
+              `Skipping goal ${goal.id}: status is ${goal.status}, expected ACTIVE`,
+            );
+            continue;
+          }
+
+          // Phase 4: Edge case check - skip if Team Epics already exist
+          // Tasks are related to goals through projects, so we need to find projects first
+          const projects = await this.taskRepo.manager
+            .getRepository('Project')
+            .find({
+              where: {
+                goalId: goal.id,
+              },
+            });
+
+          if (projects.length > 0) {
+            const projectIds = projects.map((p: any) => p.id);
+
+            // Use query builder to check for team epics with IN operator
+            const existingTeamEpics = await this.taskRepo
+              .createQueryBuilder('task')
+              .where('task.projectId IN (:...projectIds)', { projectIds })
+              .andWhere('task.type = :type', { type: 'team_epic' })
+              .getCount();
+
+            if (existingTeamEpics > 0) {
+              this.logger.debug(
+                `Skipping goal ${goal.id}: ${existingTeamEpics} Team Epic(s) already exist`,
+              );
+              continue;
+            }
+          }
+
           this.logger.log(`Auto-decomposing goal: ${goal.title} (${goal.id})`);
 
           const result = await this.goalDecompositionService.decomposeGoal(
@@ -415,6 +451,27 @@ export class GoalAutomationListener {
     try {
       this.logger.debug('Checking for tasks ready for execution...');
 
+      // Phase 4: Global concurrent execution limit
+      const MAX_CONCURRENT_TASKS = 5;
+
+      // Check how many tasks are currently executing
+      const currentlyExecuting = await this.taskRepo.count({
+        where: { status: TaskStatus.IN_PROGRESS },
+      });
+
+      const availableSlots = MAX_CONCURRENT_TASKS - currentlyExecuting;
+
+      if (availableSlots <= 0) {
+        this.logger.warn(
+          `Maximum concurrent tasks limit reached (${currentlyExecuting}/${MAX_CONCURRENT_TASKS}), skipping auto-execution`,
+        );
+        return;
+      }
+
+      this.logger.debug(
+        `Available execution slots: ${availableSlots}/${MAX_CONCURRENT_TASKS} (${currentlyExecuting} currently in progress)`,
+      );
+
       // READY 상태이고 Hollon에게 할당된 Task 찾기
       const readyTasks = await this.taskRepo
         .createQueryBuilder('task')
@@ -423,7 +480,7 @@ export class GoalAutomationListener {
         .andWhere('task.type != :teamEpic', { teamEpic: 'team_epic' })
         .leftJoinAndSelect('task.project', 'project')
         .leftJoinAndSelect('task.assignedHollon', 'hollon')
-        .take(5) // 한 번에 최대 5개 Task까지만 실행 (병렬 실행 방지)
+        .take(Math.min(availableSlots, 5)) // Take minimum of available slots and 5
         .getMany();
 
       this.logger.log(`🔍 Query returned ${readyTasks.length} tasks`);
@@ -468,6 +525,32 @@ export class GoalAutomationListener {
               );
             }
             continue;
+          }
+
+          // Phase 4: Manager Execution Prevention Check
+          // Managers (hollons with subordinates) should not execute implementation tasks
+          // They should delegate to their team members instead
+          const assignedHollon = task.assignedHollon;
+          if (assignedHollon) {
+            // Load subordinates if not already loaded
+            const hollonWithSubordinates = await this.taskRepo.manager
+              .getRepository('Hollon')
+              .findOne({
+                where: { id: assignedHollon.id },
+                relations: ['subordinates'],
+              });
+
+            if (
+              hollonWithSubordinates?.subordinates &&
+              hollonWithSubordinates.subordinates.length > 0
+            ) {
+              this.logger.warn(
+                `Task ${task.id} assigned to manager ${assignedHollon.name} ` +
+                  `with ${hollonWithSubordinates.subordinates.length} subordinates - ` +
+                  `managers should not execute implementation tasks, skipping`,
+              );
+              continue;
+            }
           }
 
           this.logger.log(

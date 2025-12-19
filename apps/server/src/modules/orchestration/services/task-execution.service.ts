@@ -908,6 +908,7 @@ ${i + 1}. **${item.title}**
    * Phase 3.12: Hollon별 브랜치 생성 (Task worktree 내)
    * - 브랜치명: feature/{hollonName}/task-{taskId}
    * - 작업자를 브랜치명으로 명확히 식별
+   * Phase 4: Duplicate branch prevention - delete remote branch if exists
    */
   private async createBranch(
     hollon: Hollon,
@@ -923,6 +924,29 @@ ${i + 1}. **${item.title}**
     );
 
     try {
+      // Phase 4: Check if branch exists remotely and delete it
+      try {
+        const { stdout } = await execAsync(
+          `git ls-remote --heads origin ${branchName}`,
+          { cwd: worktreePath },
+        );
+
+        if (stdout.trim()) {
+          this.logger.warn(
+            `Remote branch ${branchName} already exists, deleting it`,
+          );
+          await execAsync(`git push origin --delete ${branchName}`, {
+            cwd: worktreePath,
+          });
+          this.logger.log(`Deleted remote branch ${branchName}`);
+        }
+      } catch (checkError) {
+        // Ignore errors from ls-remote or delete (branch might not exist)
+        this.logger.debug(
+          `Branch check/delete skipped: ${checkError instanceof Error ? checkError.message : 'Unknown error'}`,
+        );
+      }
+
       // The worktree was created with a temporary branch, now rename it to the feature branch
       // Git automatically creates the necessary directory structure for nested branches
       await execAsync(`git branch -m ${branchName}`, {
@@ -1582,6 +1606,7 @@ ${i + 1}. **${item.title}**
   /**
    * Pull Request 생성
    * Phase 3.11: 현재 브랜치를 자동 감지 (feature/{hollonName}/task-{id})
+   * Phase 4: No-commit check - ensure task made changes before creating PR
    */
   private async createPullRequest(
     _project: Project,
@@ -1600,6 +1625,43 @@ ${i + 1}. **${item.title}**
 
       this.logger.debug(`Current branch: ${currentBranch}`);
 
+      // Phase 4: Get base branch from organization settings to check commit count
+      const organization = await this.orgRepo.findOne({
+        where: { id: task.project.organizationId },
+      });
+      const settings = (organization?.settings || {}) as OrganizationSettings;
+      const baseBranch = settings.baseBranch || 'main';
+
+      // Phase 4: Check if there are any commits to push
+      try {
+        const { stdout: commitCount } = await execAsync(
+          `git rev-list --count origin/${baseBranch}..HEAD`,
+          { cwd: worktreePath },
+        );
+
+        const count = parseInt(commitCount.trim(), 10);
+
+        if (count === 0) {
+          throw new Error(
+            `No commits to create PR - task made no changes. Branch ${currentBranch} has no commits ahead of origin/${baseBranch}.`,
+          );
+        }
+
+        this.logger.log(
+          `Found ${count} commit(s) to push for PR on branch ${currentBranch}`,
+        );
+      } catch (countError) {
+        const err = countError as Error;
+        // Re-throw if it's our custom error about no commits
+        if (err.message.includes('No commits to create PR')) {
+          throw err;
+        }
+        // Otherwise log and continue (might be git command issue)
+        this.logger.warn(
+          `Could not verify commit count: ${err.message}, proceeding with PR creation`,
+        );
+      }
+
       // 2. Push to remote
       await execAsync(`git push -u origin ${currentBranch}`, {
         cwd: worktreePath,
@@ -1608,13 +1670,7 @@ ${i + 1}. **${item.title}**
       // 3. PR body 구성
       const prBody = this.buildPRBody(task);
 
-      // 4. Get base branch from organization settings
-      const organization = await this.orgRepo.findOne({
-        where: { id: task.project.organizationId },
-      });
-      const settings = (organization?.settings || {}) as OrganizationSettings;
-      const baseBranch = settings.baseBranch || 'main';
-
+      // 4. Base branch was already retrieved above for commit count check
       this.logger.debug(`Creating PR with base branch: ${baseBranch}`);
 
       // 5. Create PR using gh CLI
