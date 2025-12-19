@@ -236,6 +236,22 @@ export class CodeReviewService implements ICodeReviewService {
           this.logger.error(
             `Cannot merge PR ${prId}: CI checks are not all passing`,
           );
+
+          // Update PR status to CHANGES_REQUESTED
+          pr.status = PullRequestStatus.CHANGES_REQUESTED;
+          pr.reviewComments = pr.reviewComments
+            ? `${pr.reviewComments}\n\n[CI FAILED] CI checks failed. Please fix and resubmit.`
+            : '[CI FAILED] CI checks failed. Please fix and resubmit.';
+          await this.prRepo.save(pr);
+
+          // Update Task status back to READY so team member can pick it up again
+          pr.task.status = TaskStatus.READY;
+          await this.taskRepo.save(pr.task);
+
+          this.logger.log(
+            `PR ${prId} marked as CHANGES_REQUESTED, Task ${pr.taskId} back to READY for rework`,
+          );
+
           throw new Error(
             'CI checks must pass before merging. Please fix any failures and try again.',
           );
