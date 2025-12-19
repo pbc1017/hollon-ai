@@ -882,18 +882,39 @@ describe('Phase 3 Complete Workflow (E2E)', () => {
 
           // ========== Step 12: Cleanup Test PRs ==========
           console.log('\n🧹 Step 12: Closing All Test PRs...\n');
-          console.log('   Note: Merged PRs will skip close (already merged)\n');
+          console.log(
+            '   Note: Finding all PRs from this test run (including auto-executed tasks)\n',
+          );
 
-          for (const prId of createdPRs) {
+          // Find all PRs created during this test (not just createdPRs array)
+          // This handles cases where background processes execute unblocked tasks
+          const TaskPullRequestEntity =
+            require('../../src/modules/collaboration/entities/task-pull-request.entity').TaskPullRequest;
+          const prRepository = dataSource.getRepository(TaskPullRequestEntity);
+
+          const allTestPRs = await prRepository
+            .createQueryBuilder('pr')
+            .leftJoinAndSelect('pr.task', 'task')
+            .where('task.project_id = :projectId', { projectId: project.id })
+            .andWhere('pr.status IN (:...statuses)', {
+              statuses: ['draft', 'ready_for_review', 'approved', 'merged'],
+            })
+            .getMany();
+
+          console.log(`   Found ${allTestPRs.length} PR(s) to close\n`);
+
+          for (const pr of allTestPRs) {
             try {
               await codeReviewService.closePullRequest(
-                prId,
+                pr.id,
                 'E2E test completed - closing PR automatically',
               );
-              console.log(`   ✅ Closed PR: ${prId.slice(0, 8)}`);
+              console.log(
+                `   ✅ Closed PR: ${pr.id.slice(0, 8)} (${pr.task.title.substring(0, 50)}...)`,
+              );
             } catch (error) {
               console.log(
-                `   ⚠️  Failed to close PR ${prId.slice(0, 8)}: ${(error as Error).message}`,
+                `   ⚠️  Failed to close PR ${pr.id.slice(0, 8)}: ${(error as Error).message}`,
               );
             }
           }
