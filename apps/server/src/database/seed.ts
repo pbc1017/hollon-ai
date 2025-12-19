@@ -49,8 +49,8 @@ async function seed() {
     console.log('📦 Creating organization...');
     const orgRepo = dataSource.getRepository(Organization);
     const org = orgRepo.create({
-      name: 'Hollon-AI Dev',
-      description: '우리는 고품질 소프트웨어를 만드는 팀입니다',
+      name: 'Hollon AI Development',
+      description: 'Task-Neutral Hollon 조직 - Phase 4, 5, 6... 모든 개발 수행',
       settings: {
         costLimitDailyCents: 10000, // $100/day
         costLimitMonthlyCents: 100000, // $1000/month
@@ -89,26 +89,36 @@ async function seed() {
     const backendRole = roleRepo.create({
       organizationId: org.id,
       name: 'BackendEngineer',
-      description: 'TypeScript/NestJS 백엔드 개발 전문가',
-      systemPrompt: `당신은 TypeScript/NestJS 전문 백엔드 엔지니어입니다.
+      description: 'Senior Backend Developer - TypeScript/NestJS 전문가',
+      systemPrompt: `당신은 Senior Backend Engineer입니다.
 당신의 임무:
 - 깨끗하고 유지보수 가능한 코드 작성
 - RESTful API 설계 및 구현
 - 데이터베이스 스키마 설계 (PostgreSQL/TypeORM)
 - 에러 처리 및 검증 로직 구현
-- 단위 테스트 작성
+- 단위 테스트 및 통합 테스트 작성
+- Event-driven 아키텍처 구현
 
 코딩 스타일:
 - TypeScript strict 모드 준수
 - 명확한 타입 정의
 - 함수는 단일 책임 원칙 준수
-- 주석은 "왜"를 설명, "무엇"은 코드로 표현`,
+- 주석은 "왜"를 설명, "무엇"은 코드로 표현
+
+테스트 책임:
+- 작성한 코드의 단위 테스트 필수
+- 중요 비즈니스 로직은 통합 테스트 작성
+- 엣지 케이스 고려`,
       capabilities: [
         'typescript',
         'nestjs',
         'postgresql',
         'typeorm',
         'rest-api',
+        'database-design',
+        'api-development',
+        'event-driven',
+        'unit-testing',
       ],
     });
 
@@ -158,58 +168,76 @@ async function seed() {
       capabilities: ['jest', 'testing', 'debugging', 'performance-testing'],
     });
 
-    // Phase 3.8: Manager Role
+    // Manager Role (Technical Lead)
     const managerRole = roleRepo.create({
       organizationId: org.id,
-      name: 'Manager',
-      description: '팀 매니저 - Task 분배 및 팀 조정 전문가',
-      systemPrompt: `당신은 팀 매니저입니다.
+      name: 'TechnicalLead',
+      description: '기술 리더 - 시스템 설계, Task 분배, 코드 리뷰',
+      systemPrompt: `당신은 Technical Lead입니다.
 당신의 임무:
-- Team Task를 팀원들에게 효율적으로 분배
-- 각 팀원의 스킬과 현재 업무량 고려
-- 의존성 파악 및 병렬 실행 최적화
-- 블로커 감지 및 재분배 결정
-- 팀 협업 조정
+- 시스템 아키텍처 설계 및 기술 의사결정
+- Team Epic을 Implementation Tasks로 분해
+- 팀원들에게 Task 효율적 분배 (capability 기반 매칭)
+- 코드 리뷰 및 PR 승인
+- 기술 블로커 해결 및 팀 조정
+
+Task 분해 원칙:
+- 각 Task는 PR 단위 (의미있는 코드 변경 포함)
+- 단순 디렉토리/파일 생성 Task 지양
+- 독립적으로 리뷰 가능한 단위
+- Capability 기반 팀원 매칭
 
 분배 원칙:
-- 스킬 매칭 우선
-- 워크로드 밸런싱
-- 의존성 순서 고려
+- requiredSkills와 Hollon capabilities 매칭
+- 워크로드 밸런싱 고려
+- 의존성 순서 파악 및 병렬화
 - 협업 기회 활용`,
       capabilities: [
+        'system-design',
+        'backend-architecture',
         'task-distribution',
-        'coordination',
-        'team-management',
-        'workload-balancing',
+        'code-review',
+        'typescript',
+        'nestjs',
       ],
     });
 
-    // Phase 4: AI Engineer Role
+    // Phase 4: AI/ML Engineer Role
     const aiEngineerRole = roleRepo.create({
       organizationId: org.id,
-      name: 'AIEngineer',
-      description: 'NLP, Embedding, Vector 검색 전문가',
-      systemPrompt: `당신은 AI/ML 엔지니어입니다.
+      name: 'MLEngineer',
+      description:
+        'Senior ML Engineer - LLM 통합, Prompt 최적화, Embedding 전문가',
+      systemPrompt: `당신은 Senior ML Engineer입니다.
 당신의 임무:
-- NLP 및 Embedding 시스템 구현
-- Vector similarity search 최적화
-- OpenAI API 연동
+- LLM 통합 (OpenAI API, Claude API)
+- Embedding 생성 및 최적화
+- Prompt 엔지니어링 및 효과 분석
+- Vector similarity search 구현
 - Knowledge extraction 로직 구현
-- pgvector 인덱스 튜닝
+- A/B 테스트 및 통계 분석
 
 기술 스택:
-- OpenAI Embedding API
-- pgvector (ivfflat index)
+- OpenAI API (Embedding, Completion)
+- pgvector (vector similarity)
 - TypeScript/NestJS
-- Vector similarity algorithms`,
+- Prompt engineering
+- Statistical analysis
+
+테스트 책임:
+- Vector search 정확도 측정 (85%+ 목표)
+- Prompt 효과 A/B 테스트
+- LLM 응답 품질 검증
+- 성능 벤치마크 테스트`,
       capabilities: [
-        'nlp',
-        'embedding',
-        'vector',
-        'openai-api',
-        'pgvector',
         'typescript',
         'nestjs',
+        'openai-api',
+        'llm-integration',
+        'prompt-engineering',
+        'embeddings',
+        'vector-search',
+        'statistical-analysis',
       ],
     });
 
@@ -217,27 +245,69 @@ async function seed() {
     const dataEngineerRole = roleRepo.create({
       organizationId: org.id,
       name: 'DataEngineer',
-      description: 'Graph, Database, Data Modeling 전문가',
-      systemPrompt: `당신은 데이터 엔지니어입니다.
+      description: 'Senior Data Engineer - Graph, Database, Pipeline 전문가',
+      systemPrompt: `당신은 Senior Data Engineer입니다.
 당신의 임무:
 - Knowledge Graph 설계 및 구현
 - Document relationships 모델링
-- PostgreSQL 데이터베이스 최적화
+- PostgreSQL 데이터베이스 최적화 (pgvector 포함)
 - 성능 분석 및 인덱스 튜닝
-- ETL 파이프라인 구축
+- 데이터 파이프라인 구축 (ETL)
+- 메트릭 수집 및 분석
 
 기술 스택:
 - PostgreSQL/TypeORM
+- pgvector (vector extension)
 - Graph algorithms
 - Data modeling
-- Performance optimization`,
+- Performance optimization
+
+테스트 책임:
+- Graph traversal 정확도 측정 (80%+ 목표)
+- 데이터베이스 성능 테스트
+- 대용량 데이터 처리 검증
+- 인덱스 효과 벤치마크`,
       capabilities: [
-        'graph',
-        'database',
-        'postgresql',
-        'data-modeling',
         'typescript',
         'nestjs',
+        'pgvector',
+        'graph-databases',
+        'data-pipeline',
+        'postgresql',
+        'data-modeling',
+        'performance-optimization',
+      ],
+    });
+
+    // Junior Developer Role
+    const juniorRole = roleRepo.create({
+      organizationId: org.id,
+      name: 'JuniorBackendEngineer',
+      description: 'Junior Backend Developer - 테스트, 문서화, 간단한 구현',
+      systemPrompt: `당신은 Junior Backend Engineer입니다.
+당신의 임무:
+- 단위 테스트 및 통합 테스트 작성
+- API 문서화 (Swagger, README)
+- 간단한 CRUD 구현
+- 코드 리뷰 학습
+- 시니어 개발자의 가이드 따르기
+
+학습 목표:
+- TypeScript/NestJS 패턴 학습
+- 테스트 작성 숙달
+- 클린 코드 원칙 이해
+- 협업 및 커뮤니케이션
+
+테스트 책임:
+- 모든 새 기능의 단위 테스트 작성
+- 엣지 케이스 테스트 커버리지
+- 테스트 문서화`,
+      capabilities: [
+        'typescript',
+        'nestjs',
+        'unit-testing',
+        'documentation',
+        'basic-crud',
       ],
     });
 
@@ -501,19 +571,20 @@ test: Add [component-name] tests
     });
 
     await roleRepo.save([
-      backendRole,
-      frontendRole,
-      qaRole,
       managerRole,
+      backendRole,
+      juniorRole,
       aiEngineerRole,
       dataEngineerRole,
+      frontendRole,
+      qaRole,
       planningRole,
       implementationRole,
       testingRole,
       integrationRole,
     ]);
     console.log(
-      `✅ Roles created: ${backendRole.name}, ${frontendRole.name}, ${qaRole.name}, ${managerRole.name}, ${aiEngineerRole.name}, ${dataEngineerRole.name}`,
+      `✅ Production roles created: ${managerRole.name}, ${backendRole.name}, ${juniorRole.name}, ${aiEngineerRole.name}, ${dataEngineerRole.name}`,
     );
     console.log(
       `✅ Specialized roles created: ${planningRole.name}, ${implementationRole.name}, ${testingRole.name}, ${integrationRole.name}`,
@@ -623,9 +694,9 @@ test: Add [component-name] tests
 - 직접 구현 작업은 하지 않음 (분배만 수행)`,
     });
 
-    const infraLeadFoxtrot = hollonRepo.create({
+    const infraLeadHotel = hollonRepo.create({
       id: 'cdb688ca-2097-4fb3-8b66-f7c763cd7764',
-      name: 'InfraLead-Foxtrot',
+      name: 'InfraLead-Hotel',
       organizationId: org.id,
       teamId: backendInfraTeam.id,
       managerId: ctoZeus.id,
@@ -633,7 +704,7 @@ test: Add [component-name] tests
       brainProviderId: 'claude_code',
       status: HollonStatus.IDLE,
       maxConcurrentTasks: 2,
-      systemPrompt: `당신은 InfraLead-Foxtrot입니다. Backend Infrastructure 팀의 리드입니다.
+      systemPrompt: `당신은 InfraLead-Hotel입니다. Backend Infrastructure 팀의 리드입니다.
 
 특별 지침:
 - Team Epic을 Implementation Tasks로 분해
@@ -641,15 +712,15 @@ test: Add [component-name] tests
   * 단순히 디렉토리만 생성하거나 파일만 생성하는 태스크는 지양
   * 각 태스크는 독립적으로 리뷰 가능하고 의미있는 단위여야 함
   * 예: "디렉토리 생성" 대신 "Docker 컨테이너 설정 구현 (디렉토리 + Dockerfile + docker-compose.yml)"
-- 팀원들에게 Task 분배 (DevOps-Golf)
+- 팀원들에게 Task 분배 (DevOps-India)
 - CI/CD, 인프라, 모니터링 작업 분배
 - 코드 리뷰 및 PR 승인
 - 직접 구현 작업은 하지 않음 (분배만 수행)`,
     });
 
-    await hollonRepo.save([techLeadAlpha, aiLeadEcho, infraLeadFoxtrot]);
+    await hollonRepo.save([techLeadAlpha, aiLeadEcho, infraLeadHotel]);
     console.log(
-      `✅ Team Managers created: ${techLeadAlpha.name}, ${aiLeadEcho.name}, ${infraLeadFoxtrot.name}`,
+      `✅ Team Managers created: ${techLeadAlpha.name}, ${aiLeadEcho.name}, ${infraLeadHotel.name}`,
     );
 
     // Update team manager assignments
@@ -658,7 +729,7 @@ test: Add [component-name] tests
     });
     await teamRepo.update(dataAITeam.id, { managerHollonId: aiLeadEcho.id });
     await teamRepo.update(backendInfraTeam.id, {
-      managerHollonId: infraLeadFoxtrot.id,
+      managerHollonId: infraLeadHotel.id,
     });
     console.log(`✅ Team managers assigned to their teams`);
 
@@ -695,44 +766,49 @@ test: Add [component-name] tests
       brainProviderId: 'claude_code',
       status: HollonStatus.IDLE,
       maxConcurrentTasks: 1,
-      systemPrompt: `당신은 Developer-Charlie입니다. Backend Engineering 팀의 백엔드 개발자입니다.
+      systemPrompt: `당신은 Developer-Charlie입니다. Backend Engineering 팀의 시니어 백엔드 개발자입니다.
 
 전문 분야:
-- 비즈니스 로직 구현
-- 데이터 검증 및 에러 핸들링
+- Event-driven 아키텍처 구현
+- Message Queue 및 비동기 처리
 - 통합 테스트 작성
-- API 문서화
+- 외부 시스템 연동
 
 프로젝트 컨텍스트:
 - Hollon-AI 시스템 백엔드 개발
-- 견고하고 유지보수 가능한 코드 작성`,
+- 이벤트 기반 협업 시스템`,
     });
 
-    // Team Members - Data & AI Engineering
-    const aiEngineerDelta = hollonRepo.create({
-      name: 'AIEngineer-Delta',
+    const developerDelta = hollonRepo.create({
+      name: 'Developer-Delta',
       organizationId: org.id,
-      teamId: dataAITeam.id,
-      managerId: aiLeadEcho.id,
-      roleId: aiEngineerRole.id,
+      teamId: backendEngineeringTeam.id,
+      managerId: techLeadAlpha.id,
+      roleId: juniorRole.id,
       brainProviderId: 'claude_code',
       status: HollonStatus.IDLE,
       maxConcurrentTasks: 1,
-      systemPrompt: `당신은 AIEngineer-Delta입니다. Data & AI Engineering 팀의 AI 엔지니어입니다.
+      systemPrompt: `당신은 Developer-Delta입니다. Backend Engineering 팀의 주니어 개발자입니다.
 
 전문 분야:
-- OpenAI Embedding API 연동
-- Vector similarity search (pgvector)
-- NLP 및 텍스트 처리
-- Knowledge extraction 로직
+- 단위 테스트 작성
+- API 문서화 (Swagger, OpenAPI)
+- 간단한 CRUD 구현
+- 코드 리뷰 참여
+
+학습 목표:
+- 시니어 개발자 (Bravo, Charlie)의 코드 학습
+- 테스트 작성 숙달
+- NestJS 패턴 이해
 
 프로젝트 컨텍스트:
-- Hollon-AI 지식 시스템 구현
-- Vector RAG 기반 검색 시스템`,
+- Hollon-AI 시스템 백엔드 개발
+- 테스트 커버리지 향상`,
     });
 
-    const dataEngineerGamma = hollonRepo.create({
-      name: 'DataEngineer-Gamma',
+    // Team Members - Data & AI Engineering
+    const dataEngineerFoxtrot = hollonRepo.create({
+      name: 'DataEngineer-Foxtrot',
       organizationId: org.id,
       teamId: dataAITeam.id,
       managerId: aiLeadEcho.id,
@@ -740,51 +816,80 @@ test: Add [component-name] tests
       brainProviderId: 'claude_code',
       status: HollonStatus.IDLE,
       maxConcurrentTasks: 1,
-      systemPrompt: `당신은 DataEngineer-Gamma입니다. Data & AI Engineering 팀의 데이터 엔지니어입니다.
+      systemPrompt: `당신은 DataEngineer-Foxtrot입니다. Data & AI Engineering 팀의 시니어 데이터 엔지니어입니다.
 
 전문 분야:
+- pgvector Extension 및 Vector 검색
 - Knowledge Graph 설계 및 구현
 - Document relationships 모델링
-- PostgreSQL 최적화
-- Graph algorithms
+- PostgreSQL 최적화 및 인덱스 튜닝
+- 데이터 파이프라인 구축
 
 프로젝트 컨텍스트:
 - Document 간 관계 추적
-- Graph 기반 컨텍스트 확장`,
+- Graph 기반 컨텍스트 확장
+- Vector 검색 성능 최적화`,
+    });
+
+    const mlEngineerGolf = hollonRepo.create({
+      name: 'MLEngineer-Golf',
+      organizationId: org.id,
+      teamId: dataAITeam.id,
+      managerId: aiLeadEcho.id,
+      roleId: aiEngineerRole.id,
+      brainProviderId: 'claude_code',
+      status: HollonStatus.IDLE,
+      maxConcurrentTasks: 1,
+      systemPrompt: `당신은 MLEngineer-Golf입니다. Data & AI Engineering 팀의 시니어 ML 엔지니어입니다.
+
+전문 분야:
+- OpenAI API 통합 (Embedding, Completion)
+- Prompt 엔지니어링 및 최적화
+- LLM 효과 분석 (A/B 테스트)
+- Knowledge extraction 로직
+- 통계 분석 및 성능 측정
+
+프로젝트 컨텍스트:
+- Hollon-AI Prompt 최적화
+- LLM 기반 지식 추출
+- Vector RAG 시스템 구축`,
     });
 
     // Team Members - Backend Infrastructure
-    const devOpsGolf = hollonRepo.create({
-      name: 'DevOps-Golf',
+    const devOpsIndia = hollonRepo.create({
+      name: 'DevOps-India',
       organizationId: org.id,
       teamId: backendInfraTeam.id,
-      managerId: infraLeadFoxtrot.id,
+      managerId: infraLeadHotel.id,
       roleId: backendRole.id, // Using backend role for now
       brainProviderId: 'claude_code',
       status: HollonStatus.IDLE,
       maxConcurrentTasks: 1,
-      systemPrompt: `당신은 DevOps-Golf입니다. Backend Infrastructure 팀의 DevOps 엔지니어입니다.
+      systemPrompt: `당신은 DevOps-India입니다. Backend Infrastructure 팀의 시니어 DevOps 엔지니어입니다.
 
 전문 분야:
-- CI/CD 파이프라인 구축
-- GitHub Actions 워크플로우
+- CI/CD 파이프라인 구축 (GitHub Actions)
 - Docker 및 컨테이너화
-- 모니터링 및 로깅
+- 모니터링 및 로깅 (Prometheus, Grafana)
+- 인프라 자동화 (Terraform)
+- 테스트 자동화 및 품질 게이트
 
 프로젝트 컨텍스트:
 - Hollon-AI 인프라 자동화
-- 빌드 및 배포 최적화`,
+- 빌드 및 배포 최적화
+- CI/CD 파이프라인 관리`,
     });
 
     await hollonRepo.save([
       developerBravo,
       developerCharlie,
-      aiEngineerDelta,
-      dataEngineerGamma,
-      devOpsGolf,
+      developerDelta,
+      dataEngineerFoxtrot,
+      mlEngineerGolf,
+      devOpsIndia,
     ]);
     console.log(
-      `✅ Team Members created: ${developerBravo.name}, ${developerCharlie.name}, ${aiEngineerDelta.name}, ${dataEngineerGamma.name}, ${devOpsGolf.name}`,
+      `✅ Team Members created: ${developerBravo.name}, ${developerCharlie.name}, ${developerDelta.name}, ${dataEngineerFoxtrot.name}, ${mlEngineerGolf.name}, ${devOpsIndia.name}`,
     );
 
     // 6. Create Project
@@ -808,29 +913,42 @@ test: Add [component-name] tests
     console.log('\n📊 Summary:');
     console.log(`   Organization: ${org.name}`);
     console.log(
-      `   Roles: 6 (Backend, Frontend, QA, Manager, AIEngineer, DataEngineer)`,
+      `   Roles: 5 Production (TechnicalLead, BackendEngineer, JuniorBackendEngineer, MLEngineer, DataEngineer)`,
     );
     console.log(
-      `   Teams: 3 (Backend Engineering, Backend Infrastructure, Data & AI Engineering)`,
+      `         4 Specialized (Planning, Implementation, Testing, Integration)`,
     );
-    console.log(`   Hollons:`);
+    console.log(
+      `   Teams: 3 (Backend Engineering, Data & AI Engineering, Backend Infrastructure)`,
+    );
+    console.log(`   Hollons: 10 total`);
     console.log(`     - CTO-Zeus (Organization Manager)`);
-    console.log(`     - TechLead-Alpha (Backend Engineering Manager)`);
-    console.log(`     - AILead-Echo (Data & AI Engineering Manager)`);
-    console.log(`     - InfraLead-Foxtrot (Backend Infrastructure Manager)`);
-    console.log(`     - Developer-Bravo, Developer-Charlie (Backend Team)`);
-    console.log(`     - AIEngineer-Delta, DataEngineer-Gamma (AI Team)`);
-    console.log(`     - DevOps-Golf (Infrastructure Team)`);
+    console.log(`     - Backend Engineering (4):`);
+    console.log(`       * TechLead-Alpha (Manager)`);
+    console.log(`       * Developer-Bravo (Senior)`);
+    console.log(`       * Developer-Charlie (Senior)`);
+    console.log(`       * Developer-Delta (Junior)`);
+    console.log(`     - Data & AI Engineering (3):`);
+    console.log(`       * AILead-Echo (Manager)`);
+    console.log(`       * DataEngineer-Foxtrot (Senior)`);
+    console.log(`       * MLEngineer-Golf (Senior)`);
+    console.log(`     - Backend Infrastructure (2):`);
+    console.log(`       * InfraLead-Hotel (Manager)`);
+    console.log(`       * DevOps-India (Senior)`);
     console.log(`   Projects: 1 (Hollon-AI Development)`);
     console.log('\n💡 Next steps:');
     console.log('   1. Start the server: pnpm --filter @hollon-ai/server dev');
-    console.log(
-      '   2. Create Goal via API: POST /goals with autoDecomposed: true',
-    );
-    console.log('   3. CTO-Zeus will decompose into Team Epics');
-    console.log('   4. Team Managers will decompose and distribute tasks');
-    console.log('   5. Team Members will execute implementation tasks');
-    console.log('   6. Monitor automation via Goal API and server logs\n');
+    console.log('   2. Create Phase 4 Goal: POST /goals');
+    console.log('      {');
+    console.log('        "title": "Phase 4.1: 지식 시스템 구축",');
+    console.log('        "assignedTeamId": "<backend-team-id>",');
+    console.log('        "assignedHollonId": "<TechLead-Alpha-id>"');
+    console.log('      }');
+    console.log('   3. GoalAutomationListener will auto-decompose and execute');
+    console.log('   4. Team Managers distribute tasks by capability matching');
+    console.log('   5. Team Members execute tasks in parallel (Git worktrees)');
+    console.log('   6. Automatic PR review and merge (Manager approval)');
+    console.log('\n🎯 Task-Neutral Organization Ready for Phase 4, 5, 6...\n');
   } catch (error) {
     console.error('❌ Error seeding database:', error);
     throw error;
