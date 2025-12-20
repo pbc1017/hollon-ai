@@ -2019,11 +2019,14 @@ Make sure to:
    * PR URL에서 PR 번호 추출
    */
   /**
-   * Phase 4: Check if parent task should resume after subtask completion
+   * Phase 4: Check if parent task should be reviewed after subtask completion
    *
    * When a subtask completes, check if ALL sibling subtasks are also complete.
-   * If yes, mark the parent task as READY so it can be executed again (resumed).
-   * The parent task will detect it's a resumed task and create a PR.
+   * If yes, mark the parent task as READY_FOR_REVIEW for manager review.
+   * Manager can then decide to:
+   * - Approve and continue (execute parent task → create PR)
+   * - Request changes or add more subtasks
+   * - Change direction if the approach was wrong
    */
   private async checkAndResumeParentTask(subtask: Task): Promise<void> {
     if (!subtask.parentTaskId) {
@@ -2069,17 +2072,18 @@ Make sure to:
     }
 
     this.logger.log(
-      `✅ All ${siblings.length} subtasks completed for parent task ${parentTask.id.slice(0, 8)}, marking as READY to resume`,
+      `✅ All ${siblings.length} subtasks completed for parent task ${parentTask.id.slice(0, 8)}, marking as READY_FOR_REVIEW for manager review`,
     );
 
-    // Mark parent task as READY so orchestrator can pick it up
+    // Mark parent task as READY_FOR_REVIEW so manager can review before resuming
+    // This allows checking if the direction is still correct or needs adjustment
     await this.taskRepo.update(parentTask.id, {
-      status: TaskStatus.READY,
+      status: TaskStatus.READY_FOR_REVIEW,
       assignedHollonId: parentTask.assignedHollonId, // Keep the same hollon
     });
 
     this.logger.log(
-      `Parent task ${parentTask.id.slice(0, 8)} marked as READY, will be resumed by hollon ${parentTask.assignedHollonId?.slice(0, 8)}`,
+      `Parent task ${parentTask.id.slice(0, 8)} marked as READY_FOR_REVIEW, awaiting manager review before PR creation`,
     );
   }
 
