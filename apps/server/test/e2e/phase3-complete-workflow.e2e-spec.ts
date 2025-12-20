@@ -469,17 +469,56 @@ describe('Phase 3 Complete Workflow (E2E)', () => {
                   }
                 }
 
-                // After all subtasks complete, parent task should be completed
-                // Check if PR was created for the parent task
+                // After all subtasks complete, check parent task status
                 console.log(
-                  `      🔍 Checking if parent task completed and PR created...`,
+                  `      🔍 Checking parent task status after subtasks...`,
                 );
-                const updatedParentTask = await taskRepo.findOne({
+                let updatedParentTask = await taskRepo.findOne({
                   where: { id: task.id },
                 });
 
-                if (updatedParentTask?.status === 'completed') {
-                  console.log(`      ✅ Parent task completed!`);
+                // Phase 4: Parent task should be READY_FOR_REVIEW after all subtasks complete
+                if (updatedParentTask?.status === 'ready_for_review') {
+                  console.log(
+                    `      ✅ Parent task is READY_FOR_REVIEW (all subtasks complete)`,
+                  );
+                  console.log(
+                    `      🔄 Simulating manager approval and executing parent task...`,
+                  );
+
+                  // Execute parent task (simulating manager approval)
+                  try {
+                    const parentHollon = await hollonRepo.findOne({
+                      where: { id: updatedParentTask.assignedHollonId },
+                    });
+
+                    if (parentHollon) {
+                      await taskExecutionService.executeTask(
+                        task.id,
+                        parentHollon.id,
+                      );
+                      console.log(
+                        `      ✅ Parent task executed (resumed after subtasks)`,
+                      );
+
+                      // Reload parent task to check final status
+                      updatedParentTask = await taskRepo.findOne({
+                        where: { id: task.id },
+                      });
+                    }
+                  } catch (parentError) {
+                    console.log(
+                      `      ⚠️  Error executing parent task: ${(parentError as Error).message}`,
+                    );
+                  }
+                }
+
+                // Check if PR was created for the parent task
+                console.log(`      🔍 Checking if PR was created...`);
+                if (updatedParentTask?.status === 'ready_for_review') {
+                  console.log(
+                    `      ✅ Parent task completed and ready for review!`,
+                  );
 
                   const TaskPullRequest =
                     require('../../src/modules/collaboration/entities/task-pull-request.entity').TaskPullRequest;
@@ -496,7 +535,7 @@ describe('Phase 3 Complete Workflow (E2E)', () => {
                     createdPRs.push(pr.id);
                   } else {
                     console.log(
-                      `      ⚠️  No PR found for completed parent task`,
+                      `      ⚠️  No PR found for parent task (unexpected)`,
                     );
                   }
                 } else {
