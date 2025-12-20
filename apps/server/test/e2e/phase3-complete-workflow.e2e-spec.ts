@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { AppModule } from '../../src/app.module';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Repository, In } from 'typeorm';
 import * as path from 'path';
 import * as fs from 'fs';
 import { promisify } from 'util';
@@ -918,6 +918,67 @@ describe('Phase 3 Complete Workflow (E2E)', () => {
             console.log(
               '\n⚠️  Step 11.5: Skipping dependency test (no PR merged)',
             );
+          }
+
+          // ========== Step 11.6: Execute Unblocked Task ==========
+          if (mergedCount > 0 && firstPRResult) {
+            console.log('\n🔄 Step 11.6: Executing Unblocked Task...\n');
+
+            // Find tasks that were unblocked
+            const completedTask = await taskRepo.findOne({
+              where: { id: firstPRResult.taskId },
+              relations: ['dependentTasks'],
+            });
+
+            if (completedTask && completedTask.dependentTasks) {
+              const dependentTasks = await taskRepo.find({
+                where: {
+                  id: In(completedTask.dependentTasks.map((t) => t.id)),
+                  status: TaskStatus.READY,
+                },
+                relations: ['dependencies'],
+              });
+
+              if (dependentTasks.length > 0) {
+                // Execute first unblocked task to test dependency-based worktree
+                const unblockedTask = dependentTasks[0];
+                console.log(
+                  `   Executing unblocked task: "${unblockedTask.title.slice(0, 40)}..."`,
+                );
+
+                try {
+                  const hollonForTask = devBravo; // Use same hollon
+                  await taskExecutionService.executeTask(
+                    unblockedTask.id,
+                    hollonForTask.id,
+                  );
+
+                  // Reload task to check result
+                  const completedUnblockedTask = await taskRepo.findOne({
+                    where: { id: unblockedTask.id },
+                  });
+
+                  console.log(
+                    `   ✅ Unblocked task executed: ${completedUnblockedTask?.status}`,
+                  );
+
+                  // Track this execution for PR cleanup
+                  executionResults.push({
+                    taskId: unblockedTask.id,
+                    taskTitle: unblockedTask.title,
+                    hollonId: hollonForTask.id,
+                    hollonName: 'Developer-Bravo',
+                    success: true,
+                  });
+                } catch (error) {
+                  console.log(
+                    `   ⚠️  Error executing unblocked task: ${(error as Error).message}`,
+                  );
+                }
+              } else {
+                console.log('   ℹ️  No unblocked tasks available to execute');
+              }
+            }
           }
 
           // ========== Step 12: Cleanup Test PRs ==========
