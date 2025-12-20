@@ -23,7 +23,6 @@ import {
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 import { BrainResponse } from '../../brain-provider/interfaces/brain-provider.interface';
 import { ICodeReviewPort } from '../domain/ports/code-review.port';
-import { KnowledgeContext } from '../../brain-provider/services/knowledge-injection.service';
 import { QualityGateService } from './quality-gate.service';
 import { IHollonService } from '../../hollon/domain/hollon-service.interface';
 
@@ -1022,18 +1021,9 @@ ${i + 1}. **${item.title}**
     // 프롬프트 구성 (Phase 4: Pass hollon for depth-aware prompting)
     const prompt = this.buildTaskPrompt(task, hollon);
 
-    // Knowledge Context 구성 (Phase 3.5)
-    const knowledgeContext: KnowledgeContext = {
-      task,
-      organizationId: task.project.organizationId,
-      projectId: task.projectId,
-      requiredSkills: task.requiredSkills,
-      tags: task.tags,
-    };
-
     this.logger.log(`Executing brain provider for task ${task.id}`);
 
-    // BrainProvider 실행 (자동으로 지식 주입됨)
+    // BrainProvider 실행
     const result = await this.brainProvider.executeWithTracking(
       {
         prompt,
@@ -1047,7 +1037,6 @@ ${i + 1}. **${item.title}**
         hollonId: hollon.id,
         taskId: task.id,
       },
-      knowledgeContext, // Phase 3.5: 지식 주입
     );
 
     this.logger.log(

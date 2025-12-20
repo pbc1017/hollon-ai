@@ -26,8 +26,6 @@ import { IncidentModule } from './modules/incident/incident.module';
 import { ConflictResolutionModule } from './modules/conflict-resolution/conflict-resolution.module';
 import { GoalModule } from './modules/goal/goal.module';
 import { DddProvidersModule } from './modules/ddd-providers/ddd-providers.module';
-import { KnowledgeModule } from './modules/knowledge/knowledge.module';
-import { UserModule } from './modules/user/user.module';
 
 @Module({
   imports: [
@@ -57,7 +55,6 @@ import { UserModule } from './modules/user/user.module';
     HealthModule,
     OrganizationModule,
     RoleModule,
-    UserModule,
     TeamModule,
     HollonModule,
     ProjectModule,
@@ -74,7 +71,6 @@ import { UserModule } from './modules/user/user.module';
     IncidentModule,
     ConflictResolutionModule,
     GoalModule,
-    KnowledgeModule,
 
     // ✅ DDD: Global Port Providers Module
     DddProvidersModule,

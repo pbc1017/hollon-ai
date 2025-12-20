@@ -9,17 +9,14 @@ import { ProcessManagerService } from './services/process-manager.service';
 import { CostCalculatorService } from './services/cost-calculator.service';
 import { ResponseParserService } from './services/response-parser.service';
 import { BrainProviderConfigService } from './services/brain-provider-config.service';
-import { KnowledgeInjectionService } from './services/knowledge-injection.service';
 import { ClaudeCodeProvider } from './providers/claude-code.provider';
 import { DocumentModule } from '../document/document.module';
-import { KnowledgeModule } from '../knowledge/knowledge.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([BrainProviderConfig, CostRecord]),
     ConfigModule,
-    DocumentModule, // Phase 3.5: 지식 문서 접근
-    KnowledgeModule, // Phase 3.5: 지식 검색 서비스 사용
+    DocumentModule,
   ],
   controllers: [BrainProviderController],
   providers: [
@@ -28,7 +25,6 @@ import { KnowledgeModule } from '../knowledge/knowledge.module';
     CostCalculatorService,
     ResponseParserService,
     BrainProviderConfigService,
-    KnowledgeInjectionService, // Phase 3.5: 지식 주입
 
     // Provider
     ClaudeCodeProvider,
