@@ -62,10 +62,6 @@ export class Hollon extends BaseEntity {
   @Column({ default: 0 })
   depth: number;
 
-  // Phase 4: 임시 홀론 자동 정리를 위한 만료 시간
-  @Column({ name: 'expires_at', type: 'timestamp', nullable: true })
-  expiresAt: Date | null;
-
   @Column({ name: 'organization_id' })
   organizationId: string;
 
