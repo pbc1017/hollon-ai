@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CodeReviewService } from './code-review.service';
 import {
   TaskPullRequest,
@@ -120,13 +119,6 @@ describe('CodeReviewService', () => {
         {
           provide: MessageService,
           useValue: mockMessageService,
-        },
-        {
-          provide: EventEmitter2,
-          useValue: {
-            emit: jest.fn(),
-            emitAsync: jest.fn(),
-          },
         },
       ],
     }).compile();

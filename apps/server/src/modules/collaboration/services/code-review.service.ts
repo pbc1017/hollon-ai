@@ -5,7 +5,6 @@ import { Repository } from 'typeorm';
 import { promisify } from 'util';
 import { exec } from 'child_process';
 import { existsSync } from 'fs';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 
 const execAsync = promisify(exec);
 import {
@@ -42,7 +41,6 @@ export class CodeReviewService implements ICodeReviewService {
     private readonly hollonService: HollonService,
     private readonly messageService: MessageService,
     private readonly moduleRef: ModuleRef,
-    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -341,11 +339,11 @@ export class CodeReviewService implements ICodeReviewService {
           status: TaskStatus.READY,
         });
 
-        // Emit task.assigned event to trigger automatic execution
-        this.eventEmitter.emit('task.assigned', {
-          taskId: dependentTask.id,
-          hollonId: dependentTask.assignedHollonId,
-        });
+        // TODO: Re-enable event emission once EventEmitterModule is properly configured
+        // this.eventEmitter.emit('task.assigned', {
+        //   taskId: dependentTask.id,
+        //   hollonId: dependentTask.assignedHollonId,
+        // });
 
         this.logger.log(
           `✅ Unblocked dependent task ${dependentTask.id.slice(0, 8)}: ${dependentTask.title}`,
