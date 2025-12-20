@@ -340,7 +340,8 @@ describe('Phase 3 Complete Workflow (E2E)', () => {
 
         // Execute READY tasks (Brain already set dependencies)
         // BLOCKED tasks will be unblocked after their dependencies are completed
-        const tasksToExecute = assignedTasks.slice(0, 1); // Execute first READY task
+        // Execute 2 tasks to test both LOW and MEDIUM complexity scenarios
+        const tasksToExecute = assignedTasks.slice(0, 2);
         const executionResults: Array<{
           taskId: string;
           taskTitle: string;
