@@ -270,6 +270,9 @@ export class TaskExecutionService {
             status: HollonStatus.IDLE,
             currentTaskId: null as any,
           });
+
+          // Check if parent task should resume
+          await this.checkAndResumeParentTask(task);
         }
 
         return { prUrl, worktreePath };
@@ -423,6 +426,9 @@ export class TaskExecutionService {
           status: HollonStatus.IDLE,
           currentTaskId: null as any,
         });
+
+        // Check if parent task should resume
+        await this.checkAndResumeParentTask(task);
       }
 
       return { prUrl, worktreePath };
@@ -2012,6 +2018,71 @@ Make sure to:
   /**
    * PR URL에서 PR 번호 추출
    */
+  /**
+   * Phase 4: Check if parent task should resume after subtask completion
+   *
+   * When a subtask completes, check if ALL sibling subtasks are also complete.
+   * If yes, mark the parent task as READY so it can be executed again (resumed).
+   * The parent task will detect it's a resumed task and create a PR.
+   */
+  private async checkAndResumeParentTask(subtask: Task): Promise<void> {
+    if (!subtask.parentTaskId) {
+      // No parent task, nothing to resume
+      return;
+    }
+
+    this.logger.log(
+      `Checking if parent task ${subtask.parentTaskId.slice(0, 8)} should resume after subtask ${subtask.id.slice(0, 8)} completed`,
+    );
+
+    // Load parent task with all subtasks
+    const parentTask = await this.taskRepo.findOne({
+      where: { id: subtask.parentTaskId },
+      relations: ['assignedHollon'],
+    });
+
+    if (!parentTask) {
+      this.logger.warn(
+        `Parent task ${subtask.parentTaskId} not found for subtask ${subtask.id}`,
+      );
+      return;
+    }
+
+    // Load all sibling subtasks
+    const siblings = await this.taskRepo.find({
+      where: { parentTaskId: subtask.parentTaskId },
+    });
+
+    // Check if all subtasks are completed
+    const allCompleted = siblings.every(
+      (s) => s.status === TaskStatus.COMPLETED,
+    );
+
+    if (!allCompleted) {
+      const completedCount = siblings.filter(
+        (s) => s.status === TaskStatus.COMPLETED,
+      ).length;
+      this.logger.log(
+        `Parent task ${parentTask.id.slice(0, 8)}: ${completedCount}/${siblings.length} subtasks completed, waiting for others`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `✅ All ${siblings.length} subtasks completed for parent task ${parentTask.id.slice(0, 8)}, marking as READY to resume`,
+    );
+
+    // Mark parent task as READY so orchestrator can pick it up
+    await this.taskRepo.update(parentTask.id, {
+      status: TaskStatus.READY,
+      assignedHollonId: parentTask.assignedHollonId, // Keep the same hollon
+    });
+
+    this.logger.log(
+      `Parent task ${parentTask.id.slice(0, 8)} marked as READY, will be resumed by hollon ${parentTask.assignedHollonId?.slice(0, 8)}`,
+    );
+  }
+
   private extractPRNumber(prUrl: string): number | null {
     // GitHub PR URL 형식: https://github.com/owner/repo/pull/123
     const match = prUrl.match(/\/pull\/(\d+)/);
