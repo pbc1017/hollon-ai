@@ -1,6 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { EventEmitterModule } from '@nestjs/event-emitter';
 import { CollaborationSession } from './entities/collaboration-session.entity';
 import { TaskPullRequest } from './entities/task-pull-request.entity';
 import { Hollon } from '../hollon/entities/hollon.entity';
@@ -25,7 +24,6 @@ import { BrainProviderModule } from '../brain-provider/brain-provider.module';
       Task,
       Role,
     ]),
-    EventEmitterModule,
     forwardRef(() => MessageModule),
     forwardRef(() => HollonModule),
     BrainProviderModule,
