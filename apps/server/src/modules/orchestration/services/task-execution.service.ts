@@ -938,7 +938,13 @@ ${i + 1}. **${item.title}**
 
         // Create worktree from origin/baseBranch or local baseBranch
         // Prefer origin branch to ensure latest code, but fall back to local if fetch failed
-        const branchRef = useOriginBranch ? `origin/${baseBranch}` : baseBranch;
+        // In test mode with worktree dependency branches, use local branch (not in origin)
+        const isWorktreeBranch = baseBranch.startsWith('wt-hollon-');
+        const shouldUseLocalBranch =
+          !useOriginBranch || (isTestMode && isWorktreeBranch);
+        const branchRef = shouldUseLocalBranch
+          ? baseBranch
+          : `origin/${baseBranch}`;
         this.logger.log(
           `Creating worktree from ${branchRef} for task ${task.id.slice(0, 8)}`,
         );
