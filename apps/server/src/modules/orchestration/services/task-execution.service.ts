@@ -131,7 +131,7 @@ export class TaskExecutionService {
 
     const task = await this.taskRepo.findOne({
       where: { id: taskId },
-      relations: ['project', 'project.organization'],
+      relations: ['project', 'project.organization', 'dependencies'],
     });
 
     if (!task) {
@@ -871,7 +871,34 @@ ${i + 1}. **${item.title}**
       where: { id: project.organizationId },
     });
     const settings = (organization?.settings || {}) as OrganizationSettings;
-    const baseBranch = settings.baseBranch || 'main';
+    let baseBranch = settings.baseBranch || 'main';
+
+    // Phase 4: In TEST mode only, use dependency's branch as base
+    // Production: PRs are merged to main, so always use main as base
+    // Test: PRs are NOT merged, so use dependency's branch to get its changes
+    const isTestMode = process.env.NODE_ENV === 'test';
+
+    if (isTestMode && task.dependencies && task.dependencies.length > 0) {
+      const completedDeps = task.dependencies.filter(
+        (dep) => dep.status === TaskStatus.COMPLETED,
+      );
+
+      if (completedDeps.length > 0) {
+        // Use the most recently completed dependency's branch
+        const mostRecentDep = completedDeps.sort(
+          (a, b) =>
+            (b.completedAt?.getTime() || 0) - (a.completedAt?.getTime() || 0),
+        )[0];
+
+        // Construct the branch name from the dependency task
+        const depBranch = `wt-hollon-${mostRecentDep.assignedHollonId?.slice(0, 8)}-task-${mostRecentDep.id.slice(0, 8)}`;
+
+        this.logger.log(
+          `[TEST MODE] Task has completed dependency ${mostRecentDep.id.slice(0, 8)}, using its branch as base: ${depBranch}`,
+        );
+        baseBranch = depBranch;
+      }
+    }
 
     // Create new worktree for this task
     this.logger.log(
