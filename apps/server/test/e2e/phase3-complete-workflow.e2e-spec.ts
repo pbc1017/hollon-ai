@@ -886,8 +886,7 @@ describe('Phase 3 Complete Workflow (E2E)', () => {
             '   Note: Finding all PRs from this test run (including auto-executed tasks)\n',
           );
 
-          // Find all PRs created during this test (not just createdPRs array)
-          // This handles cases where background processes execute unblocked tasks
+          // Method 1: Find PRs in database
           const TaskPullRequestEntity =
             require('../../src/modules/collaboration/entities/task-pull-request.entity').TaskPullRequest;
           const prRepository = dataSource.getRepository(TaskPullRequestEntity);
@@ -901,7 +900,7 @@ describe('Phase 3 Complete Workflow (E2E)', () => {
             })
             .getMany();
 
-          console.log(`   Found ${allTestPRs.length} PR(s) to close\n`);
+          console.log(`   Found ${allTestPRs.length} PR(s) in database\n`);
 
           for (const pr of allTestPRs) {
             try {
@@ -917,6 +916,50 @@ describe('Phase 3 Complete Workflow (E2E)', () => {
                 `   ⚠️  Failed to close PR ${pr.id.slice(0, 8)}: ${(error as Error).message}`,
               );
             }
+          }
+
+          // Method 2: Also use gh CLI to close any open PRs created in last 10 minutes
+          // This handles cases where PRs are created on GitHub but not yet in DB
+          try {
+            console.log('\n   Checking for recent open PRs using gh CLI...\n');
+            const { execSync } = require('child_process');
+
+            // Get all open PRs created in last 10 minutes
+            const prListOutput = execSync(
+              'gh pr list --state open --json number,title,createdAt --limit 50',
+              { encoding: 'utf-8' },
+            );
+
+            const openPRs = JSON.parse(prListOutput);
+            const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+            const recentPRs = openPRs.filter((pr: any) => {
+              const createdAt = new Date(pr.createdAt);
+              return createdAt > tenMinutesAgo;
+            });
+
+            console.log(
+              `   Found ${recentPRs.length} recent open PR(s) via gh CLI\n`,
+            );
+
+            for (const pr of recentPRs) {
+              try {
+                execSync(
+                  `gh pr close ${pr.number} --comment "E2E test cleanup - closing automatically"`,
+                  { encoding: 'utf-8' },
+                );
+                console.log(
+                  `   ✅ Closed PR #${pr.number}: ${pr.title.substring(0, 50)}...`,
+                );
+              } catch (error) {
+                console.log(
+                  `   ⚠️  Failed to close PR #${pr.number}: ${(error as Error).message}`,
+                );
+              }
+            }
+          } catch (error) {
+            console.log(
+              `   ⚠️  Failed to query/close PRs via gh CLI: ${(error as Error).message}`,
+            );
           }
         }
 
