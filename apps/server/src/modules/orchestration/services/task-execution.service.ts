@@ -11,7 +11,11 @@ import {
   TaskPriority,
 } from '../../task/entities/task.entity';
 import { Project } from '../../project/entities/project.entity';
-import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
+import {
+  Hollon,
+  HollonStatus,
+  HollonLifecycle,
+} from '../../hollon/entities/hollon.entity';
 import { Team } from '../../team/entities/team.entity';
 import { Organization } from '../../organization/entities/organization.entity';
 import { Role } from '../../role/entities/role.entity';
@@ -201,51 +205,72 @@ export class TaskExecutionService {
           0,
         );
 
-        // Create PR and continue with normal flow
-        const prUrl = await this.createPullRequest(
-          task.project,
-          task,
-          worktreePath,
-        );
-        this.logger.log(`PR created for resumed task: ${prUrl}`);
+        // Create PR only for permanent hollons
+        let prUrl: string | null = null;
 
-        // Wait for CI checks
-        this.logger.log(`Waiting for CI checks to complete for PR: ${prUrl}`);
-        await this.waitForCIChecks(prUrl, worktreePath);
-
-        // Check CI status
-        const ciResult = await this.checkCIStatus(prUrl, worktreePath);
-
-        if (!ciResult.passed) {
-          this.logger.error(
-            `CI checks failed for resumed task ${taskId}: ${ciResult.failedChecks.join(', ')}`,
-          );
-
-          const { shouldRetry, feedback } = await this.handleCIFailure(
+        if (hollon.lifecycle === HollonLifecycle.PERMANENT) {
+          // ✅ Permanent hollon: Full PR workflow for resumed task
+          prUrl = await this.createPullRequest(
+            task.project,
             task,
-            ciResult.failedChecks,
-            prUrl,
             worktreePath,
           );
+          this.logger.log(`PR created for resumed task: ${prUrl}`);
 
-          if (shouldRetry) {
-            throw new Error(`CI_FAILURE_RETRY: ${feedback}`);
-          } else {
-            throw new Error(
-              `CI_FAILURE_MAX_RETRIES: Maximum CI retry attempts reached. ${feedback}`,
+          // Wait for CI checks
+          this.logger.log(`Waiting for CI checks to complete for PR: ${prUrl}`);
+          await this.waitForCIChecks(prUrl, worktreePath);
+
+          // Check CI status
+          const ciResult = await this.checkCIStatus(prUrl, worktreePath);
+
+          if (!ciResult.passed) {
+            this.logger.error(
+              `CI checks failed for resumed task ${taskId}: ${ciResult.failedChecks.join(', ')}`,
             );
+
+            const { shouldRetry, feedback } = await this.handleCIFailure(
+              task,
+              ciResult.failedChecks,
+              prUrl,
+              worktreePath,
+            );
+
+            if (shouldRetry) {
+              throw new Error(`CI_FAILURE_RETRY: ${feedback}`);
+            } else {
+              throw new Error(
+                `CI_FAILURE_MAX_RETRIES: Maximum CI retry attempts reached. ${feedback}`,
+              );
+            }
           }
+
+          this.logger.log(`All CI checks passed for resumed task ${taskId}`);
+
+          // Request code review
+          await this.requestCodeReview(task, prUrl, hollonId, worktreePath);
+
+          // Mark as ready for review
+          await this.taskRepo.update(taskId, {
+            status: TaskStatus.READY_FOR_REVIEW,
+          });
+        } else {
+          // ✅ Temporary hollon: Mark as COMPLETED without PR
+          this.logger.log(
+            `Temporary hollon ${hollon.id.slice(0, 8)} completed resumed task ${taskId.slice(0, 8)} - marking as COMPLETED (no PR)`,
+          );
+
+          await this.taskRepo.update(taskId, {
+            status: TaskStatus.COMPLETED,
+            completedAt: new Date(),
+          });
+
+          // Release hollon
+          await this.hollonRepo.update(hollonId, {
+            status: HollonStatus.IDLE,
+            currentTaskId: null as any,
+          });
         }
-
-        this.logger.log(`All CI checks passed for resumed task ${taskId}`);
-
-        // Request code review
-        await this.requestCodeReview(task, prUrl, hollonId, worktreePath);
-
-        // Mark as ready for review
-        await this.taskRepo.update(taskId, {
-          status: TaskStatus.READY_FOR_REVIEW,
-        });
 
         return { prUrl, worktreePath };
       }
@@ -334,54 +359,71 @@ export class TaskExecutionService {
         brainResult.cost.totalCostCents,
       );
 
-      // 7. PR 생성
-      const prUrl = await this.createPullRequest(
-        task.project,
-        task,
-        worktreePath,
-      );
-      this.logger.log(`PR created: ${prUrl}`);
+      // 7. PR 생성 (임시 홀론은 PR 생성 안함)
+      let prUrl: string | null = null;
 
-      // 8. Phase 4: Wait for CI checks to complete
-      this.logger.log(`Waiting for CI checks to complete for PR: ${prUrl}`);
-      await this.waitForCIChecks(prUrl, worktreePath);
+      if (hollon.lifecycle === HollonLifecycle.PERMANENT) {
+        // ✅ Permanent hollon: Full PR workflow
+        prUrl = await this.createPullRequest(task.project, task, worktreePath);
+        this.logger.log(`PR created: ${prUrl}`);
 
-      // 9. Phase 4: Check CI status
-      const ciResult = await this.checkCIStatus(prUrl, worktreePath);
+        // 8. Phase 4: Wait for CI checks to complete
+        this.logger.log(`Waiting for CI checks to complete for PR: ${prUrl}`);
+        await this.waitForCIChecks(prUrl, worktreePath);
 
-      if (!ciResult.passed) {
-        this.logger.error(
-          `CI checks failed for task ${taskId}: ${ciResult.failedChecks.join(', ')}`,
-        );
+        // 9. Phase 4: Check CI status
+        const ciResult = await this.checkCIStatus(prUrl, worktreePath);
 
-        // Handle CI failure and get retry decision
-        const { shouldRetry, feedback } = await this.handleCIFailure(
-          task,
-          ciResult.failedChecks,
-          prUrl,
-          worktreePath,
-        );
-
-        if (shouldRetry) {
-          // Throw error with feedback for orchestrator to retry
-          throw new Error(`CI_FAILURE_RETRY: ${feedback}`);
-        } else {
-          // Max retries reached, fail the task
-          throw new Error(
-            `CI_FAILURE_MAX_RETRIES: Maximum CI retry attempts reached. ${feedback}`,
+        if (!ciResult.passed) {
+          this.logger.error(
+            `CI checks failed for task ${taskId}: ${ciResult.failedChecks.join(', ')}`,
           );
+
+          // Handle CI failure and get retry decision
+          const { shouldRetry, feedback } = await this.handleCIFailure(
+            task,
+            ciResult.failedChecks,
+            prUrl,
+            worktreePath,
+          );
+
+          if (shouldRetry) {
+            // Throw error with feedback for orchestrator to retry
+            throw new Error(`CI_FAILURE_RETRY: ${feedback}`);
+          } else {
+            // Max retries reached, fail the task
+            throw new Error(
+              `CI_FAILURE_MAX_RETRIES: Maximum CI retry attempts reached. ${feedback}`,
+            );
+          }
         }
+
+        this.logger.log(`All CI checks passed for task ${taskId}`);
+
+        // 10. CodeReview 요청 (Phase 2 활용)
+        await this.requestCodeReview(task, prUrl, hollonId, worktreePath);
+
+        // 11. Task를 READY_FOR_REVIEW로 변경 (Phase 3.16: Manager review 대기)
+        await this.taskRepo.update(taskId, {
+          status: TaskStatus.READY_FOR_REVIEW,
+        });
+      } else {
+        // ✅ Temporary hollon: Skip PR workflow, mark as COMPLETED
+        this.logger.log(
+          `Temporary hollon ${hollon.id.slice(0, 8)} completed subtask ${taskId.slice(0, 8)} - marking as COMPLETED (no PR)`,
+        );
+
+        await this.taskRepo.update(taskId, {
+          status: TaskStatus.COMPLETED,
+          completedAt: new Date(),
+        });
+
+        // Release hollon
+        await this.hollonRepo.update(hollonId, {
+          status: HollonStatus.IDLE,
+          currentTaskId: null as any,
+        });
       }
-
-      this.logger.log(`All CI checks passed for task ${taskId}`);
-
-      // 10. CodeReview 요청 (Phase 2 활용)
-      await this.requestCodeReview(task, prUrl, hollonId, worktreePath);
-
-      // 11. Task를 READY_FOR_REVIEW로 변경 (Phase 3.16: Manager review 대기)
-      await this.taskRepo.update(taskId, {
-        status: TaskStatus.READY_FOR_REVIEW,
-      });
 
       return { prUrl, worktreePath };
     } catch (error) {
