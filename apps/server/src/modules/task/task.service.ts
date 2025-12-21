@@ -215,6 +215,15 @@ export class TaskService {
       });
     }
 
+    // ✅ Check if any dependent tasks can now be unblocked
+    this.checkAndUnblockDependentTasks(id).catch((error) => {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(
+        `Failed to check/unblock dependent tasks for ${id}: ${errorMessage}`,
+      );
+    });
+
     return savedTask;
   }
 
@@ -282,6 +291,74 @@ export class TaskService {
     this.logger.log(
       `✅ Parent task ${parentTaskId} resumed (READY state), will continue with PR creation`,
     );
+  }
+
+  /**
+   * Phase 4: Check and unblock dependent tasks when a prerequisite task completes
+   * Called when a task completes to check if any BLOCKED tasks can now proceed
+   */
+  private async checkAndUnblockDependentTasks(taskId: string): Promise<void> {
+    // Query tasks that have this task in their dependencies and are currently BLOCKED
+    const allTasksWithDependencies = await this.taskRepo
+      .createQueryBuilder('task')
+      .leftJoinAndSelect('task.dependencies', 'dependency')
+      .where('dependency.id = :taskId', { taskId })
+      .andWhere('task.status = :status', { status: TaskStatus.BLOCKED })
+      .getMany();
+
+    if (allTasksWithDependencies.length === 0) {
+      this.logger.debug(`No BLOCKED tasks depend on completed task ${taskId}`);
+      return;
+    }
+
+    this.logger.log(
+      `Checking ${allTasksWithDependencies.length} BLOCKED task(s) that depend on ${taskId}`,
+    );
+
+    let unblockedCount = 0;
+
+    for (const dependentTask of allTasksWithDependencies) {
+      // Reload dependencies to ensure we have latest status
+      const taskWithDeps = await this.taskRepo.findOne({
+        where: { id: dependentTask.id },
+        relations: ['dependencies'],
+      });
+
+      if (!taskWithDeps) {
+        continue;
+      }
+
+      // Check if ALL dependencies are now completed
+      const allDepsCompleted = taskWithDeps.dependencies.every(
+        (dep) => dep.status === TaskStatus.COMPLETED,
+      );
+
+      if (allDepsCompleted) {
+        // Unblock this task
+        await this.taskRepo.update(dependentTask.id, {
+          status: TaskStatus.READY,
+        });
+
+        unblockedCount++;
+        this.logger.log(
+          `✅ Unblocked task ${dependentTask.id} (${dependentTask.title}) - all dependencies completed`,
+        );
+      } else {
+        const remainingDeps = taskWithDeps.dependencies
+          .filter((dep) => dep.status !== TaskStatus.COMPLETED)
+          .map((dep) => dep.title);
+
+        this.logger.debug(
+          `Task ${dependentTask.id} still blocked by: ${remainingDeps.join(', ')}`,
+        );
+      }
+    }
+
+    if (unblockedCount > 0) {
+      this.logger.log(
+        `✅ Unblocked ${unblockedCount} task(s) after completing ${taskId}`,
+      );
+    }
   }
 
   /**

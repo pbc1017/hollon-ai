@@ -35,6 +35,6 @@ export class ExecuteBrainDto {
   @IsOptional()
   @IsInt()
   @Min(5000)
-  @Max(600000)
+  @Max(1200000) // 20 minutes for complex code generation tasks
   timeoutMs?: number;
 }

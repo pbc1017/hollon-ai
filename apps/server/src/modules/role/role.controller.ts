@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   ParseUUIDPipe,
+  Query,
 } from '@nestjs/common';
 import { RoleService } from './role.service';
 import { CreateRoleDto } from './dto/create-role.dto';
@@ -39,5 +40,19 @@ export class RoleController {
   @Delete(':id')
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.roleService.remove(id);
+  }
+
+  @Get('organization/:organizationId')
+  findByOrganization(
+    @Param('organizationId', ParseUUIDPipe) organizationId: string,
+  ) {
+    return this.roleService.findByOrganization(organizationId);
+  }
+
+  @Get('available-for-temporary')
+  findAvailableForTemporaryHollon(
+    @Query('organizationId', ParseUUIDPipe) organizationId?: string,
+  ) {
+    return this.roleService.findAvailableForTemporaryHollon(organizationId);
   }
 }

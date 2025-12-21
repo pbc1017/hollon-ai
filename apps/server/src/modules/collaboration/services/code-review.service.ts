@@ -1,8 +1,10 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { promisify } from 'util';
 import { exec } from 'child_process';
+import { existsSync } from 'fs';
 
 const execAsync = promisify(exec);
 import {
@@ -38,6 +40,7 @@ export class CodeReviewService implements ICodeReviewService {
     private readonly roleRepo: Repository<Role>,
     private readonly hollonService: HollonService,
     private readonly messageService: MessageService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   /**
@@ -231,6 +234,22 @@ export class CodeReviewService implements ICodeReviewService {
           this.logger.error(
             `Cannot merge PR ${prId}: CI checks are not all passing`,
           );
+
+          // Update PR status to CHANGES_REQUESTED
+          pr.status = PullRequestStatus.CHANGES_REQUESTED;
+          pr.reviewComments = pr.reviewComments
+            ? `${pr.reviewComments}\n\n[CI FAILED] CI checks failed. Please fix and resubmit.`
+            : '[CI FAILED] CI checks failed. Please fix and resubmit.';
+          await this.prRepo.save(pr);
+
+          // Update Task status back to READY so team member can pick it up again
+          pr.task.status = TaskStatus.READY;
+          await this.taskRepo.save(pr.task);
+
+          this.logger.log(
+            `PR ${prId} marked as CHANGES_REQUESTED, Task ${pr.taskId} back to READY for rework`,
+          );
+
           throw new Error(
             'CI checks must pass before merging. Please fix any failures and try again.',
           );
@@ -261,12 +280,194 @@ export class CodeReviewService implements ICodeReviewService {
     await this.taskRepo.save(pr.task);
 
     this.logger.log(`PR merged: ${prId}, Task completed: ${pr.taskId}`);
+
+    // Dependency System: Unblock dependent tasks
+    await this.unblockDependentTasks(pr.task);
+
+    // Phase 3: Check if this is a subtask and trigger parent task if all subtasks are complete
+    await this.checkAndTriggerParentTask(pr.task);
+  }
+
+  /**
+   * Dependency System: Unblock dependent tasks when a task is completed
+   *
+   * When a task is marked as COMPLETED:
+   * 1. Find all tasks that depend on this task (in BLOCKED status)
+   * 2. For each dependent task, check if ALL its dependencies are now COMPLETED
+   * 3. If yes, change status from BLOCKED to READY and emit task.assigned event
+   */
+  private async unblockDependentTasks(completedTask: Task): Promise<void> {
+    this.logger.log(
+      `Checking for dependent tasks of completed task ${completedTask.id.slice(0, 8)}...`,
+    );
+
+    // Find all tasks that have this task as a dependency and are currently BLOCKED
+    const dependentTasks = await this.taskRepo
+      .createQueryBuilder('task')
+      .innerJoin('task.dependencies', 'dependency')
+      .where('dependency.id = :completedTaskId', {
+        completedTaskId: completedTask.id,
+      })
+      .andWhere('task.status = :status', { status: TaskStatus.BLOCKED })
+      .leftJoinAndSelect('task.dependencies', 'allDeps')
+      .getMany();
+
+    if (dependentTasks.length === 0) {
+      this.logger.log(
+        `No BLOCKED dependent tasks found for task ${completedTask.id.slice(0, 8)}`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `Found ${dependentTasks.length} BLOCKED dependent tasks for task ${completedTask.id.slice(0, 8)}`,
+    );
+
+    // Check each dependent task to see if ALL its dependencies are now COMPLETED
+    for (const dependentTask of dependentTasks) {
+      const allDepsCompleted = dependentTask.dependencies.every(
+        (dep) => dep.status === TaskStatus.COMPLETED,
+      );
+
+      if (allDepsCompleted) {
+        this.logger.log(
+          `All dependencies completed for task ${dependentTask.id.slice(0, 8)}, unblocking...`,
+        );
+
+        // Change status from BLOCKED to READY
+        await this.taskRepo.update(dependentTask.id, {
+          status: TaskStatus.READY,
+        });
+
+        // TODO: Re-enable event emission once EventEmitterModule is properly configured
+        // this.eventEmitter.emit('task.assigned', {
+        //   taskId: dependentTask.id,
+        //   hollonId: dependentTask.assignedHollonId,
+        // });
+
+        this.logger.log(
+          `✅ Unblocked dependent task ${dependentTask.id.slice(0, 8)}: ${dependentTask.title}`,
+        );
+      } else {
+        const incompleteDeps = dependentTask.dependencies.filter(
+          (dep) => dep.status !== TaskStatus.COMPLETED,
+        );
+        this.logger.log(
+          `Task ${dependentTask.id.slice(0, 8)} still has ${incompleteDeps.length} incomplete dependencies, ` +
+            `remains BLOCKED`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Phase 3: Check if subtask completed and trigger parent task if all subtasks done
+   *
+   * When a subtask is marked as COMPLETED:
+   * 1. Check if this task has a parent task (is a subtask)
+   * 2. Query all sibling subtasks
+   * 3. If all subtasks are COMPLETED, automatically trigger parent task execution
+   * 4. Parent task will resume with team member hollon and create PR
+   */
+  private async checkAndTriggerParentTask(completedTask: Task): Promise<void> {
+    // Check if this is a subtask
+    if (!completedTask.parentTaskId) {
+      this.logger.log(
+        `Task ${completedTask.id} is not a subtask, no parent to trigger`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `Subtask ${completedTask.id.slice(0, 8)} completed, checking if all siblings are done...`,
+    );
+
+    // Get parent task
+    const parentTask = await this.taskRepo.findOne({
+      where: { id: completedTask.parentTaskId },
+      relations: ['assignedHollon'],
+    });
+
+    if (!parentTask) {
+      this.logger.error(
+        `Parent task ${completedTask.parentTaskId} not found for subtask ${completedTask.id}`,
+      );
+      return;
+    }
+
+    // Check if all sibling subtasks are completed
+    const allSubtasks = await this.taskRepo.find({
+      where: { parentTaskId: parentTask.id },
+    });
+
+    const allSubtasksCompleted = allSubtasks.every(
+      (subtask) => subtask.status === TaskStatus.COMPLETED,
+    );
+
+    if (!allSubtasksCompleted) {
+      const remainingCount = allSubtasks.filter(
+        (subtask) => subtask.status !== TaskStatus.COMPLETED,
+      ).length;
+      this.logger.log(
+        `Not all subtasks completed yet. ${remainingCount} remaining out of ${allSubtasks.length}`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `🎉 All ${allSubtasks.length} subtasks completed! Triggering parent task ${parentTask.id.slice(0, 8)} to resume...`,
+    );
+
+    // Get TaskExecutionService lazily to avoid circular dependency
+    const taskExecutionService = await this.moduleRef.get(
+      'TaskExecutionService',
+      { strict: false },
+    );
+
+    if (!taskExecutionService) {
+      this.logger.error('TaskExecutionService not found in module');
+      return;
+    }
+
+    // Trigger parent task execution (will be resumed with team member hollon)
+    const assignedHollonId =
+      parentTask.assignedHollonId || parentTask.assignedHollon?.id;
+
+    if (!assignedHollonId) {
+      this.logger.error(
+        `Parent task ${parentTask.id} has no assigned hollon, cannot trigger execution`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `Triggering parent task ${parentTask.id.slice(0, 8)} with hollon ${assignedHollonId.slice(0, 8)}`,
+    );
+
+    // Execute parent task asynchronously (don't await to avoid blocking PR merge)
+    taskExecutionService
+      .executeTask(parentTask.id, assignedHollonId)
+      .then(() => {
+        this.logger.log(
+          `✅ Parent task ${parentTask.id.slice(0, 8)} resumed and PR creation initiated`,
+        );
+      })
+      .catch((error: Error) => {
+        this.logger.error(
+          `Failed to execute parent task ${parentTask.id}: ${error.message}`,
+          error.stack,
+        );
+      });
   }
 
   /**
    * PR 닫기 (머지 없이)
    */
-  async closePullRequest(prId: string, reason?: string): Promise<void> {
+  async closePullRequest(
+    prId: string,
+    reason?: string,
+    markAsCompleted?: boolean,
+  ): Promise<void> {
     const pr = await this.prRepo.findOne({
       where: { id: prId },
       relations: ['task'],
@@ -276,7 +477,10 @@ export class CodeReviewService implements ICodeReviewService {
       throw new NotFoundException(`PR ${prId} not found`);
     }
 
-    if (pr.status === PullRequestStatus.MERGED) {
+    // Test mode: Allow closing MERGED PRs (DB-only merge, GitHub PR still open)
+    const isTestMode = process.env.NODE_ENV === 'test';
+
+    if (pr.status === PullRequestStatus.MERGED && !isTestMode) {
       throw new Error(`PR ${prId} is already merged and cannot be closed`);
     }
 
@@ -284,7 +488,33 @@ export class CodeReviewService implements ICodeReviewService {
       throw new Error(`PR ${prId} is already closed`);
     }
 
-    this.logger.log(`Closing PR ${prId}`);
+    this.logger.log(
+      `Closing PR ${prId}${markAsCompleted ? ' (marking task as COMPLETED)' : ''}`,
+    );
+
+    // Close PR on GitHub if prUrl exists
+    if (pr.prUrl) {
+      try {
+        const closeComment = reason || 'Closing PR';
+
+        // Use worktree path if it exists, otherwise use current directory
+        const cwd =
+          pr.task.workingDirectory && existsSync(pr.task.workingDirectory)
+            ? pr.task.workingDirectory
+            : process.cwd();
+
+        await execAsync(
+          `gh pr close "${pr.prUrl}" --comment "${closeComment}"`,
+          { cwd },
+        );
+        this.logger.log(`Closed PR on GitHub: ${pr.prUrl}`);
+      } catch (error) {
+        this.logger.error(
+          `Failed to close PR on GitHub: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
+        // Continue with database update even if GitHub close fails
+      }
+    }
 
     // PR 상태 업데이트
     pr.status = PullRequestStatus.CLOSED;
@@ -295,9 +525,25 @@ export class CodeReviewService implements ICodeReviewService {
     }
     await this.prRepo.save(pr);
 
-    // Task 상태를 다시 IN_PROGRESS로 변경 (새 PR 생성 가능)
-    pr.task.status = TaskStatus.IN_PROGRESS;
-    await this.taskRepo.save(pr.task);
+    // Dependency System: Task 상태 결정
+    if (markAsCompleted) {
+      // Test 환경이나 특수한 경우: Task를 COMPLETED로 변경
+      pr.task.status = TaskStatus.COMPLETED;
+      pr.task.completedAt = new Date();
+      await this.taskRepo.save(pr.task);
+
+      this.logger.log(`PR closed and task completed: ${pr.taskId}`);
+
+      // Unblock dependent tasks
+      await this.unblockDependentTasks(pr.task);
+
+      // Check if subtask and trigger parent
+      await this.checkAndTriggerParentTask(pr.task);
+    } else {
+      // 기본 동작: Task 상태를 다시 IN_PROGRESS로 변경 (새 PR 생성 가능)
+      pr.task.status = TaskStatus.IN_PROGRESS;
+      await this.taskRepo.save(pr.task);
+    }
 
     // 작성자에게 알림
     if (pr.authorHollonId) {
@@ -874,21 +1120,48 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
 
       const [, owner, repo, prNumber] = match;
 
-      // gh pr merge 실행
-      this.logger.log(
-        `Executing: gh pr merge ${prNumber} --repo ${owner}/${repo} --squash --auto`,
-      );
+      // 테스트 환경에서는 실제 gh pr merge 명령을 skip (DB만 업데이트)
+      const isTestMode = process.env.NODE_ENV === 'test';
 
-      const { stdout, stderr } = await execAsync(
-        `gh pr merge ${prNumber} --repo ${owner}/${repo} --squash --auto`,
-        {
-          timeout: 30000, // 30초 타임아웃
-        },
-      );
+      if (isTestMode) {
+        // Test mode: Close PR on GitHub instead of merging
+        // This prevents test PRs from accumulating as OPEN
+        // DB will still show MERGED to simulate production behavior
+        this.logger.log(
+          `[TEST MODE] Closing PR #${prNumber} on GitHub (DB will be marked as MERGED)`,
+        );
 
-      this.logger.log(`Merge output: ${stdout}`);
-      if (stderr) {
-        this.logger.warn(`Merge stderr: ${stderr}`);
+        try {
+          const { stdout } = await execAsync(
+            `gh pr close ${prNumber} --repo ${owner}/${repo}`,
+            {
+              timeout: 10000, // 10초 타임아웃
+            },
+          );
+          this.logger.log(`PR close output: ${stdout}`);
+        } catch (closeError) {
+          // PR close 실패해도 테스트는 계속 진행 (이미 closed일 수 있음)
+          this.logger.warn(
+            `Failed to close PR #${prNumber}: ${closeError instanceof Error ? closeError.message : 'Unknown error'}`,
+          );
+        }
+      } else {
+        // gh pr merge 실행
+        this.logger.log(
+          `Executing: gh pr merge ${prNumber} --repo ${owner}/${repo} --squash --auto`,
+        );
+
+        const { stdout, stderr } = await execAsync(
+          `gh pr merge ${prNumber} --repo ${owner}/${repo} --squash --auto`,
+          {
+            timeout: 30000, // 30초 타임아웃
+          },
+        );
+
+        this.logger.log(`Merge output: ${stdout}`);
+        if (stderr) {
+          this.logger.warn(`Merge stderr: ${stderr}`);
+        }
       }
 
       // PR 상태를 MERGED로 업데이트
@@ -905,6 +1178,19 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
       this.logger.log(
         `PR #${prNumber} successfully merged and task ${pr.taskId} marked as DONE`,
       );
+
+      // Unblock dependent tasks
+      const completedTask = await this.taskRepo.findOne({
+        where: { id: pr.taskId },
+      });
+      if (completedTask) {
+        await this.unblockDependentTasks(completedTask);
+      }
+
+      // Phase 3: Check if this is a subtask and trigger parent task if all subtasks are complete
+      if (completedTask) {
+        await this.checkAndTriggerParentTask(completedTask);
+      }
 
       // Phase 3.12: Task worktree 정리
       if (pr.authorHollonId) {
@@ -1108,6 +1394,8 @@ _Automated review by Hollon AI_`;
       this.logger.log(`Cleaning up task worktree: ${worktreePath}`);
       await execAsync(`git worktree remove ${worktreePath} --force`, {
         cwd: gitCwd,
+        shell: process.env.SHELL || '/bin/bash',
+        env: { ...process.env },
       });
       this.logger.log(`Task worktree cleaned up: ${worktreePath}`);
     } catch (error) {

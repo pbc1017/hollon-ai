@@ -1028,7 +1028,33 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
           continue;
         }
 
-        // ✅ Implementation tasks: Find PR and create reviewer hollon
+        // ✅ Phase 4: Check if implementation task has completed subtasks
+        // If yes, review subtask results instead of PR
+        const childTasks = await this.taskRepo.find({
+          where: { parentTaskId: subtask.id },
+        });
+
+        const hasCompletedSubtasks =
+          childTasks.length > 0 &&
+          childTasks.every((child) => child.status === TaskStatus.COMPLETED);
+
+        if (hasCompletedSubtasks) {
+          this.logger.log(
+            `Manager ${managerHollon.name} reviewing implementation task ${subtask.id} with ${childTasks.length} completed subtasks (no PR yet)`,
+          );
+
+          // Implementation with subtasks: Review subtask results like team_epic
+          await this.taskRepo.update(subtask.id, {
+            status: TaskStatus.IN_REVIEW,
+          });
+
+          this.logger.log(
+            `Implementation task ${subtask.id} with subtasks transitioned to IN_REVIEW for manager review`,
+          );
+          continue;
+        }
+
+        // ✅ Implementation tasks without subtasks: Find PR and create reviewer hollon
         const prs = await this.codeReviewPort.findPullRequestsByTaskId(
           subtask.id,
         );
@@ -1036,7 +1062,7 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
 
         if (!pr) {
           this.logger.warn(
-            `No PR found for task ${subtask.id}, skipping review`,
+            `No PR found for task ${subtask.id} (and no subtasks), skipping review`,
           );
           continue;
         }

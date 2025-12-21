@@ -11,9 +11,14 @@ import {
   TaskPriority,
 } from '../../task/entities/task.entity';
 import { Project } from '../../project/entities/project.entity';
-import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
+import {
+  Hollon,
+  HollonStatus,
+  HollonLifecycle,
+} from '../../hollon/entities/hollon.entity';
 import { Team } from '../../team/entities/team.entity';
 import { Organization } from '../../organization/entities/organization.entity';
+import { Role } from '../../role/entities/role.entity';
 import { OrganizationSettings } from '../../organization/interfaces/organization-settings.interface';
 import {
   Document,
@@ -22,7 +27,6 @@ import {
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 import { BrainResponse } from '../../brain-provider/interfaces/brain-provider.interface';
 import { ICodeReviewPort } from '../domain/ports/code-review.port';
-import { KnowledgeContext } from '../../brain-provider/services/knowledge-injection.service';
 import { QualityGateService } from './quality-gate.service';
 import { IHollonService } from '../../hollon/domain/hollon-service.interface';
 
@@ -38,6 +42,7 @@ interface DecompositionWorkItem {
   estimatedHours?: number;
   requiredSkills?: string[];
   acceptanceCriteria?: string[];
+  dependencies?: string[]; // Task titles that must complete before this task
 }
 
 interface DecompositionResult {
@@ -95,6 +100,8 @@ export class TaskExecutionService {
     private readonly orgRepo: Repository<Organization>,
     @InjectRepository(Document)
     private readonly documentRepo: Repository<Document>,
+    @InjectRepository(Role)
+    private readonly roleRepo: Repository<Role>,
     private readonly brainProvider: BrainProviderService,
     private readonly qualityGateService: QualityGateService,
     @Inject('ICodeReviewPort')
@@ -124,7 +131,7 @@ export class TaskExecutionService {
 
     const task = await this.taskRepo.findOne({
       where: { id: taskId },
-      relations: ['project', 'project.organization'],
+      relations: ['project', 'project.organization', 'dependencies'],
     });
 
     if (!task) {
@@ -198,51 +205,75 @@ export class TaskExecutionService {
           0,
         );
 
-        // Create PR and continue with normal flow
-        const prUrl = await this.createPullRequest(
-          task.project,
-          task,
-          worktreePath,
-        );
-        this.logger.log(`PR created for resumed task: ${prUrl}`);
+        // Create PR only for permanent hollons
+        let prUrl: string | null = null;
 
-        // Wait for CI checks
-        this.logger.log(`Waiting for CI checks to complete for PR: ${prUrl}`);
-        await this.waitForCIChecks(prUrl, worktreePath);
-
-        // Check CI status
-        const ciResult = await this.checkCIStatus(prUrl, worktreePath);
-
-        if (!ciResult.passed) {
-          this.logger.error(
-            `CI checks failed for resumed task ${taskId}: ${ciResult.failedChecks.join(', ')}`,
-          );
-
-          const { shouldRetry, feedback } = await this.handleCIFailure(
+        if (hollon.lifecycle === HollonLifecycle.PERMANENT) {
+          // ✅ Permanent hollon: Full PR workflow for resumed task
+          prUrl = await this.createPullRequest(
+            task.project,
             task,
-            ciResult.failedChecks,
-            prUrl,
             worktreePath,
           );
+          this.logger.log(`PR created for resumed task: ${prUrl}`);
 
-          if (shouldRetry) {
-            throw new Error(`CI_FAILURE_RETRY: ${feedback}`);
-          } else {
-            throw new Error(
-              `CI_FAILURE_MAX_RETRIES: Maximum CI retry attempts reached. ${feedback}`,
+          // Wait for CI checks
+          this.logger.log(`Waiting for CI checks to complete for PR: ${prUrl}`);
+          await this.waitForCIChecks(prUrl, worktreePath);
+
+          // Check CI status
+          const ciResult = await this.checkCIStatus(prUrl, worktreePath);
+
+          if (!ciResult.passed) {
+            this.logger.error(
+              `CI checks failed for resumed task ${taskId}: ${ciResult.failedChecks.join(', ')}`,
             );
+
+            const { shouldRetry, feedback } = await this.handleCIFailure(
+              task,
+              ciResult.failedChecks,
+              prUrl,
+              worktreePath,
+            );
+
+            if (shouldRetry) {
+              throw new Error(`CI_FAILURE_RETRY: ${feedback}`);
+            } else {
+              throw new Error(
+                `CI_FAILURE_MAX_RETRIES: Maximum CI retry attempts reached. ${feedback}`,
+              );
+            }
           }
+
+          this.logger.log(`All CI checks passed for resumed task ${taskId}`);
+
+          // Request code review
+          await this.requestCodeReview(task, prUrl, hollonId, worktreePath);
+
+          // Mark as ready for review
+          await this.taskRepo.update(taskId, {
+            status: TaskStatus.READY_FOR_REVIEW,
+          });
+        } else {
+          // ✅ Temporary hollon: Mark as COMPLETED without PR
+          this.logger.log(
+            `Temporary hollon ${hollon.id.slice(0, 8)} completed resumed task ${taskId.slice(0, 8)} - marking as COMPLETED (no PR)`,
+          );
+
+          await this.taskRepo.update(taskId, {
+            status: TaskStatus.COMPLETED,
+            completedAt: new Date(),
+          });
+
+          // Release hollon
+          await this.hollonRepo.update(hollonId, {
+            status: HollonStatus.IDLE,
+            currentTaskId: null as any,
+          });
+
+          // Check if parent task should resume
+          await this.checkAndResumeParentTask(task);
         }
-
-        this.logger.log(`All CI checks passed for resumed task ${taskId}`);
-
-        // Request code review
-        await this.requestCodeReview(task, prUrl, hollonId, worktreePath);
-
-        // Mark as ready for review
-        await this.taskRepo.update(taskId, {
-          status: TaskStatus.READY_FOR_REVIEW,
-        });
 
         return { prUrl, worktreePath };
       }
@@ -331,54 +362,74 @@ export class TaskExecutionService {
         brainResult.cost.totalCostCents,
       );
 
-      // 7. PR 생성
-      const prUrl = await this.createPullRequest(
-        task.project,
-        task,
-        worktreePath,
-      );
-      this.logger.log(`PR created: ${prUrl}`);
+      // 7. PR 생성 (임시 홀론은 PR 생성 안함)
+      let prUrl: string | null = null;
 
-      // 8. Phase 4: Wait for CI checks to complete
-      this.logger.log(`Waiting for CI checks to complete for PR: ${prUrl}`);
-      await this.waitForCIChecks(prUrl, worktreePath);
+      if (hollon.lifecycle === HollonLifecycle.PERMANENT) {
+        // ✅ Permanent hollon: Full PR workflow
+        prUrl = await this.createPullRequest(task.project, task, worktreePath);
+        this.logger.log(`PR created: ${prUrl}`);
 
-      // 9. Phase 4: Check CI status
-      const ciResult = await this.checkCIStatus(prUrl, worktreePath);
+        // 8. Phase 4: Wait for CI checks to complete
+        this.logger.log(`Waiting for CI checks to complete for PR: ${prUrl}`);
+        await this.waitForCIChecks(prUrl, worktreePath);
 
-      if (!ciResult.passed) {
-        this.logger.error(
-          `CI checks failed for task ${taskId}: ${ciResult.failedChecks.join(', ')}`,
-        );
+        // 9. Phase 4: Check CI status
+        const ciResult = await this.checkCIStatus(prUrl, worktreePath);
 
-        // Handle CI failure and get retry decision
-        const { shouldRetry, feedback } = await this.handleCIFailure(
-          task,
-          ciResult.failedChecks,
-          prUrl,
-          worktreePath,
-        );
-
-        if (shouldRetry) {
-          // Throw error with feedback for orchestrator to retry
-          throw new Error(`CI_FAILURE_RETRY: ${feedback}`);
-        } else {
-          // Max retries reached, fail the task
-          throw new Error(
-            `CI_FAILURE_MAX_RETRIES: Maximum CI retry attempts reached. ${feedback}`,
+        if (!ciResult.passed) {
+          this.logger.error(
+            `CI checks failed for task ${taskId}: ${ciResult.failedChecks.join(', ')}`,
           );
+
+          // Handle CI failure and get retry decision
+          const { shouldRetry, feedback } = await this.handleCIFailure(
+            task,
+            ciResult.failedChecks,
+            prUrl,
+            worktreePath,
+          );
+
+          if (shouldRetry) {
+            // Throw error with feedback for orchestrator to retry
+            throw new Error(`CI_FAILURE_RETRY: ${feedback}`);
+          } else {
+            // Max retries reached, fail the task
+            throw new Error(
+              `CI_FAILURE_MAX_RETRIES: Maximum CI retry attempts reached. ${feedback}`,
+            );
+          }
         }
+
+        this.logger.log(`All CI checks passed for task ${taskId}`);
+
+        // 10. CodeReview 요청 (Phase 2 활용)
+        await this.requestCodeReview(task, prUrl, hollonId, worktreePath);
+
+        // 11. Task를 READY_FOR_REVIEW로 변경 (Phase 3.16: Manager review 대기)
+        await this.taskRepo.update(taskId, {
+          status: TaskStatus.READY_FOR_REVIEW,
+        });
+      } else {
+        // ✅ Temporary hollon: Skip PR workflow, mark as COMPLETED
+        this.logger.log(
+          `Temporary hollon ${hollon.id.slice(0, 8)} completed subtask ${taskId.slice(0, 8)} - marking as COMPLETED (no PR)`,
+        );
+
+        await this.taskRepo.update(taskId, {
+          status: TaskStatus.COMPLETED,
+          completedAt: new Date(),
+        });
+
+        // Release hollon
+        await this.hollonRepo.update(hollonId, {
+          status: HollonStatus.IDLE,
+          currentTaskId: null as any,
+        });
+
+        // Check if parent task should resume
+        await this.checkAndResumeParentTask(task);
       }
-
-      this.logger.log(`All CI checks passed for task ${taskId}`);
-
-      // 10. CodeReview 요청 (Phase 2 활용)
-      await this.requestCodeReview(task, prUrl, hollonId, worktreePath);
-
-      // 11. Task를 READY_FOR_REVIEW로 변경 (Phase 3.16: Manager review 대기)
-      await this.taskRepo.update(taskId, {
-        status: TaskStatus.READY_FOR_REVIEW,
-      });
 
       return { prUrl, worktreePath };
     } catch (error) {
@@ -407,6 +458,12 @@ export class TaskExecutionService {
     task: Task,
     hollon: Hollon,
   ): Promise<{ prUrl: string | null; worktreePath: string | null }> {
+    if (!task.id) {
+      throw new Error(
+        `Task object is missing id property. Task: ${JSON.stringify(task)}`,
+      );
+    }
+
     this.logger.log(
       `Manager ${hollon.name} decomposing team epic ${task.id.slice(0, 8)}`,
     );
@@ -488,6 +545,10 @@ export class TaskExecutionService {
         `Creating ${brainResult.workItems?.length || 0} implementation tasks for team members`,
       );
 
+      // Task title → Task 객체 매핑 (dependency resolution용)
+      const taskMap = new Map<string, Task>();
+
+      // First pass: Create all tasks without dependencies
       for (const workItem of brainResult.workItems || []) {
         // 팀원 중 적절한 홀론 선택
         const assignedHollon = await this.selectBestHollon(team, workItem);
@@ -500,7 +561,7 @@ export class TaskExecutionService {
           title: workItem.title,
           description: workItem.description,
           type: TaskType.IMPLEMENTATION,
-          status: TaskStatus.READY, // 즉시 실행 가능
+          status: TaskStatus.READY, // Will be updated if has dependencies
           assignedHollonId: assignedHollon?.id,
           depth: (task.depth || 0) + 1,
           priority: this.mapPriority(workItem.priority || ''),
@@ -509,10 +570,41 @@ export class TaskExecutionService {
         });
 
         const savedImplTask = await this.taskRepo.save(implTask);
+        taskMap.set(workItem.title, savedImplTask);
         childTasks.push(savedImplTask);
       }
 
-      this.logger.log(`Created ${childTasks.length} implementation tasks`);
+      // Second pass: Resolve and set dependencies
+      let blockedCount = 0;
+      for (const workItem of brainResult.workItems || []) {
+        const currentTask = taskMap.get(workItem.title);
+        if (!currentTask) continue;
+
+        // Parse dependencies
+        const dependencyTitles = workItem.dependencies || [];
+        const dependencyTasks = dependencyTitles
+          .map((depTitle: string) => taskMap.get(depTitle))
+          .filter((t: Task | undefined): t is Task => t != null);
+
+        if (dependencyTasks.length > 0) {
+          // Set dependencies (many-to-many relation)
+          currentTask.dependencies = dependencyTasks;
+
+          // Update status to BLOCKED
+          currentTask.status = TaskStatus.BLOCKED;
+
+          await this.taskRepo.save(currentTask);
+          blockedCount++;
+
+          this.logger.log(
+            `Task "${currentTask.title}" → BLOCKED (depends on ${dependencyTasks.length} task(s))`,
+          );
+        }
+      }
+
+      this.logger.log(
+        `Created ${childTasks.length} implementation tasks (${blockedCount} BLOCKED, ${childTasks.length - blockedCount} READY)`,
+      );
     }
 
     // 6. ✅ SSOT Line 185-186: 부모는 PENDING으로 대기
@@ -591,7 +683,9 @@ Please distribute work items among these sub-teams.
 `
     : `This is a leaf team with ${team.hollons?.length || 0} members.
 
-Please create implementation tasks for individual team members.`
+Please create implementation tasks for individual team members.
+
+IMPORTANT: Identify task dependencies - which tasks must be completed before others can start.`
 }
 
 # Output Format
@@ -607,7 +701,8 @@ ${
         "description": "Detailed description",
         "priority": "P1",
         "acceptanceCriteria": ["criterion 1", "criterion 2"],
-        "requiredSkills": ["skill1", "skill2"]
+        "requiredSkills": ["skill1", "skill2"],
+        "dependencies": ["Exact title of task that must complete first"]
       }
     ]
   }
@@ -619,11 +714,18 @@ ${
       "description": "Detailed description",
       "priority": "P1",
       "acceptanceCriteria": ["criterion 1", "criterion 2"],
-      "requiredSkills": ["TypeScript", "NestJS"]
+      "requiredSkills": ["TypeScript", "NestJS"],
+      "dependencies": ["Exact title of task that must complete first"]
     }
   ]
 }`
 }
+
+IMPORTANT:
+- Use "dependencies" array to specify which tasks must be completed before this task can start
+- Dependencies should reference exact task titles from the same workItems array
+- If a task has no dependencies, use an empty array: "dependencies": []
+- Tasks with dependencies will be marked as BLOCKED until their dependencies complete
 
 Return ONLY the JSON, no other text.
 `.trim();
@@ -769,7 +871,34 @@ ${i + 1}. **${item.title}**
       where: { id: project.organizationId },
     });
     const settings = (organization?.settings || {}) as OrganizationSettings;
-    const baseBranch = settings.baseBranch || 'main';
+    let baseBranch = settings.baseBranch || 'main';
+
+    // Phase 4: In TEST mode only, use dependency's branch as base
+    // Production: PRs are merged to main, so always use main as base
+    // Test: PRs are NOT merged, so use dependency's branch to get its changes
+    const isTestMode = process.env.NODE_ENV === 'test';
+
+    if (isTestMode && task.dependencies && task.dependencies.length > 0) {
+      const completedDeps = task.dependencies.filter(
+        (dep) => dep.status === TaskStatus.COMPLETED,
+      );
+
+      if (completedDeps.length > 0) {
+        // Use the most recently completed dependency's branch
+        const mostRecentDep = completedDeps.sort(
+          (a, b) =>
+            (b.completedAt?.getTime() || 0) - (a.completedAt?.getTime() || 0),
+        )[0];
+
+        // Construct the branch name from the dependency task
+        const depBranch = `wt-hollon-${mostRecentDep.assignedHollonId?.slice(0, 8)}-task-${mostRecentDep.id.slice(0, 8)}`;
+
+        this.logger.log(
+          `[TEST MODE] Task has completed dependency ${mostRecentDep.id.slice(0, 8)}, using its branch as base: ${depBranch}`,
+        );
+        baseBranch = depBranch;
+      }
+    }
 
     // Create new worktree for this task
     this.logger.log(
@@ -790,24 +919,44 @@ ${i + 1}. **${item.title}**
 
         // Phase 4: Fetch latest from origin to ensure we have up-to-date base branch
         this.logger.log(`Fetching latest from origin for ${baseBranch}`);
-        await execAsync('git fetch origin', {
-          cwd: project.workingDirectory,
-        });
+        let useOriginBranch = true;
+        try {
+          await execAsync('git fetch origin', {
+            cwd: project.workingDirectory,
+          });
+          this.logger.log('✅ Git fetch succeeded');
+        } catch (fetchError) {
+          const err = fetchError as Error & { stderr?: string };
+          this.logger.warn(
+            `Failed to fetch from origin (${err.message}). Will use local branch instead.`,
+          );
+          useOriginBranch = false;
+        }
 
         // Create unique temporary branch name for worktree
         const tempBranch = `wt-hollon-${hollon.id.slice(0, 8)}-task-${task.id.slice(0, 8)}`;
 
-        // Create worktree from origin/baseBranch to ensure latest code
-        // This avoids depending on potentially outdated local branch
+        // Create worktree from origin/baseBranch or local baseBranch
+        // Prefer origin branch to ensure latest code, but fall back to local if fetch failed
+        // In test mode with worktree dependency branches, use local branch (not in origin)
+        const isWorktreeBranch = baseBranch.startsWith('wt-hollon-');
+        const shouldUseLocalBranch =
+          !useOriginBranch || (isTestMode && isWorktreeBranch);
+        const branchRef = shouldUseLocalBranch
+          ? baseBranch
+          : `origin/${baseBranch}`;
+        this.logger.log(
+          `Creating worktree from ${branchRef} for task ${task.id.slice(0, 8)}`,
+        );
         await execAsync(
-          `git worktree add -b ${tempBranch} ${worktreePath} origin/${baseBranch}`,
+          `git worktree add -b ${tempBranch} ${worktreePath} ${branchRef}`,
           {
             cwd: project.workingDirectory,
           },
         );
 
         this.logger.log(
-          `Task worktree created: hollon-${hollon.id.slice(0, 8)}/task-${task.id.slice(0, 8)} from origin/${baseBranch}`,
+          `Task worktree created: hollon-${hollon.id.slice(0, 8)}/task-${task.id.slice(0, 8)} from ${branchRef}`,
         );
       } catch (error: unknown) {
         const err = error as Error & { stderr?: string };
@@ -839,6 +988,7 @@ ${i + 1}. **${item.title}**
    * Phase 3.12: Hollon별 브랜치 생성 (Task worktree 내)
    * - 브랜치명: feature/{hollonName}/task-{taskId}
    * - 작업자를 브랜치명으로 명확히 식별
+   * Phase 4: Duplicate branch prevention - delete remote branch if exists
    */
   private async createBranch(
     hollon: Hollon,
@@ -854,6 +1004,29 @@ ${i + 1}. **${item.title}**
     );
 
     try {
+      // Phase 4: Check if branch exists remotely and delete it
+      try {
+        const { stdout } = await execAsync(
+          `git ls-remote --heads origin ${branchName}`,
+          { cwd: worktreePath },
+        );
+
+        if (stdout.trim()) {
+          this.logger.warn(
+            `Remote branch ${branchName} already exists, deleting it`,
+          );
+          await execAsync(`git push origin --delete ${branchName}`, {
+            cwd: worktreePath,
+          });
+          this.logger.log(`Deleted remote branch ${branchName}`);
+        }
+      } catch (checkError) {
+        // Ignore errors from ls-remote or delete (branch might not exist)
+        this.logger.debug(
+          `Branch check/delete skipped: ${checkError instanceof Error ? checkError.message : 'Unknown error'}`,
+        );
+      }
+
       // The worktree was created with a temporary branch, now rename it to the feature branch
       // Git automatically creates the necessary directory structure for nested branches
       await execAsync(`git branch -m ${branchName}`, {
@@ -926,21 +1099,12 @@ ${i + 1}. **${item.title}**
     task: Task,
     worktreePath: string,
   ): Promise<BrainResponse> {
-    // 프롬프트 구성
-    const prompt = this.buildTaskPrompt(task);
-
-    // Knowledge Context 구성 (Phase 3.5)
-    const knowledgeContext: KnowledgeContext = {
-      task,
-      organizationId: task.project.organizationId,
-      projectId: task.projectId,
-      requiredSkills: task.requiredSkills,
-      tags: task.tags,
-    };
+    // 프롬프트 구성 (Phase 4: Pass hollon for depth-aware prompting)
+    const prompt = this.buildTaskPrompt(task, hollon);
 
     this.logger.log(`Executing brain provider for task ${task.id}`);
 
-    // BrainProvider 실행 (자동으로 지식 주입됨)
+    // BrainProvider 실행
     const result = await this.brainProvider.executeWithTracking(
       {
         prompt,
@@ -954,7 +1118,6 @@ ${i + 1}. **${item.title}**
         hollonId: hollon.id,
         taskId: task.id,
       },
-      knowledgeContext, // Phase 3.5: 지식 주입
     );
 
     this.logger.log(
@@ -1017,10 +1180,34 @@ ${i + 1}. **${item.title}**
    * Task 프롬프트 생성
    * Phase 4: Ask Brain if decomposition is needed for complex tasks
    */
-  private buildTaskPrompt(task: Task): string {
+  private buildTaskPrompt(task: Task, hollon?: Hollon): string {
     const sections: string[] = [];
 
     sections.push(`# Task: ${task.title}\n`);
+
+    // Check for CI failure feedback
+    const metadata = (task.metadata || {}) as Record<string, unknown>;
+    const ciFeedback = metadata.lastCIFeedback as string | undefined;
+
+    if (ciFeedback) {
+      sections.push(`## ⚠️ CI FAILURE FEEDBACK\n${ciFeedback}\n`);
+      sections.push(
+        `## Recovery Options\n` +
+          `You have TWO options to fix this CI failure:\n\n` +
+          `**Option 1: Self-Correction (Recommended for simple fixes)**\n` +
+          `- Review the CI errors above\n` +
+          `- Fix the issues directly in your code (linting, types, tests, etc.)\n` +
+          `- Commit the fixes\n` +
+          `- Start your response with "SELF_CORRECT: <brief reason>"\n\n` +
+          `**Option 2: Decompose into Subtasks (For complex issues)**\n` +
+          `- If the CI failures indicate that the task is too complex\n` +
+          `- Break down the fix into smaller, manageable subtasks\n` +
+          `- Start your response with "DECOMPOSE_TASK: <reason>"\n` +
+          `- Provide subtask JSON as described in the Instructions section below\n\n` +
+          `**Choose wisely:** Use Option 1 for quick fixes (typos, missing imports, simple test fixes). ` +
+          `Use Option 2 if you need to restructure code or the issue is complex.\n`,
+      );
+    }
 
     if (task.description) {
       sections.push(`## Description\n${task.description}\n`);
@@ -1034,37 +1221,236 @@ ${i + 1}. **${item.title}**
       sections.push(`## Affected Files\n${task.affectedFiles.join('\n')}\n`);
     }
 
-    sections.push(
-      `## Instructions\n` +
-        `Please implement the task described above. ` +
-        `Make sure to:\n` +
-        `1. Write clean, maintainable code\n` +
-        `2. Follow the project's coding standards\n` +
-        `3. Add appropriate tests if needed\n` +
-        `4. Update documentation if required\n` +
-        `5. Commit your changes with a descriptive message\n\n` +
-        `## Task Decomposition (Phase 4)\n` +
-        `If this task is complex and would benefit from being broken down into smaller subtasks ` +
-        `(e.g., needs planning phase, exploration phase, and implementation phase), ` +
-        `you can suggest decomposition by starting your response with:\n` +
-        `"DECOMPOSE_TASK: <reason>"\n\n` +
-        `Then provide a JSON object with this structure:\n` +
-        `{\n` +
-        `  "subtasks": [\n` +
-        `    {\n` +
-        `      "title": "Subtask title",\n` +
-        `      "description": "Detailed description",\n` +
-        `      "priority": "P1",\n` +
-        `      "acceptanceCriteria": ["criterion 1", "criterion 2"],\n` +
-        `      "requiredSkills": ["skill1", "skill2"]\n` +
-        `    }\n` +
-        `  ]\n` +
-        `}\n\n` +
-        `Only suggest decomposition if the task is truly complex. ` +
-        `For simple tasks, just implement them directly.\n`,
+    // Phase 4: Analyze task complexity and hollon depth
+    const analysis = this.analyzeTaskComplexity(task);
+    const isPermanentHollon = hollon && hollon.depth === 0;
+
+    // Phase 4.1: MANDATORY decomposition if estimated commits >= 2
+    const mustDecompose = isPermanentHollon && analysis.estimatedCommits >= 2;
+    const shouldRecommendDecomposition =
+      isPermanentHollon && !mustDecompose && analysis.level === 'medium';
+
+    // Log prompt decision
+    console.log(
+      `\n🎯 Phase 4: Prompt decision for task "${task.title}":\n` +
+        `   Hollon depth: ${hollon?.depth ?? 'undefined'}\n` +
+        `   Is permanent hollon: ${isPermanentHollon}\n` +
+        `   Complexity: ${analysis.level}\n` +
+        `   Estimated commits: ${analysis.estimatedCommits}\n` +
+        `   Must decompose: ${mustDecompose}\n` +
+        `   Should recommend decomposition: ${shouldRecommendDecomposition}\n` +
+        `   Prompt branch: ${mustDecompose ? 'MANDATORY_DECOMPOSITION' : shouldRecommendDecomposition ? 'RECOMMENDED_DECOMPOSITION' : isPermanentHollon ? 'DIRECT_IMPLEMENTATION' : 'TEMPORARY_DIRECT_ONLY'}\n`,
     );
 
+    if (mustDecompose) {
+      // For tasks requiring multiple commits: MANDATORY decomposition
+      sections.push(
+        `## Instructions\n` +
+          `🚨 MANDATORY DECOMPOSITION REQUIRED 🚨\n\n` +
+          `This task is estimated to require ${analysis.estimatedCommits} commits, which means it should be broken down into ${analysis.estimatedCommits} subtasks.\n\n` +
+          `**You MUST decompose this task. Direct implementation is NOT allowed.**\n\n` +
+          `Start your response with:\n` +
+          `"DECOMPOSE_TASK: This task requires ${analysis.estimatedCommits} separate commits"\n\n` +
+          `Then provide a JSON object with this structure:\n` +
+          `{\n` +
+          `  "subtasks": [\n` +
+          `    {\n` +
+          `      "title": "Subtask title (e.g., 'Implement entity layer')",\n` +
+          `      "description": "What this subtask accomplishes (should result in 1 commit)",\n` +
+          `      "priority": "P1",\n` +
+          `      "acceptanceCriteria": ["criterion 1", "criterion 2"],\n` +
+          `      "requiredSkills": ["skill1", "skill2"]\n` +
+          `    }\n` +
+          `  ]\n` +
+          `}\n\n` +
+          `**Guidelines for decomposition:**\n` +
+          `- Each subtask should represent ONE logical commit\n` +
+          `- Split by architectural layers (e.g., entity → service → controller → tests)\n` +
+          `- Each subtask should be independently testable\n` +
+          `- Subtasks will be executed in parallel by specialized sub-hollons\n`,
+      );
+    } else if (shouldRecommendDecomposition) {
+      // For medium complexity: Recommend but not mandatory
+      sections.push(
+        `## Instructions\n` +
+          `This task appears to be ${analysis.level} complexity.\n` +
+          `While it could be implemented directly, decomposition is recommended for better code quality.\n\n` +
+          `**Option 1: Decompose (Recommended)**\n` +
+          `Start your response with "DECOMPOSE_TASK: <reason>" and provide subtask JSON.\n\n` +
+          `**Option 2: Implement directly**\n` +
+          `If you believe this can be done in a single, focused commit:\n` +
+          `1. Write clean, maintainable code\n` +
+          `2. Follow the project's coding standards\n` +
+          `3. Add appropriate tests if needed\n` +
+          `4. Update documentation if required\n` +
+          `5. Create ONE commit with all changes\n`,
+      );
+    } else if (isPermanentHollon) {
+      // For low complexity: Direct implementation preferred
+      sections.push(
+        `## Instructions\n` +
+          `Please implement the task described above. ` +
+          `Make sure to:\n` +
+          `1. Write clean, maintainable code\n` +
+          `2. Follow the project's coding standards\n` +
+          `3. Add appropriate tests if needed\n` +
+          `4. Update documentation if required\n` +
+          `5. Commit your changes with a descriptive message\n\n` +
+          `Note: This task is estimated to require ${analysis.estimatedCommits} commit(s).\n`,
+      );
+    } else {
+      // For temporary hollons (depth >= 1): Direct implementation only
+      sections.push(
+        `## Instructions\n` +
+          `You are a temporary sub-hollon responsible for executing this specific subtask.\n` +
+          `Please implement the task described above directly. DO NOT attempt to decompose further.\n\n` +
+          `Make sure to:\n` +
+          `1. Write clean, maintainable code\n` +
+          `2. Follow the project's coding standards\n` +
+          `3. Add appropriate tests if needed\n` +
+          `4. Update documentation if required\n` +
+          `5. Commit your changes with a descriptive message\n`,
+      );
+    }
+
     return sections.join('\n');
+  }
+
+  /**
+   * Phase 4: Analyze task complexity to determine if decomposition should be recommended
+   *
+   * Complexity heuristics:
+   * - High complexity: Long description, multiple acceptance criteria, many affected files
+   * - Medium complexity: Moderate requirements
+   * - Low complexity: Simple, focused task
+   */
+  private analyzeTaskComplexity(task: Task): {
+    level: 'high' | 'medium' | 'low';
+    estimatedCommits: number;
+  } {
+    let complexityScore = 0;
+    const scoreBreakdown: string[] = [];
+
+    // Estimate number of commits based on task characteristics
+    let estimatedCommits = 1;
+
+    // Check description length
+    if (task.description) {
+      const descLength = task.description.length;
+      if (descLength > 500) {
+        complexityScore += 3;
+        scoreBreakdown.push(`Description length (${descLength}): +3`);
+      } else if (descLength > 200) {
+        complexityScore += 2;
+        scoreBreakdown.push(`Description length (${descLength}): +2`);
+      } else if (descLength > 100) {
+        complexityScore += 1;
+        scoreBreakdown.push(`Description length (${descLength}): +1`);
+      }
+    }
+
+    // Check acceptance criteria - each criterion could be a separate commit
+    if (task.acceptanceCriteria && Array.isArray(task.acceptanceCriteria)) {
+      const criteriaCount = task.acceptanceCriteria.length;
+      if (criteriaCount > 5) {
+        complexityScore += 3;
+        scoreBreakdown.push(`Acceptance criteria (${criteriaCount}): +3`);
+        // 5+ criteria likely needs 3+ commits (e.g., entity, service, controller, tests, docs)
+        estimatedCommits = Math.max(
+          estimatedCommits,
+          Math.ceil(criteriaCount / 2),
+        );
+      } else if (criteriaCount > 3) {
+        complexityScore += 2;
+        scoreBreakdown.push(`Acceptance criteria (${criteriaCount}): +2`);
+        // 4-5 criteria likely needs 2 commits
+        estimatedCommits = Math.max(estimatedCommits, 2);
+      } else if (criteriaCount > 1) {
+        complexityScore += 1;
+        scoreBreakdown.push(`Acceptance criteria (${criteriaCount}): +1`);
+      }
+    }
+
+    // Check affected files - multiple files across different concerns = multiple commits
+    if (task.affectedFiles && task.affectedFiles.length > 0) {
+      const fileCount = task.affectedFiles.length;
+      if (fileCount > 5) {
+        complexityScore += 3;
+        scoreBreakdown.push(`Affected files (${fileCount}): +3`);
+        // 5+ files likely span multiple concerns (entity, service, controller, DTOs, tests)
+        estimatedCommits = Math.max(estimatedCommits, 3);
+      } else if (fileCount > 3) {
+        complexityScore += 2;
+        scoreBreakdown.push(`Affected files (${fileCount}): +2`);
+        // 4-5 files likely need 2 commits (e.g., implementation + tests)
+        estimatedCommits = Math.max(estimatedCommits, 2);
+      } else if (fileCount > 1) {
+        complexityScore += 1;
+        scoreBreakdown.push(`Affected files (${fileCount}): +1`);
+      }
+    }
+
+    // Check required skills
+    if (task.requiredSkills && task.requiredSkills.length > 3) {
+      complexityScore += 2;
+      scoreBreakdown.push(
+        `Required skills (${task.requiredSkills.length}): +2`,
+      );
+    }
+
+    // Keywords indicating complexity
+    const complexKeywords = [
+      'implement complete',
+      'full system',
+      'entire module',
+      'end-to-end',
+      'comprehensive',
+    ];
+    const titleKeywords = task.title
+      ? complexKeywords.filter((keyword) =>
+          task.title.toLowerCase().includes(keyword),
+        )
+      : [];
+    const descKeywords = task.description
+      ? complexKeywords.filter((keyword) =>
+          task.description.toLowerCase().includes(keyword),
+        )
+      : [];
+
+    if (titleKeywords.length > 0) {
+      complexityScore += 2;
+      scoreBreakdown.push(`Title keywords (${titleKeywords.join(', ')}): +2`);
+      // "Complete" or "Full" systems need multiple commits
+      estimatedCommits = Math.max(estimatedCommits, 3);
+    }
+    if (descKeywords.length > 0) {
+      complexityScore += 2;
+      scoreBreakdown.push(
+        `Description keywords (${descKeywords.join(', ')}): +2`,
+      );
+    }
+
+    // Classify based on score
+    let complexityLevel: 'high' | 'medium' | 'low';
+    if (complexityScore >= 7) {
+      complexityLevel = 'high';
+    } else if (complexityScore >= 4) {
+      complexityLevel = 'medium';
+    } else {
+      complexityLevel = 'low';
+    }
+
+    // Log the analysis using console.log to ensure it appears in test output
+    console.log(
+      `\n📊 Phase 4: Task complexity analysis for "${task.title}":\n` +
+        `   Score breakdown:\n` +
+        scoreBreakdown.map((s) => `     - ${s}`).join('\n') +
+        `\n   Total score: ${complexityScore}\n` +
+        `   Complexity level: ${complexityLevel.toUpperCase()}\n` +
+        `   Estimated commits: ${estimatedCommits}\n`,
+    );
+
+    return { level: complexityLevel, estimatedCommits };
   }
 
   /**
@@ -1072,13 +1458,69 @@ ${i + 1}. **${item.title}**
    */
   private shouldDecomposeTask(brainOutput: string, _task: Task): boolean {
     // Look for decomposition marker in Brain's output
-    return brainOutput.trim().startsWith('DECOMPOSE_TASK:');
+    const shouldDecompose = brainOutput.trim().startsWith('DECOMPOSE_TASK:');
+
+    // Log Brain's decision
+    const firstLine = brainOutput.split('\n')[0].substring(0, 100);
+    console.log(
+      `\n🤖 Phase 4: Brain's decomposition decision:\n` +
+        `   Should decompose: ${shouldDecompose}\n` +
+        `   Response starts with: "${firstLine}${brainOutput.length > 100 ? '...' : ''}"\n`,
+    );
+
+    return shouldDecompose;
   }
 
   /**
    * Phase 4: Create temporary sub-hollon for a subtask
    * Follows the pattern from HollonOrchestratorService.handleComplexTask()
    */
+
+  /**
+   * Phase 4: Get system prompt for sub-hollon based on type
+   * Reads prompt templates from the prompts/ directory
+   */
+  /**
+   * Phase 4: Get appropriate Role for sub-hollon based on type
+   * Finds specialized roles from the database
+   */
+  private async getRoleForSubHollonType(
+    type: 'planning' | 'implementation' | 'testing' | 'integration',
+    organizationId: string,
+  ): Promise<Role | null> {
+    const roleNameMap = {
+      planning: 'PlanningSpecialist',
+      implementation: 'ImplementationSpecialist',
+      testing: 'TestingSpecialist',
+      integration: 'IntegrationSpecialist',
+    };
+
+    const roleName = roleNameMap[type];
+
+    try {
+      const role = await this.roleRepo.findOne({
+        where: {
+          name: roleName,
+          organizationId,
+          availableForTemporaryHollon: true,
+        },
+      });
+
+      if (!role) {
+        this.logger.warn(
+          `Role ${roleName} not found for organization ${organizationId}`,
+        );
+      }
+
+      return role;
+    } catch (error) {
+      this.logger.error(
+        `Failed to load role for ${type}: ${(error as Error).message}`,
+      );
+      return null;
+    }
+  }
+
   private async createSubHollonForSubtask(
     parentHollon: Hollon,
     task: Task,
@@ -1086,16 +1528,26 @@ ${i + 1}. **${item.title}**
       title: string;
       description: string;
       requiredSkills?: string[];
+      subHollonType?: 'planning' | 'implementation' | 'testing' | 'integration';
     },
   ): Promise<Hollon> {
-    // Determine appropriate role based on subtask skills or use a generic implementation role
-    // For now, we'll create a generic "Implementer" sub-hollon
-    // In the future, this could be enhanced to select roles based on requiredSkills
+    // Phase 4: Determine sub-hollon type (default to 'implementation')
+    const subHollonType = subtaskData.subHollonType || 'implementation';
 
-    const subHollonName = `Impl-${task.id.substring(0, 8)}-${subtaskData.title.substring(0, 20).replace(/[^a-zA-Z0-9-]/g, '-')}`;
+    // Phase 4: Get specialized role for the sub-hollon type
+    const specializedRole = await this.getRoleForSubHollonType(
+      subHollonType,
+      parentHollon.organizationId,
+    );
+
+    // Fallback to parent's role if specialized role not found
+    const roleId = specializedRole?.id || parentHollon.roleId;
+    const systemPrompt = specializedRole?.systemPrompt || undefined;
+
+    const subHollonName = `${subHollonType.substring(0, 4)}-${task.id.substring(0, 8)}-${subtaskData.title.substring(0, 20).replace(/[^a-zA-Z0-9-]/g, '-')}`;
 
     this.logger.log(
-      `Creating temporary sub-hollon ${subHollonName} for subtask "${subtaskData.title}"`,
+      `Creating temporary sub-hollon ${subHollonName} (type: ${subHollonType}, role: ${specializedRole?.name || 'fallback'}) for subtask "${subtaskData.title}"`,
     );
 
     // Create temporary sub-hollon using the service
@@ -1103,13 +1555,14 @@ ${i + 1}. **${item.title}**
       name: subHollonName,
       organizationId: parentHollon.organizationId,
       teamId: parentHollon.teamId || undefined,
-      roleId: parentHollon.roleId, // Use same role as parent for now
+      roleId, // ✅ Phase 4: Use specialized role ID
       brainProviderId: parentHollon.brainProviderId || 'claude_code',
       createdBy: parentHollon.id,
+      systemPrompt, // ✅ Phase 4: Inject role's system prompt
     });
 
     this.logger.log(
-      `Created temporary sub-hollon ${subHollon.id.slice(0, 8)} for "${subtaskData.title}"`,
+      `Created temporary sub-hollon ${subHollon.id.slice(0, 8)} with ${specializedRole?.name || 'default'} role for "${subtaskData.title}"`,
     );
 
     return subHollon;
@@ -1223,6 +1676,7 @@ ${i + 1}. **${item.title}**
   /**
    * Pull Request 생성
    * Phase 3.11: 현재 브랜치를 자동 감지 (feature/{hollonName}/task-{id})
+   * Phase 4: No-commit check - ensure task made changes before creating PR
    */
   private async createPullRequest(
     _project: Project,
@@ -1230,12 +1684,6 @@ ${i + 1}. **${item.title}**
     worktreePath: string,
   ): Promise<string> {
     this.logger.debug(`Creating PR for task ${task.id}`);
-
-    // Skip PR creation in test environment (no GitHub remote)
-    if (process.env.NODE_ENV === 'test') {
-      this.logger.debug(`Skipping PR creation in test environment`);
-      return `https://github.com/test/repo/pull/${Math.floor(Math.random() * 1000)}`;
-    }
 
     try {
       // 1. Get current branch name
@@ -1247,6 +1695,43 @@ ${i + 1}. **${item.title}**
 
       this.logger.debug(`Current branch: ${currentBranch}`);
 
+      // Phase 4: Get base branch from organization settings to check commit count
+      const organization = await this.orgRepo.findOne({
+        where: { id: task.project.organizationId },
+      });
+      const settings = (organization?.settings || {}) as OrganizationSettings;
+      const baseBranch = settings.baseBranch || 'main';
+
+      // Phase 4: Check if there are any commits to push
+      try {
+        const { stdout: commitCount } = await execAsync(
+          `git rev-list --count origin/${baseBranch}..HEAD`,
+          { cwd: worktreePath },
+        );
+
+        const count = parseInt(commitCount.trim(), 10);
+
+        if (count === 0) {
+          throw new Error(
+            `No commits to create PR - task made no changes. Branch ${currentBranch} has no commits ahead of origin/${baseBranch}.`,
+          );
+        }
+
+        this.logger.log(
+          `Found ${count} commit(s) to push for PR on branch ${currentBranch}`,
+        );
+      } catch (countError) {
+        const err = countError as Error;
+        // Re-throw if it's our custom error about no commits
+        if (err.message.includes('No commits to create PR')) {
+          throw err;
+        }
+        // Otherwise log and continue (might be git command issue)
+        this.logger.warn(
+          `Could not verify commit count: ${err.message}, proceeding with PR creation`,
+        );
+      }
+
       // 2. Push to remote
       await execAsync(`git push -u origin ${currentBranch}`, {
         cwd: worktreePath,
@@ -1255,13 +1740,7 @@ ${i + 1}. **${item.title}**
       // 3. PR body 구성
       const prBody = this.buildPRBody(task);
 
-      // 4. Get base branch from organization settings
-      const organization = await this.orgRepo.findOne({
-        where: { id: task.project.organizationId },
-      });
-      const settings = (organization?.settings || {}) as OrganizationSettings;
-      const baseBranch = settings.baseBranch || 'main';
-
+      // 4. Base branch was already retrieved above for commit count check
       this.logger.debug(`Creating PR with base branch: ${baseBranch}`);
 
       // 5. Create PR using gh CLI
@@ -1274,9 +1753,14 @@ ${i + 1}. **${item.title}**
       return prUrl;
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to create PR: ${errorMessage}`);
-      throw new Error(`PR creation failed: ${errorMessage}`);
+        error instanceof Error ? error.message : String(error);
+      const stderr = (error as any)?.stderr || '';
+      this.logger.error(
+        `Failed to create PR: ${errorMessage}${stderr ? `\nStderr: ${stderr}` : ''}`,
+      );
+      throw new Error(
+        `PR creation failed: ${errorMessage}${stderr ? ` (${stderr})` : ''}`,
+      );
     }
   }
 
@@ -1400,13 +1884,14 @@ Make sure to:
 3. Ensure all tests pass locally before committing
 `.trim();
 
-    // Update task metadata with retry count
+    // Update task metadata with retry count and feedback
     await this.taskRepo.update(task.id, {
       metadata: {
         ...metadata,
         ciRetryCount: retryCount,
         lastCIFailure: new Date().toISOString(),
         lastCIFailedChecks: failedChecks,
+        lastCIFeedback: feedback, // Store feedback for next execution
       } as any,
     });
 
@@ -1566,6 +2051,75 @@ Make sure to:
   /**
    * PR URL에서 PR 번호 추출
    */
+  /**
+   * Phase 4: Check if parent task should be reviewed after subtask completion
+   *
+   * When a subtask completes, check if ALL sibling subtasks are also complete.
+   * If yes, mark the parent task as READY_FOR_REVIEW for manager review.
+   * Manager can then decide to:
+   * - Approve and continue (execute parent task → create PR)
+   * - Request changes or add more subtasks
+   * - Change direction if the approach was wrong
+   */
+  private async checkAndResumeParentTask(subtask: Task): Promise<void> {
+    if (!subtask.parentTaskId) {
+      // No parent task, nothing to resume
+      return;
+    }
+
+    this.logger.log(
+      `Checking if parent task ${subtask.parentTaskId.slice(0, 8)} should resume after subtask ${subtask.id.slice(0, 8)} completed`,
+    );
+
+    // Load parent task with all subtasks
+    const parentTask = await this.taskRepo.findOne({
+      where: { id: subtask.parentTaskId },
+      relations: ['assignedHollon'],
+    });
+
+    if (!parentTask) {
+      this.logger.warn(
+        `Parent task ${subtask.parentTaskId} not found for subtask ${subtask.id}`,
+      );
+      return;
+    }
+
+    // Load all sibling subtasks
+    const siblings = await this.taskRepo.find({
+      where: { parentTaskId: subtask.parentTaskId },
+    });
+
+    // Check if all subtasks are completed
+    const allCompleted = siblings.every(
+      (s) => s.status === TaskStatus.COMPLETED,
+    );
+
+    if (!allCompleted) {
+      const completedCount = siblings.filter(
+        (s) => s.status === TaskStatus.COMPLETED,
+      ).length;
+      this.logger.log(
+        `Parent task ${parentTask.id.slice(0, 8)}: ${completedCount}/${siblings.length} subtasks completed, waiting for others`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `✅ All ${siblings.length} subtasks completed for parent task ${parentTask.id.slice(0, 8)}, marking as READY_FOR_REVIEW for manager review`,
+    );
+
+    // Mark parent task as READY_FOR_REVIEW so manager can review before resuming
+    // This allows checking if the direction is still correct or needs adjustment
+    await this.taskRepo.update(parentTask.id, {
+      status: TaskStatus.READY_FOR_REVIEW,
+      assignedHollonId: parentTask.assignedHollonId, // Keep the same hollon
+    });
+
+    this.logger.log(
+      `Parent task ${parentTask.id.slice(0, 8)} marked as READY_FOR_REVIEW, awaiting manager review before PR creation`,
+    );
+  }
+
   private extractPRNumber(prUrl: string): number | null {
     // GitHub PR URL 형식: https://github.com/owner/repo/pull/123
     const match = prUrl.match(/\/pull\/(\d+)/);

@@ -10,10 +10,6 @@ import {
   BrainRequest,
   BrainResponse,
 } from './interfaces/brain-provider.interface';
-import {
-  KnowledgeInjectionService,
-  KnowledgeContext,
-} from './services/knowledge-injection.service';
 
 @Injectable()
 export class BrainProviderService {
@@ -23,7 +19,6 @@ export class BrainProviderService {
     private readonly claudeProvider: ClaudeCodeProvider,
     @InjectRepository(CostRecord)
     private readonly costRecordRepo: Repository<CostRecord>,
-    private readonly knowledgeInjection: KnowledgeInjectionService,
   ) {}
 
   /**
@@ -36,7 +31,6 @@ export class BrainProviderService {
       hollonId?: string;
       taskId?: string;
     },
-    knowledgeContext?: KnowledgeContext,
   ): Promise<BrainResponse> {
     this.logger.log(
       `Executing brain with tracking: org=${context.organizationId}, ` +
@@ -44,22 +38,8 @@ export class BrainProviderService {
     );
 
     try {
-      // ✅ Phase 3.5: 지식 주입
-      let enhancedPrompt = request.prompt;
-      if (knowledgeContext) {
-        enhancedPrompt = await this.knowledgeInjection.injectKnowledge(
-          request.prompt,
-          knowledgeContext,
-        );
-      }
-
-      // Execute brain provider with enhanced prompt
-      const enhancedRequest: BrainRequest = {
-        ...request,
-        prompt: enhancedPrompt,
-      };
-
-      const result = await this.claudeProvider.execute(enhancedRequest);
+      // Execute brain provider
+      const result = await this.claudeProvider.execute(request);
 
       // Track cost in database
       await this.costRecordRepo.save({

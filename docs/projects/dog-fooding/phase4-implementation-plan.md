@@ -115,23 +115,26 @@ Phase 4 (학습 및 성장) 구현을 실제 Hollon 팀에게 맡겨서:
 - ✅ 범용 역할 (Phase 4, 5, 6... 모두 수행 가능)
 - ✅ Capability 기반 Task 매칭
 - ✅ 재사용 가능한 Hollon
+- ✅ 각 팀이 자체 테스트 작성 (QA 팀 불필요)
 
 ```
-Organization: Hollon AI
-├── Team: Backend Engineering
-│   ├── Manager: TechLead-Alpha
-│   ├── Senior: BackendDev-Bravo
-│   ├── Senior: BackendDev-Charlie
-│   └── Junior: BackendDev-Delta
+Organization: Hollon AI Development
+├── CTO-Zeus (Organization Manager)
 │
-├── Team: Data & AI Engineering
+├── Team: Backend Engineering (4명)
+│   ├── Manager: TechLead-Alpha
+│   ├── Senior: Developer-Bravo
+│   ├── Senior: Developer-Charlie
+│   └── Junior: Developer-Delta
+│
+├── Team: Data & AI Engineering (3명)
 │   ├── Manager: AILead-Echo
 │   ├── Senior: DataEngineer-Foxtrot
 │   └── Senior: MLEngineer-Golf
 │
-└── Team: Quality & Testing
-    ├── Manager: QALead-Hotel
-    └── Senior: TestEngineer-India
+└── Team: Backend Infrastructure (2명)
+    ├── Manager: InfraLead-Hotel
+    └── Senior: DevOps-India
 ```
 
 **특징**:
@@ -142,6 +145,7 @@ Organization: Hollon AI
 - Phase 5.1 (CLI) → Backend Engineering
 - Phase 5.2 (UI) → Frontend Engineering (필요 시 추가)
 - **모든 Phase에 재사용 가능**
+- **테스트**: 각 Engineer가 자신의 코드 테스트 작성 (전문 QA 불필요)
 
 ---
 
@@ -151,13 +155,19 @@ Organization: Hollon AI
 
 | Stage         | Activity                                 | Duration | Output                   |
 | ------------- | ---------------------------------------- | -------- | ------------------------ |
-| **Setup**     | Organization, Teams, Roles, Hollons 생성 | 1 day    | 9 Hollons                |
+| **Setup**     | Organization, Teams, Roles, Hollons 생성 | 1 day    | 10 Hollons (3 teams)     |
 | **Phase 4.1** | 지식 시스템 구현                         | 2 weeks  | Working Knowledge System |
 | **Phase 4.2** | 협업 인프라 구현                         | 2 weeks  | Working Collaboration    |
 | **Phase 4.3** | 메모리 시스템 구현                       | 2 weeks  | Working Memory System    |
 | **Review**    | 결과 분석 및 보고서 작성                 | 3 days   | Dogfooding Report        |
 
 **총 기간**: 약 6-7주
+
+**Hollon 구성**:
+
+- 1 CTO (조직 전체 관리)
+- 3 Team Managers (각 팀 1명)
+- 6 Team Members (Backend 3, Data/AI 2, Infra 1)
 
 ---
 
@@ -409,31 +419,31 @@ Manager Hollon이 **requiredSkills 기반**으로 자율 분배:
 
 #### Phase 4.1 Subtasks
 
-| Subtask                  | Required Capabilities                  | → Assigned Hollon                        | Reason          |
-| ------------------------ | -------------------------------------- | ---------------------------------------- | --------------- |
-| KnowledgeExtraction 구현 | `typescript`, `nestjs`, `event-driven` | **BackendDev-Charlie**                   | Event 처리 전문 |
-| VectorSearch 구현        | `pgvector`, `data-pipeline`            | **DataEngineer-Foxtrot**                 | Vector DB 전문  |
-| KnowledgeGraph 구현      | `graph-databases`, `data-pipeline`     | **DataEngineer-Foxtrot**                 | Graph DB 전문   |
-| PromptComposer 통합      | `system-design`, `llm-integration`     | **TechLead-Alpha** + **MLEngineer-Golf** | 아키텍처 + LLM  |
-| E2E 테스트               | `e2e-testing`                          | **TestEngineer-India**                   | 테스트 전문     |
+| Subtask                  | Required Capabilities                  | → Assigned Hollon                        | Reason                     |
+| ------------------------ | -------------------------------------- | ---------------------------------------- | -------------------------- |
+| KnowledgeExtraction 구현 | `typescript`, `nestjs`, `event-driven` | **Developer-Charlie**                    | Event 처리 전문            |
+| VectorSearch 구현        | `pgvector`, `data-pipeline`            | **DataEngineer-Foxtrot**                 | Vector DB 전문             |
+| KnowledgeGraph 구현      | `graph-databases`, `data-pipeline`     | **DataEngineer-Foxtrot**                 | Graph DB 전문              |
+| PromptComposer 통합      | `system-design`, `llm-integration`     | **TechLead-Alpha** + **MLEngineer-Golf** | 아키텍처 + LLM             |
+| 단위/통합 테스트 작성    | `unit-testing`, `documentation`        | **Developer-Delta** (Junior)             | 테스트 작성 전문 (각 기능) |
 
 #### Phase 4.2 Subtasks
 
-| Subtask                    | Required Capabilities                     | → Assigned Hollon                            | Reason         |
-| -------------------------- | ----------------------------------------- | -------------------------------------------- | -------------- |
-| Channel Entity 구현        | `typescript`, `nestjs`, `database-design` | **BackendDev-Bravo**                         | DB 스키마 전문 |
-| ContinuousImprovement 구현 | `event-driven`, `llm-integration`         | **BackendDev-Charlie** + **MLEngineer-Golf** | Event + LLM    |
-| MessageListener 개선       | `event-emitter`, `integration`            | **BackendDev-Charlie**                       | Event 전문     |
-| E2E 테스트                 | `e2e-testing`                             | **TestEngineer-India**                       | 테스트 전문    |
+| Subtask                    | Required Capabilities                     | → Assigned Hollon                           | Reason         |
+| -------------------------- | ----------------------------------------- | ------------------------------------------- | -------------- |
+| Channel Entity 구현        | `typescript`, `nestjs`, `database-design` | **Developer-Bravo**                         | DB 스키마 전문 |
+| ContinuousImprovement 구현 | `event-driven`, `llm-integration`         | **Developer-Charlie** + **MLEngineer-Golf** | Event + LLM    |
+| MessageListener 개선       | `event-emitter`, `integration`            | **Developer-Charlie**                       | Event 전문     |
+| 단위/통합 테스트 작성      | `unit-testing`                            | **Developer-Delta** (Junior)                | 테스트 작성    |
 
 #### Phase 4.3 Subtasks
 
-| Subtask                  | Required Capabilities                   | → Assigned Hollon        | Reason            |
-| ------------------------ | --------------------------------------- | ------------------------ | ----------------- |
-| PerformanceAnalyzer 구현 | `data-pipeline`, `metrics`              | **DataEngineer-Foxtrot** | 데이터 파이프라인 |
-| PromptOptimizer 구현     | `llm-integration`, `prompt-engineering` | **MLEngineer-Golf**      | Prompt 전문       |
-| BestPractice 구현        | `machine-learning`, `llm-integration`   | **AILead-Echo**          | ML 아키텍처       |
-| E2E 테스트               | `e2e-testing`                           | **TestEngineer-India**   | 테스트 전문       |
+| Subtask                  | Required Capabilities                   | → Assigned Hollon            | Reason            |
+| ------------------------ | --------------------------------------- | ---------------------------- | ----------------- |
+| PerformanceAnalyzer 구현 | `data-pipeline`, `metrics`              | **DataEngineer-Foxtrot**     | 데이터 파이프라인 |
+| PromptOptimizer 구현     | `llm-integration`, `prompt-engineering` | **MLEngineer-Golf**          | Prompt 전문       |
+| BestPractice 구현        | `machine-learning`, `llm-integration`   | **AILead-Echo**              | ML 아키텍처       |
+| 단위/통합 테스트 작성    | `unit-testing`                          | **Developer-Delta** (Junior) | 테스트 작성       |
 
 **핵심**:
 
@@ -472,9 +482,9 @@ POST /teams
 
 POST /teams
 {
-  name: "Quality & Testing",
+  name: "Backend Infrastructure",
   organizationId: org.id,
-  description: "E2E 테스트, 품질 보증"
+  description: "CI/CD, Docker, 모니터링, 인프라 자동화"
 }
 
 # 3. Roles 생성 (범용 역할!)
@@ -508,12 +518,12 @@ POST /roles
 
 POST /roles
 {
-  name: "QA Lead",
-  capabilities: ["test-strategy", "e2e-testing", "quality-assurance"],
+  name: "Junior Backend Engineer",
+  capabilities: ["typescript", "nestjs", "unit-testing", "documentation"],
   organizationId: org.id
 }
 
-# 4. Hollons 생성 (총 9명)
+# 4. Hollons 생성 (총 10명)
 POST /hollons
 {
   name: "TechLead-Alpha",
@@ -530,7 +540,7 @@ POST /hollons
   personality: "백엔드 시스템을 구현합니다..."
 }
 
-# (나머지 7명 생성...)
+# (나머지 6명 생성: Developer-Charlie, Developer-Delta, DataEngineer-Foxtrot, MLEngineer-Golf, InfraLead-Hotel, DevOps-India)
 
 # 5. Manager 지정
 PATCH /teams/{backendTeam.id}
@@ -543,9 +553,9 @@ PATCH /teams/{dataAITeam.id}
   managerHollonId: aiLeadEcho.id
 }
 
-PATCH /teams/{qaTeam.id}
+PATCH /teams/{infraTeam.id}
 {
-  managerHollonId: qaLeadHotel.id
+  managerHollonId: infraLeadHotel.id
 }
 ```
 
@@ -572,7 +582,7 @@ POST /goals
       "nestjs",
       "vector-databases",  // → DataEngineer-Foxtrot 매칭
       "llm-integration",   // → MLEngineer-Golf 매칭
-      "event-driven"       // → BackendDev-Charlie 매칭
+      "event-driven"       // → Developer-Charlie 매칭
     ]
   }
 }
@@ -588,11 +598,11 @@ POST /goals
 #      2. Subtask 분해 (Task 엔티티 생성)
 #      3. 각 Subtask의 requiredSkills 분석
 #      4. Capability 매칭으로 팀원 자동 배정:
-#         - Task: "KnowledgeExtraction 구현" → BackendDev-Charlie
+#         - Task: "KnowledgeExtraction 구현" → Developer-Charlie
 #         - Task: "VectorSearch 구현" → DataEngineer-Foxtrot
 #         - Task: "KnowledgeGraph 구현" → DataEngineer-Foxtrot
 #         - Task: "PromptComposer 통합" → MLEngineer-Golf
-#         - Task: "E2E 테스트" → TestEngineer-India
+#         - Task: "단위/통합 테스트 작성" → Developer-Delta
 #
 # T+2분: GoalAutomationListener.autoExecuteTasks() (Cron)
 #   → TaskExecutionService.executeTask() (각 assignedHollonId)
@@ -610,9 +620,9 @@ POST /goals
 # - Capability 기반 매칭 (requiredSkills)
 #
 # 결과: 3개 팀이 자동으로 협업하여 Phase 4.1 완성!
-# - Backend Engineering: 전체 조율 (TechLead-Alpha)
-# - Data & AI Engineering: Vector/Graph/LLM
-# - Quality & Testing: 테스트
+# - Backend Engineering: 전체 조율 및 서비스 구현 (TechLead-Alpha)
+# - Data & AI Engineering: Vector/Graph/LLM 구현
+# - Backend Infrastructure: CI/CD 및 배포 자동화
 ```
 
 ### 3. 자동 워크플로우 (GoalAutomationListener - Phase 3 완료)
@@ -676,18 +686,19 @@ T+1분  : Cron 1 실행 (autoDecomposeGoals)
          └─ TechLead-Alpha (Manager)가 Brain Provider 호출
             ├─ phase4-revised-plan.md 읽기
             ├─ Subtask 5개 분해
-            │  ├─ Task 1: "KnowledgeExtraction 구현" → BackendDev-Charlie
+            │  ├─ Task 1: "KnowledgeExtraction 구현" → Developer-Charlie
             │  ├─ Task 2: "VectorSearch 구현" → DataEngineer-Foxtrot
             │  ├─ Task 3: "KnowledgeGraph 구현" → DataEngineer-Foxtrot
             │  ├─ Task 4: "PromptComposer 통합" → MLEngineer-Golf
-            │  └─ Task 5: "E2E 테스트" → TestEngineer-India
+            │  └─ Task 5: "단위/통합 테스트 작성" → Developer-Delta
             └─ Task 엔티티 생성 (status='todo', assignedHollonId 포함)
 
 T+2분  : Cron 2 실행 (autoExecuteTasks)
          └─ 각 Hollon이 Brain Provider 호출
-            ├─ BackendDev-Charlie: KnowledgeExtraction 구현 시작
+            ├─ Developer-Charlie: KnowledgeExtraction 구현 시작
             ├─ DataEngineer-Foxtrot: VectorSearch 구현 시작
             ├─ MLEngineer-Golf: PromptComposer 통합 시작
+            ├─ Developer-Delta: 테스트 작성 시작
             └─ (각자 Git worktree에서 병렬 작업)
 
 T+2시간: Task 완료 (평균)
@@ -961,14 +972,14 @@ POST /teams
 
 ```
 실제 회사:
-├── Backend Team → 모든 백엔드 기능 담당 (Phase 구분 X)
-├── Frontend Team → 모든 프론트엔드 기능 담당
-└── QA Team → 모든 테스트 담당
+├── Backend Team → 모든 백엔드 기능 담당 (Phase 구분 X, 자체 테스트 작성)
+├── Data Team → 모든 데이터/ML 기능 담당
+└── DevOps Team → 인프라 및 CI/CD 담당
 
 Hollon AI (Task-Neutral):
-├── Backend Engineering → Phase 4, 5, 6 모든 백엔드
-├── Data & AI Engineering → Phase 4, 5, 6 모든 AI/ML
-└── Quality & Testing → Phase 4, 5, 6 모든 테스트
+├── Backend Engineering → Phase 4, 5, 6 모든 백엔드 (자체 테스트 작성)
+├── Data & AI Engineering → Phase 4, 5, 6 모든 AI/ML (자체 테스트 작성)
+└── Backend Infrastructure → Phase 4, 5, 6 모든 인프라
 ```
 
 ---
