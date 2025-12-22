@@ -780,11 +780,12 @@ export class GoalAutomationListener {
           // gh pr checks로 CI 상태 확인
           try {
             const { stdout } = await execAsync(
-              `gh pr checks ${pr.prUrl} --json state`,
+              `gh pr checks ${pr.prUrl} --json state,name`,
             );
 
             const checks = JSON.parse(stdout.trim()) as Array<{
               state: string;
+              name?: string;
             }>;
 
             // 모든 체크가 성공했는지 확인
@@ -817,11 +818,57 @@ export class GoalAutomationListener {
               const currentRetryCount = (metadata.ciRetryCount as number) || 0;
               const maxRetries = 3;
 
+              // Get failed check names and detailed CI logs
+              const failedCheckNames = checks
+                .filter((check) => check.state !== 'success')
+                .map((check) => check.name || 'Unknown check')
+                .filter((name): name is string => name !== undefined);
+
+              let ciLogs = '';
+              try {
+                const { stdout } = await execAsync(
+                  `gh pr checks ${pr.prUrl} --json name,state,detailsUrl`,
+                );
+                const detailedChecks = JSON.parse(stdout.trim()) as Array<{
+                  name: string;
+                  state: string;
+                  detailsUrl: string;
+                }>;
+                const failedDetails = detailedChecks
+                  .filter((check) => check.state !== 'success')
+                  .map((check) => `${check.name}: ${check.detailsUrl}`)
+                  .join('\n');
+                ciLogs =
+                  failedDetails ||
+                  `Failed checks: ${failedCheckNames.join(', ')}`;
+              } catch {
+                this.logger.debug('Could not fetch detailed CI logs');
+                ciLogs = `Failed checks: ${failedCheckNames.join(', ')}`;
+              }
+
               if (currentRetryCount < maxRetries) {
                 // 재시도 가능
                 this.logger.log(
                   `Retrying task ${task.id} (attempt ${currentRetryCount + 1}/${maxRetries})`,
                 );
+
+                // Create feedback message for the brain
+                const feedback = `
+CI Checks Failed (Attempt ${currentRetryCount + 1}/${maxRetries}):
+
+${ciLogs}
+
+The following CI checks failed:
+${failedCheckNames.map((check) => `- ${check}`).join('\n')}
+
+Please review the CI errors and fix the issues in your code. 
+${currentRetryCount + 1 < maxRetries ? 'You will have another chance to fix this.' : 'This is the final attempt.'}
+
+Make sure to:
+1. Review the error messages carefully
+2. Fix any linting, type, or test failures
+3. Ensure all tests pass locally before committing
+`.trim();
 
                 // Task를 READY로 설정하여 pullNextTask에서 선택될 수 있도록 함
                 task.status = TaskStatus.READY;
@@ -829,8 +876,14 @@ export class GoalAutomationListener {
                   ...metadata,
                   ciRetryCount: currentRetryCount + 1,
                   lastCIFailure: new Date().toISOString(),
+                  lastCIFailedChecks: failedCheckNames,
+                  lastCIFeedback: feedback, // Store feedback for next execution
                 } as Record<string, unknown>;
                 await this.taskRepo.save(task);
+
+                this.logger.log(
+                  `Task ${task.id} metadata updated with CI feedback`,
+                );
 
                 // Hollon에게 재실행 요청
                 if (task.assignedHollonId) {
