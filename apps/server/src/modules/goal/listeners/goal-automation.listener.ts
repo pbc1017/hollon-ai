@@ -823,8 +823,8 @@ export class GoalAutomationListener {
                   `Retrying task ${task.id} (attempt ${currentRetryCount + 1}/${maxRetries})`,
                 );
 
-                // Task를 IN_PROGRESS로 되돌리고 재시도 카운트 증가
-                task.status = TaskStatus.IN_PROGRESS;
+                // Task를 READY로 설정하여 pullNextTask에서 선택될 수 있도록 함
+                task.status = TaskStatus.READY;
                 task.metadata = {
                   ...metadata,
                   ciRetryCount: currentRetryCount + 1,
