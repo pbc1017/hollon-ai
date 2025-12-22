@@ -780,23 +780,23 @@ export class GoalAutomationListener {
           // gh pr checks로 CI 상태 확인
           try {
             const { stdout } = await execAsync(
-              `gh pr checks ${pr.prUrl} --json conclusion`,
+              `gh pr checks ${pr.prUrl} --json state`,
             );
 
             const checks = JSON.parse(stdout.trim()) as Array<{
-              conclusion: string;
+              state: string;
             }>;
 
             // 모든 체크가 성공했는지 확인
             const hasFailedChecks = checks.some(
-              (check) => check.conclusion !== 'success',
+              (check) => check.state !== 'success',
             );
 
             const hasPendingChecks = checks.some(
               (check) =>
-                check.conclusion === 'pending' ||
-                check.conclusion === 'in_progress' ||
-                check.conclusion === null,
+                check.state === 'pending' ||
+                check.state === 'in_progress' ||
+                check.state === null,
             );
 
             if (hasPendingChecks) {

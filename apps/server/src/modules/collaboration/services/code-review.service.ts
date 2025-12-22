@@ -219,15 +219,15 @@ export class CodeReviewService implements ICodeReviewService {
 
       try {
         const { stdout } = await execAsync(
-          `gh pr checks ${pr.prUrl} --json conclusion`,
+          `gh pr checks ${pr.prUrl} --json state`,
         );
 
         const checks = JSON.parse(stdout.trim()) as Array<{
-          conclusion: string;
+          state: string;
         }>;
 
         const hasFailedChecks = checks.some(
-          (check) => check.conclusion !== 'success',
+          (check) => check.state !== 'success',
         );
 
         if (hasFailedChecks) {
