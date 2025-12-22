@@ -217,6 +217,9 @@ export class TaskExecutionService {
           );
           this.logger.log(`PR created for resumed task: ${prUrl}`);
 
+          // Phase 4.2: Save PR to database immediately (for CI monitoring)
+          await this.savePRRecord(task, prUrl, hollonId, worktreePath);
+
           // Wait for CI checks
           this.logger.log(`Waiting for CI checks to complete for PR: ${prUrl}`);
           await this.waitForCIChecks(prUrl, worktreePath);
@@ -248,7 +251,7 @@ export class TaskExecutionService {
           this.logger.log(`All CI checks passed for resumed task ${taskId}`);
 
           // Request code review
-          await this.requestCodeReview(task, prUrl, hollonId, worktreePath);
+          await this.requestCodeReview(task, prUrl);
 
           // Mark as ready for review
           await this.taskRepo.update(taskId, {
@@ -370,6 +373,9 @@ export class TaskExecutionService {
         prUrl = await this.createPullRequest(task.project, task, worktreePath);
         this.logger.log(`PR created: ${prUrl}`);
 
+        // Phase 4.2: Save PR to database immediately (for CI monitoring)
+        await this.savePRRecord(task, prUrl, hollonId, worktreePath);
+
         // 8. Phase 4: Wait for CI checks to complete
         this.logger.log(`Waiting for CI checks to complete for PR: ${prUrl}`);
         await this.waitForCIChecks(prUrl, worktreePath);
@@ -404,7 +410,7 @@ export class TaskExecutionService {
         this.logger.log(`All CI checks passed for task ${taskId}`);
 
         // 10. CodeReview 요청 (Phase 2 활용)
-        await this.requestCodeReview(task, prUrl, hollonId, worktreePath);
+        await this.requestCodeReview(task, prUrl);
 
         // 11. Task를 READY_FOR_REVIEW로 변경 (Phase 3.16: Manager review 대기)
         await this.taskRepo.update(taskId, {
@@ -2013,12 +2019,49 @@ Make sure to:
    * CodeReview 요청 (Phase 2 활용)
    * Phase 3.11: PR URL에서 브랜치명 추출
    */
-  private async requestCodeReview(
+  /**
+   * Phase 4.2: Save PR record to database (without requesting review)
+   * This is called immediately after PR creation to enable CI monitoring
+   * even if CI checks fail before review can be requested
+   */
+  private async savePRRecord(
     task: Task,
     prUrl: string,
     authorHollonId: string,
     worktreePath: string,
-  ): Promise<void> {
+  ): Promise<string> {
+    const prNumber = this.extractPRNumber(prUrl);
+
+    if (!prNumber) {
+      this.logger.warn(`Could not extract PR number from ${prUrl}`);
+      throw new Error(`Invalid PR URL: ${prUrl}`);
+    }
+
+    this.logger.log(
+      `Saving PR #${prNumber} to database for task ${task.id.slice(0, 8)}`,
+    );
+
+    // Get current branch name
+    const { stdout } = await execAsync(`git branch --show-current`, {
+      cwd: worktreePath,
+    });
+    const branchName = stdout.trim();
+
+    // ✅ DDD: TaskPullRequest 생성 (Port 사용) - 리뷰 요청 없이
+    const pr = await this.codeReviewPort.createPullRequest({
+      taskId: task.id,
+      prNumber,
+      prUrl,
+      repository: task.project.repositoryUrl || 'unknown',
+      branchName,
+      authorHollonId,
+    });
+
+    this.logger.log(`PR record saved to database: ${pr.id}`);
+    return pr.id;
+  }
+
+  private async requestCodeReview(task: Task, prUrl: string): Promise<void> {
     const prNumber = this.extractPRNumber(prUrl);
 
     if (!prNumber) {
@@ -2028,21 +2071,20 @@ Make sure to:
 
     this.logger.log(`Requesting code review for PR #${prNumber}`);
 
-    // Get current branch name
-    const { stdout } = await execAsync(`git branch --show-current`, {
-      cwd: worktreePath,
-    });
-    const branchName = stdout.trim();
+    // Phase 4.2: Find existing PR record (created by savePRRecord)
+    const existingPRs = await this.codeReviewPort.findPullRequestsByTaskId(
+      task.id,
+    );
 
-    // ✅ DDD: TaskPullRequest 생성 (Port 사용)
-    const pr = await this.codeReviewPort.createPullRequest({
-      taskId: task.id,
-      prNumber,
-      prUrl,
-      repository: task.project.repositoryUrl || 'unknown',
-      branchName, // Phase 3.11: 동적 브랜치명 (feature/{hollonName}/task-{id})
-      authorHollonId,
-    });
+    if (existingPRs.length === 0) {
+      this.logger.error(
+        `No PR record found for task ${task.id.slice(0, 8)} - PR should have been saved after creation`,
+      );
+      throw new Error(`PR record not found for task ${task.id}`);
+    }
+
+    const pr = existingPRs[0]; // Get the first (should be only one)
+    this.logger.log(`Found existing PR record: ${pr.id}`);
 
     // ✅ DDD: 리뷰어 자동 할당 (Port 사용)
     await this.codeReviewPort.requestReview(pr.id);
