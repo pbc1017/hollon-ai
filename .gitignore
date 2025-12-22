@@ -40,6 +40,10 @@ coverage/
 *.sqlite
 *.db
 
+# Git worktrees (dynamically created by Hollon task execution)
+.git-worktrees/
+**/.git-worktrees/
+
 # Secrets
 *.pem
 *.key
