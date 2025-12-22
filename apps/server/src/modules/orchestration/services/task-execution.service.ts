@@ -850,7 +850,6 @@ ${i + 1}. **${item.title}**
 
     const worktreePath = path.join(
       project.workingDirectory,
-      '..',
       '.git-worktrees',
       `hollon-${hollon.id.slice(0, 8)}`,
       `task-${task.id.slice(0, 8)}`,
