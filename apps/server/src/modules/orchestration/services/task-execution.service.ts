@@ -567,7 +567,7 @@ export class TaskExecutionService {
           priority: this.mapPriority(workItem.priority || ''),
           acceptanceCriteria: workItem.acceptanceCriteria,
           requiredSkills: workItem.requiredSkills,
-          workingDirectory: task.project.workingDirectory, // ✅ Inherit from project
+          // workingDirectory will be set at execution time by getOrCreateWorktree()
         });
 
         const savedImplTask = await this.taskRepo.save(implTask);
