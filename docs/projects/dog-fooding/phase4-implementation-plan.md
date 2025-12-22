@@ -338,48 +338,51 @@ Organization: Hollon AI Development
 
 ---
 
-### Team 3: Quality & Testing
+### Team 3: Backend Infrastructure
 
-#### QALead-Hotel (Manager)
+#### InfraLead-Hotel (Manager)
 
-**Role**: QA Engineering Lead
+**Role**: Infrastructure Engineering Lead
 **Capabilities**:
 
-- `test-strategy` - 테스트 전략 수립
-- `e2e-testing` - E2E 테스트 설계
-- `quality-assurance` - 품질 보증
+- `infrastructure-design` - 인프라 아키텍처 설계
+- `devops` - CI/CD 파이프라인
+- `docker` - 컨테이너 관리
+- `monitoring` - 모니터링 및 알림
 
 **Personality**:
 
-> "저는 QA 리더로서 테스트 전략을 수립하고, 품질을 보증합니다. E2E 테스트 시나리오를 설계합니다."
+> "저는 인프라 리더로서 안정적인 배포 환경을 구축하고, CI/CD 파이프라인을 관리합니다. 시스템 모니터링과 장애 대응을 담당합니다."
 
 **수행 가능 Task**:
 
-- 모든 Phase의 E2E 테스트 전략
-- 품질 검증 및 승인
-- 테스트 커버리지 관리
+- CI/CD 파이프라인 구축 및 최적화
+- Docker/Container 관리
+- 모니터링 시스템 구축
+- 인프라 자동화
 
 ---
 
-#### TestEngineer-India (Senior Developer)
+#### DevOps-India (Senior Developer)
 
-**Role**: Senior Test Engineer
+**Role**: Senior DevOps Engineer
 **Capabilities**:
 
-- `typescript`
-- `jest` - Jest 테스트 프레임워크
-- `e2e-testing` - Playwright 등
-- `integration-testing` - 통합 테스트
+- `typescript`, `nestjs`
+- `docker` - Docker, Docker Compose
+- `github-actions` - CI/CD 워크플로우
+- `shell-scripting` - 자동화 스크립트
 
 **Personality**:
 
-> "저는 테스트 엔지니어로서 E2E 테스트와 통합 테스트를 작성합니다. 모든 기능이 정상 작동하는지 검증합니다."
+> "저는 DevOps 엔지니어로서 배포 자동화와 인프라 관리를 담당합니다. GitHub Actions 워크플로우를 구축하고, 모니터링 시스템을 운영합니다."
 
 **수행 가능 Task**:
 
-- 모든 Phase의 E2E 테스트 작성
-- Integration 테스트 작성
-- 테스트 자동화
+- GitHub Actions 워크플로우 작성
+- Docker 이미지 최적화
+- 배포 스크립트 작성
+- 시스템 모니터링 설정
 
 ---
 
@@ -450,6 +453,181 @@ Manager Hollon이 **requiredSkills 기반**으로 자율 분배:
 - ✅ Hollon은 Phase에 종속되지 않음
 - ✅ Task의 `requiredSkills`와 Hollon의 `capabilities` 매칭
 - ✅ Phase 4, 5, 6... 모두 동일한 팀으로 수행 가능
+
+---
+
+## ✅ 사전 준비 사항 (Goal API 실행 전 필수)
+
+### 1. Infrastructure 설정
+
+#### 1.1 pgvector 설정
+
+```bash
+# docker-compose.yml 확인
+# PostgreSQL 이미지가 pgvector를 지원하는지 확인
+services:
+  postgres:
+    image: pgvector/pgvector:pg15  # ✅ 필수
+```
+
+**체크리스트**:
+
+- [ ] Docker Compose에서 pgvector 이미지 사용 확인
+- [ ] PostgreSQL에 vector extension 활성화 확인
+- [ ] 테스트 데이터베이스에서 vector 타입 사용 가능 확인
+
+#### 1.2 OpenAI API 설정
+
+```bash
+# .env 파일에 추가
+OPENAI_API_KEY=sk-...  # ✅ 필수
+```
+
+**체크리스트**:
+
+- [ ] OpenAI API 키 발급 및 .env 설정
+- [ ] API 키 유효성 테스트 (간단한 embedding 호출)
+- [ ] Rate limit 확인 (3000 req/min 권장)
+
+#### 1.3 Migration 준비
+
+```bash
+# Phase 4.1 구현 시 필요한 Migration 확인
+# - Document.embedding: vector(1536)
+# - DocumentRelationship 테이블
+```
+
+**체크리스트**:
+
+- [ ] Migration 자동 실행 확인 (migrationsRun: true)
+- [ ] 기존 Document 테이블 스키마 확인
+
+---
+
+### 2. Phase 3 자동화 검증
+
+#### 2.1 GoalAutomationListener 작동 확인
+
+```bash
+# Cron이 정상 작동하는지 확인
+# - autoDecomposeGoals: 매 1분
+# - autoExecuteTasks: 매 1분
+# - autoReviewTasks: 매 1분
+```
+
+**체크리스트**:
+
+- [ ] `DISABLE_SCHEDULER` 환경 변수가 false 또는 미설정
+- [ ] 최근 로그에서 GoalAutomationListener Cron 실행 확인
+- [ ] 간단한 테스트 Goal 생성하여 자동 분해 확인
+
+#### 2.2 Manager Hollon 설정 확인
+
+```bash
+# 각 팀의 Manager가 올바르게 설정되었는지 확인
+```
+
+**체크리스트**:
+
+- [ ] Backend Engineering → TechLead-Alpha
+- [ ] Data & AI Engineering → AILead-Echo
+- [ ] Backend Infrastructure → InfraLead-Hotel
+
+---
+
+### 3. Safety Guardrails (Phase 4.3용)
+
+#### 3.1 PromptOptimizer 제약 조건
+
+**구현 위치**: `apps/server/src/modules/performance/services/prompt-optimizer.service.ts`
+
+```typescript
+// Phase 4.3 구현 시 포함해야 할 Safety Constraints
+interface PromptOptimizationConfig {
+  maxChangesPerWeek: 1; // 주당 최대 1회만 Prompt 변경
+  minTaskSampleSize: 100; // 최소 100개 Task 분석 후 최적화
+  rollbackThreshold: 0.9; // 성능 10% 하락 시 자동 롤백
+  approvalRequired: true; // Human 승인 필수
+}
+```
+
+**체크리스트**:
+
+- [ ] Phase 4.3 Goal 생성 시 위 제약 조건 Acceptance Criteria에 포함
+- [ ] Rollback 메커니즘 구현 확인
+- [ ] Human 승인 프로세스 정의
+
+#### 3.2 ContinuousImprovementService Threshold
+
+**구현 위치**: `apps/server/src/modules/improvement/services/continuous-improvement.service.ts`
+
+```typescript
+// Threshold 명확히 정의
+private needsImprovement(metrics: any): boolean {
+  return (
+    metrics.escalationRate > 0.3 ||  // 30% 이상 escalation
+    metrics.blockedTasks > 5 ||      // 5개 이상 blocked
+    metrics.incidentCount > 3        // 3개 이상 incident
+  );
+}
+```
+
+**체크리스트**:
+
+- [ ] Threshold 값 Acceptance Criteria에 명시
+- [ ] LLM 호출은 needsImprovement() true일 때만
+- [ ] Daily 실행 시간: 새벽 2시 (부하 적은 시간)
+
+---
+
+### 4. 현재 시스템 상태 확인
+
+```bash
+# 데이터베이스 확인
+pnpm db:query:dev "SELECT COUNT(*) FROM organizations"
+pnpm db:query:dev "SELECT COUNT(*) FROM teams"
+pnpm db:query:dev "SELECT COUNT(*) FROM hollons"
+
+# Seed 실행 확인
+# - Organization: Hollon AI Development (1개)
+# - Teams: 3개 (Backend Engineering, Data & AI, Infrastructure)
+# - Hollons: 10개 (CTO + 3 Managers + 6 Members)
+```
+
+**체크리스트**:
+
+- [ ] Organization 생성 확인
+- [ ] 3개 Team 생성 확인
+- [ ] 10개 Hollon 생성 확인
+- [ ] Manager 설정 확인 (team.managerHollonId)
+
+---
+
+### 5. Goal 생성 전 최종 체크리스트
+
+**Infrastructure**:
+
+- [ ] pgvector 설정 완료
+- [ ] OpenAI API 키 설정 완료
+- [ ] Migration 준비 완료
+
+**Phase 3 Automation**:
+
+- [ ] GoalAutomationListener Cron 작동 확인
+- [ ] Manager Hollon 설정 확인
+- [ ] 테스트 Goal 자동 분해 검증
+
+**Safety**:
+
+- [ ] Phase 4.3 Safety Constraints 정의
+- [ ] Threshold 값 명시
+- [ ] Rollback 메커니즘 계획
+
+**Organization**:
+
+- [ ] Seed 데이터 확인 (10 Hollons)
+- [ ] 각 Hollon의 capabilities 확인
+- [ ] Team-Manager 관계 확인
 
 ---
 
