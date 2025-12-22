@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 import { promisify } from 'util';
 import { exec } from 'child_process';
 import { Goal, GoalStatus } from '../entities/goal.entity';
-import { Task, TaskStatus } from '../../task/entities/task.entity';
+import { Task, TaskStatus, TaskType } from '../../task/entities/task.entity';
 import { TaskPullRequest } from '../../collaboration/entities/task-pull-request.entity';
 import { GoalDecompositionService } from '../services/goal-decomposition.service';
 import { TaskExecutionService } from '../../orchestration/services/task-execution.service';
@@ -451,12 +451,15 @@ export class GoalAutomationListener {
     try {
       this.logger.debug('Checking for tasks ready for execution...');
 
-      // Phase 4: Global concurrent execution limit
-      const MAX_CONCURRENT_TASKS = 5;
+      // Phase 4: Global concurrent execution limit (increased for subtasks)
+      const MAX_CONCURRENT_TASKS = 10;
 
-      // Check how many tasks are currently executing
+      // Check how many implementation tasks are currently executing (exclude team_epic)
       const currentlyExecuting = await this.taskRepo.count({
-        where: { status: TaskStatus.IN_PROGRESS },
+        where: {
+          status: TaskStatus.IN_PROGRESS,
+          type: TaskType.IMPLEMENTATION, // ✅ Only count implementation tasks
+        },
       });
 
       const availableSlots = MAX_CONCURRENT_TASKS - currentlyExecuting;
