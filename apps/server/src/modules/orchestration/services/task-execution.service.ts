@@ -1033,6 +1033,21 @@ ${i + 1}. **${item.title}**
         );
       }
 
+      // Check if we're already on the correct branch (worktree reuse case)
+      const { stdout: currentBranch } = await execAsync(
+        `git branch --show-current`,
+        { cwd: worktreePath },
+      );
+
+      const currentBranchTrimmed = currentBranch.trim();
+
+      if (currentBranchTrimmed === branchName) {
+        this.logger.log(
+          `Already on branch ${branchName}, skipping branch creation`,
+        );
+        return branchName;
+      }
+
       // The worktree was created with a temporary branch, now rename it to the feature branch
       // Git automatically creates the necessary directory structure for nested branches
       await execAsync(`git branch -m ${branchName}`, {
