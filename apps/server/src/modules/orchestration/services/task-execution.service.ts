@@ -427,11 +427,22 @@ export class TaskExecutionService {
           completedAt: new Date(),
         });
 
-        // Release hollon
-        await this.hollonRepo.update(hollonId, {
-          status: HollonStatus.IDLE,
-          currentTaskId: null as any,
-        });
+        // Phase 1: Immediately delete temporary hollon to free up team slot
+        this.logger.log(
+          `Deleting temporary hollon ${hollon.name} (${hollon.id.slice(0, 8)}) to free up team slot`,
+        );
+
+        try {
+          await this.hollonService.deleteTemporary(hollonId);
+          this.logger.log(
+            `Successfully deleted temporary hollon ${hollon.name} - team slot freed`,
+          );
+        } catch (deleteError) {
+          this.logger.error(
+            `Failed to delete temporary hollon ${hollonId}: ${deleteError instanceof Error ? deleteError.message : 'Unknown error'}`,
+          );
+          // Don't throw - task is already completed, just log the error
+        }
 
         // Check if parent task should resume
         await this.checkAndResumeParentTask(task);

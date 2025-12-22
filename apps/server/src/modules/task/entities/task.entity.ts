@@ -23,6 +23,7 @@ export enum TaskStatus {
   READY_FOR_REVIEW = 'ready_for_review', // Phase 3.10: Subtasks completed, awaiting parent review
   IN_REVIEW = 'in_review',
   BLOCKED = 'blocked',
+  WAITING_FOR_HOLLON = 'waiting_for_hollon', // Phase 1.5: Waiting for available hollon slot
   COMPLETED = 'completed',
   FAILED = 'failed',
   CANCELLED = 'cancelled',

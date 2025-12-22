@@ -53,5 +53,10 @@ export interface IHollonService {
   /**
    * 임시 Hollon 해제 (IDLE -> 삭제)
    */
+  /**
+   * Phase 1: 임시 Hollon 즉시 삭제 (Task 완료 후)
+   */
+  deleteTemporary(hollonId: string): Promise<void>;
+
   releaseTemporaryHollon(hollonId: string): Promise<void>;
 }

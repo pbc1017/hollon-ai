@@ -554,6 +554,7 @@ Please analyze the subtask results and respond with ONE of the 4 options above.`
         [TaskStatus.READY_FOR_REVIEW]: '📝',
         [TaskStatus.IN_REVIEW]: '🔍',
         [TaskStatus.BLOCKED]: '⏸️',
+        [TaskStatus.WAITING_FOR_HOLLON]: '⏱️',
         [TaskStatus.COMPLETED]: '✅',
         [TaskStatus.FAILED]: '❌',
         [TaskStatus.CANCELLED]: '🚫',

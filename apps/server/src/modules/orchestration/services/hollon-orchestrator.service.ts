@@ -251,9 +251,33 @@ export class HollonOrchestratorService {
         }
       }
 
-      // Set hollon to IDLE (not ERROR) to allow it to pick up new tasks
-      // ERROR state is reserved for unrecoverable situations
-      await this.updateHollonStatus(hollonId, HollonStatus.IDLE);
+      // Phase 1: Check if hollon is temporary and delete it on failure
+      // Fetch hollon to check lifecycle
+      const hollonForCleanup = await this.hollonRepo.findOne({
+        where: { id: hollonId },
+      });
+
+      if (hollonForCleanup?.lifecycle === HollonLifecycle.TEMPORARY) {
+        this.logger.log(
+          `Deleting temporary hollon ${hollonForCleanup.name} (${hollonId.slice(0, 8)}) after task failure`,
+        );
+
+        try {
+          await this.hollonService.deleteTemporary(hollonId);
+          this.logger.log(
+            `Successfully deleted temporary hollon ${hollonForCleanup.name} - team slot freed`,
+          );
+        } catch (deleteError) {
+          this.logger.error(
+            `Failed to delete temporary hollon ${hollonId}: ${deleteError instanceof Error ? deleteError.message : 'Unknown error'}`,
+          );
+          // Continue execution even if deletion fails
+        }
+      } else if (hollonForCleanup) {
+        // Set permanent hollon to IDLE (not ERROR) to allow it to pick up new tasks
+        // ERROR state is reserved for unrecoverable situations
+        await this.updateHollonStatus(hollonId, HollonStatus.IDLE);
+      }
 
       return {
         success: false,
@@ -604,8 +628,48 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
 
       return true; // Task delegated successfully
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      // Phase 1.5: Check if error is due to hollon limit
+      if (errorMessage.includes('maximum hollon limit')) {
+        this.logger.log(
+          `Task ${task.id} waiting for hollon slot - setting status to WAITING_FOR_HOLLON`,
+        );
+
+        // Set task to WAITING_FOR_HOLLON status
+        await this.hollonRepo.manager.getRepository(Task).update(task.id, {
+          status: TaskStatus.WAITING_FOR_HOLLON,
+        });
+
+        // Cleanup any partially created Sub-Hollons
+        try {
+          const tempHollons = await this.hollonRepo.find({
+            where: {
+              createdByHollonId: parentHollon.id,
+              lifecycle: HollonLifecycle.TEMPORARY,
+            },
+          });
+
+          for (const hollon of tempHollons) {
+            await this.hollonRepo.remove(hollon);
+          }
+
+          if (tempHollons.length > 0) {
+            this.logger.log(
+              `Cleaned up ${tempHollons.length} partially created temporary hollons`,
+            );
+          }
+        } catch (cleanupError) {
+          this.logger.error(`Failed to cleanup Sub-Hollons: ${cleanupError}`);
+        }
+
+        return true; // Task is now waiting, not falling back to direct execution
+      }
+
+      // Other errors: fall back to direct execution
       this.logger.error(
-        `Error delegating complex task ${task.id}: ${error}. Falling back to direct execution.`,
+        `Error delegating complex task ${task.id}: ${errorMessage}. Falling back to direct execution.`,
       );
 
       // Cleanup any created Sub-Hollons

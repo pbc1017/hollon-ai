@@ -12,6 +12,8 @@ import { TaskExecutionService } from '../../orchestration/services/task-executio
 import { HollonOrchestratorService } from '../../orchestration/services/hollon-orchestrator.service';
 import { DecompositionStrategy } from '../dto/decomposition-options.dto';
 import { TaskService } from '../../task/task.service';
+import { Hollon } from '../../hollon/entities/hollon.entity';
+import { Team } from '../../team/entities/team.entity';
 
 const execAsync = promisify(exec);
 
@@ -42,6 +44,10 @@ export class GoalAutomationListener {
     private readonly taskRepo: Repository<Task>,
     @InjectRepository(TaskPullRequest)
     private readonly prRepo: Repository<TaskPullRequest>,
+    @InjectRepository(Hollon)
+    private readonly hollonRepo: Repository<Hollon>,
+    @InjectRepository(Team)
+    private readonly teamRepo: Repository<Team>,
     private readonly goalDecompositionService: GoalDecompositionService,
     private readonly taskExecutionService: TaskExecutionService,
     private readonly hollonOrchestratorService: HollonOrchestratorService,
@@ -1096,6 +1102,124 @@ Make sure to:
       const err = error as Error;
       this.logger.error(
         `Task review automation failed: ${err.message}`,
+        err.stack,
+      );
+    }
+  }
+
+  /**
+   * Phase 1.5: 대기 중인 Task를 사용 가능한 Hollon에 할당
+   *
+   * Hollon 한도에 도달하여 WAITING_FOR_HOLLON 상태가 된 Task들을
+   * 주기적으로 확인하고, Hollon 슬롯이 확보되면 다시 실행 시도
+   *
+   * 실행 주기: 30초마다 (빠른 대응을 위해 1분보다 짧게 설정)
+   */
+  @Cron('*/30 * * * * *') // 30초마다 실행
+  async assignWaitingTasks(): Promise<void> {
+    try {
+      // 1. WAITING_FOR_HOLLON 상태인 Task 조회 (FIFO 순서)
+      const waitingTasks = await this.taskRepo
+        .createQueryBuilder('task')
+        .where('task.status = :status', {
+          status: TaskStatus.WAITING_FOR_HOLLON,
+        })
+        .leftJoinAndSelect('task.project', 'project')
+        .leftJoinAndSelect('project.assignedTeam', 'assignedTeam')
+        .orderBy('task.createdAt', 'ASC') // FIFO: 먼저 대기한 Task부터
+        .take(50) // 한 번에 최대 50개 확인
+        .getMany();
+
+      if (waitingTasks.length === 0) {
+        this.logger.debug('No tasks waiting for hollon slots');
+        return;
+      }
+
+      this.logger.log(
+        `Found ${waitingTasks.length} tasks waiting for hollon slots`,
+      );
+
+      // 2. Team별로 그룹화
+      const tasksByTeam = new Map<string, Task[]>();
+      for (const task of waitingTasks) {
+        const teamId = task.project?.assignedTeam?.id;
+        if (!teamId) {
+          this.logger.warn(`Task ${task.id} has no team - skipping`);
+          continue;
+        }
+
+        if (!tasksByTeam.has(teamId)) {
+          tasksByTeam.set(teamId, []);
+        }
+        tasksByTeam.get(teamId)!.push(task);
+      }
+
+      // 3. Team별로 사용 가능한 Hollon 슬롯 확인 및 Task 할당
+      for (const [teamId, tasks] of tasksByTeam.entries()) {
+        try {
+          // Team의 현재 Hollon 수 확인
+          const currentHollonCount = await this.hollonRepo.count({
+            where: { teamId },
+          });
+
+          // Team 설정에서 최대 Hollon 수 확인
+          const team = await this.teamRepo.findOne({
+            where: { id: teamId },
+            relations: ['organization'],
+          });
+
+          if (!team) {
+            this.logger.warn(`Team ${teamId} not found`);
+            continue;
+          }
+
+          const maxHollons =
+            (team.organization?.settings?.['maxHollonsPerTeam'] as number) ||
+            10;
+          const availableSlots = maxHollons - currentHollonCount;
+
+          if (availableSlots <= 0) {
+            this.logger.debug(
+              `Team ${team.name} has no available hollon slots (${currentHollonCount}/${maxHollons})`,
+            );
+            continue;
+          }
+
+          this.logger.log(
+            `Team ${team.name} has ${availableSlots} available hollon slots - processing ${Math.min(availableSlots, tasks.length)} waiting tasks`,
+          );
+
+          // 4. 사용 가능한 슬롯만큼 Task를 READY로 변경
+          const tasksToAssign = tasks.slice(0, availableSlots);
+
+          for (const task of tasksToAssign) {
+            try {
+              // Task를 다시 READY 상태로 변경하여 재시도
+              await this.taskRepo.update(task.id, {
+                status: TaskStatus.READY,
+              });
+
+              this.logger.log(
+                `Task ${task.id} (${task.title}) changed from WAITING_FOR_HOLLON → READY`,
+              );
+            } catch (updateError) {
+              this.logger.error(
+                `Failed to update task ${task.id}: ${updateError instanceof Error ? updateError.message : 'Unknown error'}`,
+              );
+              // Continue with next task
+            }
+          }
+        } catch (teamError) {
+          this.logger.error(
+            `Failed to process team ${teamId}: ${teamError instanceof Error ? teamError.message : 'Unknown error'}`,
+          );
+          // Continue with next team
+        }
+      }
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Waiting task assignment failed: ${err.message}`,
         err.stack,
       );
     }

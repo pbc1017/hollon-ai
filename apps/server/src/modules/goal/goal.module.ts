@@ -6,6 +6,7 @@ import { Task } from '../task/entities/task.entity';
 import { Project } from '../project/entities/project.entity';
 import { Organization } from '../organization/entities/organization.entity';
 import { Team } from '../team/entities/team.entity';
+import { Hollon } from '../hollon/entities/hollon.entity';
 import { GoalService } from './goal.service';
 import { GoalController } from './goal.controller';
 import { GoalTrackingService } from './services/goal-tracking.service';
@@ -27,6 +28,7 @@ import { OrchestrationModule } from '../orchestration/orchestration.module';
       Project,
       Organization,
       Team,
+      Hollon,
     ]),
     BrainProviderModule,
     TaskModule,
