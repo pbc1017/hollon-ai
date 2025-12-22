@@ -384,10 +384,21 @@ Please provide the decomposition in JSON format only, no additional text.`;
         where: { id: goal.organizationId },
       });
 
+    // Get the first project's working directory as template (repo root)
+    const templateProject = await this.goalRepo.manager
+      .getRepository('Project')
+      .findOne({
+        where: { organizationId: goal.organizationId },
+        order: { createdAt: 'ASC' as const },
+      });
+
     const workingDirectory =
-      (organization?.settings as any)?.workingDirectory || process.cwd();
+      (organization?.settings as any)?.workingDirectory ||
+      templateProject?.workingDirectory ||
+      process.cwd();
     const repositoryUrl =
       (organization?.settings as any)?.repositoryUrl ||
+      templateProject?.repositoryUrl ||
       `file://${workingDirectory}`;
 
     for (const projectDef of decomposition) {
