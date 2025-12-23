@@ -21,7 +21,12 @@ export class DocumentEmbedding extends BaseEntity {
   })
   embedding: string; // Stored as string representation of vector
 
-  @Column({ name: 'model', type: 'varchar', length: 100, default: 'text-embedding-3-small' })
+  @Column({
+    name: 'model',
+    type: 'varchar',
+    length: 100,
+    default: 'text-embedding-3-small',
+  })
   model: string;
 
   // Relations
