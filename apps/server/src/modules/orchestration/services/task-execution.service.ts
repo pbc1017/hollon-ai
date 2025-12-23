@@ -209,6 +209,50 @@ export class TaskExecutionService {
         let prUrl: string | null = null;
 
         if (hollon.lifecycle === HollonLifecycle.PERMANENT) {
+          // ✅ Phase 4: Run prettier before creating PR
+          this.logger.log(
+            `Running prettier to format code before PR creation for resumed task`,
+          );
+          try {
+            await execAsync(
+              `npx prettier --write "**/*.{ts,tsx,js,jsx,json}"`,
+              {
+                cwd: worktreePath,
+              },
+            );
+            this.logger.log(`Code formatted successfully`);
+
+            // Check if prettier made any changes
+            const { stdout: statusOut } = await execAsync(
+              `git status --porcelain`,
+              {
+                cwd: worktreePath,
+              },
+            );
+
+            if (statusOut.trim()) {
+              // Prettier made changes, commit them
+              this.logger.log(
+                `Prettier made formatting changes, committing...`,
+              );
+              await execAsync(`git add -A`, { cwd: worktreePath });
+              await execAsync(
+                `git commit -m "style: Apply prettier formatting"`,
+                {
+                  cwd: worktreePath,
+                },
+              );
+              this.logger.log(`Formatting changes committed`);
+            } else {
+              this.logger.log(`No formatting changes needed`);
+            }
+          } catch (prettierError) {
+            // Don't fail the task if prettier fails, just log it
+            this.logger.warn(
+              `Prettier formatting failed: ${prettierError instanceof Error ? prettierError.message : 'Unknown error'}`,
+            );
+          }
+
           // ✅ Permanent hollon: Full PR workflow for resumed task
           prUrl = await this.createPullRequest(
             task.project,
@@ -220,43 +264,18 @@ export class TaskExecutionService {
           // Phase 4.2: Save PR to database immediately (for CI monitoring)
           await this.savePRRecord(task, prUrl, hollonId, worktreePath);
 
-          // Wait for CI checks
-          this.logger.log(`Waiting for CI checks to complete for PR: ${prUrl}`);
-          await this.waitForCIChecks(prUrl, worktreePath);
-
-          // Check CI status
-          const ciResult = await this.checkCIStatus(prUrl, worktreePath);
-
-          if (!ciResult.passed) {
-            this.logger.error(
-              `CI checks failed for resumed task ${taskId}: ${ciResult.failedChecks.join(', ')}`,
-            );
-
-            const { shouldRetry, feedback } = await this.handleCIFailure(
-              task,
-              ciResult.failedChecks,
-              prUrl,
-              worktreePath,
-            );
-
-            if (shouldRetry) {
-              throw new Error(`CI_FAILURE_RETRY: ${feedback}`);
-            } else {
-              throw new Error(
-                `CI_FAILURE_MAX_RETRIES: Maximum CI retry attempts reached. ${feedback}`,
-              );
-            }
-          }
-
-          this.logger.log(`All CI checks passed for resumed task ${taskId}`);
-
-          // Request code review
-          await this.requestCodeReview(task, prUrl);
-
-          // Mark as ready for review
+          // Phase 4: Set task to IN_REVIEW for asynchronous CI monitoring
+          // The autoCheckPRCI Cron will monitor CI status and handle failures
+          this.logger.log(
+            `Setting resumed task ${taskId} to IN_REVIEW for CI monitoring by Cron`,
+          );
           await this.taskRepo.update(taskId, {
-            status: TaskStatus.READY_FOR_REVIEW,
+            status: TaskStatus.IN_REVIEW,
           });
+
+          this.logger.log(
+            `Resumed task ${taskId} is now IN_REVIEW - autoCheckPRCI Cron will monitor CI status`,
+          );
         } else {
           // ✅ Temporary hollon: Mark as COMPLETED without PR
           this.logger.log(
@@ -369,6 +388,43 @@ export class TaskExecutionService {
       let prUrl: string | null = null;
 
       if (hollon.lifecycle === HollonLifecycle.PERMANENT) {
+        // ✅ Phase 4: Run prettier before creating PR
+        this.logger.log(`Running prettier to format code before PR creation`);
+        try {
+          await execAsync(`npx prettier --write "**/*.{ts,tsx,js,jsx,json}"`, {
+            cwd: worktreePath,
+          });
+          this.logger.log(`Code formatted successfully`);
+
+          // Check if prettier made any changes
+          const { stdout: statusOut } = await execAsync(
+            `git status --porcelain`,
+            {
+              cwd: worktreePath,
+            },
+          );
+
+          if (statusOut.trim()) {
+            // Prettier made changes, commit them
+            this.logger.log(`Prettier made formatting changes, committing...`);
+            await execAsync(`git add -A`, { cwd: worktreePath });
+            await execAsync(
+              `git commit -m "style: Apply prettier formatting"`,
+              {
+                cwd: worktreePath,
+              },
+            );
+            this.logger.log(`Formatting changes committed`);
+          } else {
+            this.logger.log(`No formatting changes needed`);
+          }
+        } catch (prettierError) {
+          // Don't fail the task if prettier fails, just log it
+          this.logger.warn(
+            `Prettier formatting failed: ${prettierError instanceof Error ? prettierError.message : 'Unknown error'}`,
+          );
+        }
+
         // ✅ Permanent hollon: Full PR workflow
         prUrl = await this.createPullRequest(task.project, task, worktreePath);
         this.logger.log(`PR created: ${prUrl}`);
@@ -376,46 +432,18 @@ export class TaskExecutionService {
         // Phase 4.2: Save PR to database immediately (for CI monitoring)
         await this.savePRRecord(task, prUrl, hollonId, worktreePath);
 
-        // 8. Phase 4: Wait for CI checks to complete
-        this.logger.log(`Waiting for CI checks to complete for PR: ${prUrl}`);
-        await this.waitForCIChecks(prUrl, worktreePath);
-
-        // 9. Phase 4: Check CI status
-        const ciResult = await this.checkCIStatus(prUrl, worktreePath);
-
-        if (!ciResult.passed) {
-          this.logger.error(
-            `CI checks failed for task ${taskId}: ${ciResult.failedChecks.join(', ')}`,
-          );
-
-          // Handle CI failure and get retry decision
-          const { shouldRetry, feedback } = await this.handleCIFailure(
-            task,
-            ciResult.failedChecks,
-            prUrl,
-            worktreePath,
-          );
-
-          if (shouldRetry) {
-            // Throw error with feedback for orchestrator to retry
-            throw new Error(`CI_FAILURE_RETRY: ${feedback}`);
-          } else {
-            // Max retries reached, fail the task
-            throw new Error(
-              `CI_FAILURE_MAX_RETRIES: Maximum CI retry attempts reached. ${feedback}`,
-            );
-          }
-        }
-
-        this.logger.log(`All CI checks passed for task ${taskId}`);
-
-        // 10. CodeReview 요청 (Phase 2 활용)
-        await this.requestCodeReview(task, prUrl);
-
-        // 11. Task를 READY_FOR_REVIEW로 변경 (Phase 3.16: Manager review 대기)
+        // Phase 4: Set task to IN_REVIEW for asynchronous CI monitoring
+        // The autoCheckPRCI Cron will monitor CI status and handle failures
+        this.logger.log(
+          `Setting task ${taskId} to IN_REVIEW for CI monitoring by Cron`,
+        );
         await this.taskRepo.update(taskId, {
-          status: TaskStatus.READY_FOR_REVIEW,
+          status: TaskStatus.IN_REVIEW,
         });
+
+        this.logger.log(
+          `Task ${taskId} is now IN_REVIEW - autoCheckPRCI Cron will monitor CI status`,
+        );
       } else {
         // ✅ Temporary hollon: Skip PR workflow, mark as COMPLETED
         this.logger.log(
