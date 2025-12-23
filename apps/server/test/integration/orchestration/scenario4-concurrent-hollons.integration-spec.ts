@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, Not, IsNull } from 'typeorm';
 import { AppModule } from '@/app.module';
 import { Organization } from '@/modules/organization/entities/organization.entity';
 import { Role } from '@/modules/role/entities/role.entity';
@@ -164,8 +164,10 @@ describe('Integration: Scenario 4 - Concurrent Hollons', () => {
       // Should be claimed by respective hollons
       expect(result1.task?.assignedHollonId).toBe(hollon1.id);
       expect(result2.task?.assignedHollonId).toBe(hollon2.id);
-      expect(result1.task?.status).toBe(TaskStatus.IN_PROGRESS);
-      expect(result2.task?.status).toBe(TaskStatus.IN_PROGRESS);
+      // Note: After pullNextTask (claimTask), non-review tasks remain in READY status.
+      // Status changes to IN_PROGRESS in executeTask after worktree is created.
+      expect(result1.task?.status).toBe(TaskStatus.READY);
+      expect(result2.task?.status).toBe(TaskStatus.READY);
 
       // Should pull different tasks
       expect(result1.task?.id).not.toBe(result2.task?.id);
@@ -174,11 +176,13 @@ describe('Integration: Scenario 4 - Concurrent Hollons', () => {
     it('should prevent file conflicts', async () => {
       // At this point, both hollons should have claimed tasks with different files
       // Get current tasks to verify no file conflicts
+      // Note: Tasks remain in READY status after claiming until executeTask runs
       const taskRepo = dataSource.getRepository(Task);
-      const inProgressTasks = await taskRepo.find({
+      const claimedTasks = await taskRepo.find({
         where: {
           projectId: project.id,
-          status: TaskStatus.IN_PROGRESS,
+          status: TaskStatus.READY,
+          assignedHollonId: Not(IsNull()),
         },
       });
 
@@ -186,7 +190,7 @@ describe('Integration: Scenario 4 - Concurrent Hollons', () => {
       const fileToHollonMap = new Map<string, string>();
       let hasConflict = false;
 
-      for (const task of inProgressTasks) {
+      for (const task of claimedTasks) {
         if (task.affectedFiles && task.assignedHollonId) {
           for (const file of task.affectedFiles) {
             const existingHollonId = fileToHollonMap.get(file);
@@ -246,16 +250,17 @@ describe('Integration: Scenario 4 - Concurrent Hollons', () => {
   });
 
   describe('Verification: Check parallel execution results', () => {
-    it('should have multiple tasks in progress', async () => {
+    it('should have multiple tasks claimed', async () => {
+      // Note: Tasks remain in READY status after claiming until executeTask runs
       const taskRepo = dataSource.getRepository(Task);
-      const inProgressTasks = await taskRepo.find({
+      const claimedTasks = await taskRepo.find({
         where: {
           projectId: project.id,
-          status: TaskStatus.IN_PROGRESS,
+          assignedHollonId: Not(IsNull()),
         },
       });
 
-      expect(inProgressTasks.length).toBeGreaterThan(0);
+      expect(claimedTasks.length).toBeGreaterThan(0);
     });
 
     it('should have tasks distributed across hollons', async () => {

@@ -235,21 +235,28 @@ describe('Phase 3.8 Team Distribution Integration Test', () => {
 
       expect(hollonTasks.length).toBeGreaterThan(0);
 
+      // Phase 4 Pull-based model: subtasks are NOT pre-assigned to hollons
+      // They inherit assignedTeamId from parent and wait to be pulled
       hollonTasks.forEach((task) => {
-        expect(task.assignedHollonId).toBeDefined();
-        expect(task.assignedTeamId).toBeNull();
+        // In pull-based model, assignedHollonId is null until pulled
+        // assignedTeamId is inherited from parent team_epic
+        expect(task.assignedTeamId).toBeDefined(); // Inherited from parent
         expect(task.depth).toBe(1); // Level 1
         expect(task.parentTask).toBeDefined();
         expect(task.parentTask?.type).toBe(TaskType.TEAM_EPIC);
+        expect(task.status).toBe(TaskStatus.READY); // Waiting to be pulled
       });
 
-      // Verify Team Task status updated
+      // Verify Team Task status updated (stays in_progress while subtasks execute)
       const updatedTeamTasks = await taskRepo.find({
         where: { type: TaskType.TEAM_EPIC },
       });
 
       updatedTeamTasks.forEach((task) => {
-        expect(task.status).toBe(TaskStatus.IN_PROGRESS);
+        // Team_epic status should be IN_PROGRESS or READY (manager processing)
+        expect([TaskStatus.IN_PROGRESS, TaskStatus.READY]).toContain(
+          task.status,
+        );
       });
 
       console.log('\n✅ Team Distribution Flow Complete!');
@@ -275,11 +282,13 @@ describe('Phase 3.8 Team Distribution Integration Test', () => {
         expect(task.assignedHollonId).toBeNull();
       });
 
-      // Verify Level 1 (Hollon Tasks)
+      // Verify Level 1 (Hollon Tasks) - Pull-based model
+      // In Phase 4, subtasks are NOT pre-assigned to hollons
+      // They inherit assignedTeamId and wait to be pulled
       level1.forEach((task) => {
-        expect(task.assignedHollonId).toBeDefined();
-        expect(task.assignedTeamId).toBeNull();
-        expect([dev1.id, dev2.id]).toContain(task.assignedHollonId);
+        // assignedHollonId is null until pulled by a hollon
+        // assignedTeamId is inherited from parent team_epic
+        expect(task.assignedTeamId).toBe(team.id);
       });
 
       console.log('\n✅ Hierarchical Structure Verified!');

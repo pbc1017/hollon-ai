@@ -208,19 +208,24 @@ describe('TeamTaskDistributionService Integration Test', () => {
       // Verify subtask structure
       const taskRepo = dataSource.getRepository(Task);
 
+      // Phase 4 Pull-based model: subtasks are NOT pre-assigned to hollons
+      // They inherit assignedTeamId from parent and wait to be pulled
       for (const subtask of subtasks) {
         expect(subtask.depth).toBe(1); // Level 1 (Hollon Task)
         expect(subtask.parentTaskId).toBe(teamTask.id);
-        expect(subtask.assignedHollonId).toBeDefined();
-        expect(subtask.assignedTeamId).toBeNull();
+        // In pull-based model, assignedHollonId is null until pulled
+        // assignedTeamId is inherited from parent team_epic
+        expect(subtask.assignedTeamId).toBeDefined();
         expect(subtask.status).toBe(TaskStatus.READY);
       }
 
-      // Verify Team Task status updated
+      // Verify Team Task status updated (stays in_progress or ready while manager processes)
       const updatedTeamTask = await taskRepo.findOne({
         where: { id: teamTask.id },
       });
-      expect(updatedTeamTask!.status).toBe(TaskStatus.IN_PROGRESS);
+      expect([TaskStatus.IN_PROGRESS, TaskStatus.READY]).toContain(
+        updatedTeamTask!.status,
+      );
 
       console.log('\n=== Distribution Result ===');
       subtasks.forEach((st) => {
@@ -250,12 +255,14 @@ describe('TeamTaskDistributionService Integration Test', () => {
       expect(level0Tasks[0].assignedTeamId).toBe(team.id);
       expect(level0Tasks[0].assignedHollonId).toBeNull();
 
-      // Verify Level 1 (Hollon Tasks)
+      // Verify Level 1 (Hollon Tasks) - Pull-based model
+      // In Phase 4, subtasks are NOT pre-assigned to hollons
+      // They inherit assignedTeamId from parent and wait to be pulled
       level1Tasks.forEach((task) => {
         expect(task.parentTaskId).toBe(teamTask.id);
-        expect(task.assignedHollonId).toBeDefined();
-        expect(task.assignedTeamId).toBeNull();
-        expect([dev1.id, dev2.id]).toContain(task.assignedHollonId);
+        // In pull-based model, assignedHollonId is null until pulled
+        // assignedTeamId is inherited from parent team_epic
+        expect(task.assignedTeamId).toBe(team.id);
       });
 
       console.log('\n=== Hierarchical Structure ===');
@@ -264,10 +271,12 @@ describe('TeamTaskDistributionService Integration Test', () => {
         console.log(`  - ${t.title} (${t.type}) → Team ${t.assignedTeamId}`);
       });
 
-      console.log(`Level 1 (Hollon Tasks): ${level1Tasks.length}`);
+      console.log(
+        `Level 1 (Hollon Tasks - waiting to be pulled): ${level1Tasks.length}`,
+      );
       level1Tasks.forEach((t) => {
         console.log(
-          `  - ${t.title} (${t.type}) → Hollon ${t.assignedHollonId}`,
+          `  - ${t.title} (${t.type}) → Team ${t.assignedTeamId} (unassigned hollon, pull-based)`,
         );
       });
     });

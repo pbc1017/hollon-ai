@@ -209,12 +209,15 @@ describe('add', () => {
         testHollon.id,
       );
 
-      // Note: Task status is still IN_PROGRESS because TaskExecutionService is mocked
-      // In real execution, TaskExecutionService would update it to READY_FOR_REVIEW
+      // Note: Task status is still READY because TaskExecutionService is mocked.
+      // After pullNextTask (claimTask), non-review tasks remain in READY status.
+      // Status changes to IN_PROGRESS in executeTask after worktree is created.
+      // Since TaskExecutionService is mocked here, the status remains READY.
+      // In real execution, TaskExecutionService would update it to IN_PROGRESS → READY_FOR_REVIEW.
       const updatedTask = await getTaskRepo().findOne({
         where: { id: testTask.id },
       });
-      expect(updatedTask?.status).toBe(TaskStatus.IN_PROGRESS);
+      expect(updatedTask?.status).toBe(TaskStatus.READY);
 
       // Verify hollon status returned to IDLE
       const updatedHollon = await getHollonRepo().findOne({
