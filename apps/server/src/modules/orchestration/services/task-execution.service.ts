@@ -917,7 +917,21 @@ ${i + 1}. **${item.title}**
 
     // Phase 4.1 Fix #2: Worktree must be created at git root, not in project subdirectory
     // project.workingDirectory may be apps/server, but .git is at project root
-    const gitRoot = path.resolve(project.workingDirectory, '..');
+    // Use git rev-parse to find actual git root (handles any depth of subdirectory)
+    let gitRoot: string;
+    try {
+      const { stdout } = await execAsync('git rev-parse --show-toplevel', {
+        cwd: project.workingDirectory,
+      });
+      gitRoot = stdout.trim();
+      this.logger.debug(`Git root detected: ${gitRoot}`);
+    } catch {
+      // Fallback: assume workingDirectory is at git root
+      gitRoot = project.workingDirectory;
+      this.logger.warn(
+        `Could not detect git root, using project.workingDirectory: ${gitRoot}`,
+      );
+    }
     const worktreePath = path.join(
       gitRoot,
       '.git-worktrees',
