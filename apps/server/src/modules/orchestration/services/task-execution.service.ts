@@ -210,11 +210,21 @@ export class TaskExecutionService {
         let prUrl: string | null = null;
 
         if (hollon.lifecycle === HollonLifecycle.PERMANENT) {
-          // ✅ Phase 4: Run prettier before creating PR
+          // ✅ Phase 4: Run ESLint and Prettier before creating PR
           this.logger.log(
-            `Running prettier to format code before PR creation for resumed task`,
+            `Running ESLint and Prettier before PR creation for resumed task`,
           );
           try {
+            // Fix #9: Run ESLint --fix first
+            await execAsync(
+              `npx eslint --fix "src/**/*.{ts,tsx}" --no-error-on-unmatched-pattern || true`,
+              {
+                cwd: worktreePath,
+              },
+            );
+            this.logger.log(`ESLint fix completed`);
+
+            // Then run Prettier
             await execAsync(
               `npx prettier --write "**/*.{ts,tsx,js,jsx,json}"`,
               {
@@ -223,7 +233,7 @@ export class TaskExecutionService {
             );
             this.logger.log(`Code formatted successfully`);
 
-            // Check if prettier made any changes
+            // Check if ESLint/Prettier made any changes
             const { stdout: statusOut } = await execAsync(
               `git status --porcelain`,
               {
@@ -232,13 +242,11 @@ export class TaskExecutionService {
             );
 
             if (statusOut.trim()) {
-              // Prettier made changes, commit them
-              this.logger.log(
-                `Prettier made formatting changes, committing...`,
-              );
+              // ESLint/Prettier made changes, commit them
+              this.logger.log(`ESLint/Prettier made changes, committing...`);
               await execAsync(`git add -A`, { cwd: worktreePath });
               await execAsync(
-                `git commit -m "style: Apply prettier formatting"`,
+                `git commit -m "style: Apply ESLint and Prettier fixes"`,
                 {
                   cwd: worktreePath,
                 },
@@ -247,10 +255,10 @@ export class TaskExecutionService {
             } else {
               this.logger.log(`No formatting changes needed`);
             }
-          } catch (prettierError) {
-            // Don't fail the task if prettier fails, just log it
+          } catch (lintError) {
+            // Don't fail the task if lint/prettier fails, just log it
             this.logger.warn(
-              `Prettier formatting failed: ${prettierError instanceof Error ? prettierError.message : 'Unknown error'}`,
+              `ESLint/Prettier failed: ${lintError instanceof Error ? lintError.message : 'Unknown error'}`,
             );
           }
 
@@ -389,15 +397,27 @@ export class TaskExecutionService {
       let prUrl: string | null = null;
 
       if (hollon.lifecycle === HollonLifecycle.PERMANENT) {
-        // ✅ Phase 4: Run prettier before creating PR
-        this.logger.log(`Running prettier to format code before PR creation`);
+        // ✅ Phase 4: Run ESLint and Prettier before creating PR
+        this.logger.log(
+          `Running ESLint and Prettier to fix code issues before PR creation`,
+        );
         try {
+          // Fix #9: Run ESLint --fix first to fix lint errors
+          await execAsync(
+            `npx eslint --fix "src/**/*.{ts,tsx}" --no-error-on-unmatched-pattern || true`,
+            {
+              cwd: worktreePath,
+            },
+          );
+          this.logger.log(`ESLint fix completed`);
+
+          // Then run Prettier for formatting
           await execAsync(`npx prettier --write "**/*.{ts,tsx,js,jsx,json}"`, {
             cwd: worktreePath,
           });
           this.logger.log(`Code formatted successfully`);
 
-          // Check if prettier made any changes
+          // Check if ESLint/Prettier made any changes
           const { stdout: statusOut } = await execAsync(
             `git status --porcelain`,
             {
@@ -406,11 +426,11 @@ export class TaskExecutionService {
           );
 
           if (statusOut.trim()) {
-            // Prettier made changes, commit them
-            this.logger.log(`Prettier made formatting changes, committing...`);
+            // ESLint/Prettier made changes, commit them
+            this.logger.log(`ESLint/Prettier made changes, committing...`);
             await execAsync(`git add -A`, { cwd: worktreePath });
             await execAsync(
-              `git commit -m "style: Apply prettier formatting"`,
+              `git commit -m "style: Apply ESLint and Prettier fixes"`,
               {
                 cwd: worktreePath,
               },
@@ -419,10 +439,10 @@ export class TaskExecutionService {
           } else {
             this.logger.log(`No formatting changes needed`);
           }
-        } catch (prettierError) {
-          // Don't fail the task if prettier fails, just log it
+        } catch (lintError) {
+          // Don't fail the task if lint/prettier fails, just log it
           this.logger.warn(
-            `Prettier formatting failed: ${prettierError instanceof Error ? prettierError.message : 'Unknown error'}`,
+            `ESLint/Prettier failed: ${lintError instanceof Error ? lintError.message : 'Unknown error'}`,
           );
         }
 
@@ -1422,7 +1442,9 @@ ${i + 1}. **${item.title}**
           `2. Follow the project's coding standards\n` +
           `3. Add appropriate tests if needed\n` +
           `4. Update documentation if required\n` +
-          `5. Commit your changes with a descriptive message\n\n` +
+          `5. **Commit frequently** - make atomic commits after each logical change\n` +
+          `6. Each commit should be independently valid (pass lint/build)\n` +
+          `7. Run \`npm run lint:fix\` before each commit to fix lint errors\n\n` +
           `Note: This task is estimated to require ${analysis.estimatedCommits} commit(s).\n`,
       );
     } else {
@@ -1436,7 +1458,8 @@ ${i + 1}. **${item.title}**
           `2. Follow the project's coding standards\n` +
           `3. Add appropriate tests if needed\n` +
           `4. Update documentation if required\n` +
-          `5. Commit your changes with a descriptive message\n`,
+          `5. **Commit frequently** - make atomic commits after each logical change\n` +
+          `6. Run \`npm run lint:fix\` before each commit to fix lint errors\n`,
       );
     }
 
