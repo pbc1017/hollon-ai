@@ -10,9 +10,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * - Tracking knowledge application patterns
  * - Optimizing knowledge retrieval and recommendations
  */
-export class CreateKnowledgeMetrics1766400000000
-  implements MigrationInterface
-{
+export class CreateKnowledgeMetrics1766400000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Create knowledge_metrics table
     await queryRunner.query(`
