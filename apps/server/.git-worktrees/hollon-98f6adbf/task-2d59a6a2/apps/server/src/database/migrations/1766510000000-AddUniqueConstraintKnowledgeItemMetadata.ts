@@ -39,8 +39,8 @@ export class AddUniqueConstraintKnowledgeItemMetadata1766510000000 implements Mi
     if (duplicates.length > 0) {
       throw new Error(
         `Cannot apply UNIQUE constraint: Found ${duplicates.length} duplicate (knowledge_item_id, metadata_type, metadata_key) combinations in knowledge_item_metadata table. ` +
-        `Duplicates: ${JSON.stringify(duplicates)}. ` +
-        `Please resolve these duplicates before applying this migration.`
+          `Duplicates: ${JSON.stringify(duplicates)}. ` +
+          `Please resolve these duplicates before applying this migration.`,
       );
     }
 
