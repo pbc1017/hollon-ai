@@ -364,7 +364,10 @@ export interface IVectorNormalizer {
    * @param tolerance - Tolerance for floating point comparison
    * @returns True if vector is normalized
    */
-  isNormalized(vector: TfIdfVector | WeightedVector, tolerance?: number): boolean;
+  isNormalized(
+    vector: TfIdfVector | WeightedVector,
+    tolerance?: number,
+  ): boolean;
 }
 
 /**
