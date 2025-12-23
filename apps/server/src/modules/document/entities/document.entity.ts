@@ -1,8 +1,9 @@
-import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, Index, OneToMany } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Organization } from '../../organization/entities/organization.entity';
 import { Project } from '../../project/entities/project.entity';
 import { Hollon } from '../../hollon/entities/hollon.entity';
+import { DocumentEmbedding } from './document-embedding.entity';
 
 export enum DocumentType {
   TASK_CONTEXT = 'task_context',
@@ -59,6 +60,11 @@ export class Document extends BaseEntity {
   embedding: string;
 
   // Relations
+  @OneToMany(() => DocumentEmbedding, (embedding) => embedding.document, {
+    cascade: true,
+  })
+  embeddings: DocumentEmbedding[];
+
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organization_id' })
   organization: Organization;
