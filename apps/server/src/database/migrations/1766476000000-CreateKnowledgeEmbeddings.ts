@@ -29,8 +29,12 @@ export class CreateKnowledgeEmbeddings1766476000000 implements MigrationInterfac
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_knowledge_embeddings_vector"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_knowledge_embeddings_item"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_knowledge_embeddings_vector"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_knowledge_embeddings_item"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "knowledge_embeddings"`);
   }
 }

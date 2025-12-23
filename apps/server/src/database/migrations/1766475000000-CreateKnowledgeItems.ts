@@ -43,9 +43,13 @@ export class CreateKnowledgeItems1766475000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_knowledge_items_created_at"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_knowledge_items_created_at"`,
+    );
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_knowledge_items_type"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_knowledge_items_organization"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_knowledge_items_organization"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "knowledge_items"`);
     await queryRunner.query(`DROP TYPE IF EXISTS "knowledge_item_type_enum"`);
   }

@@ -50,11 +50,21 @@ export class CreateKnowledgeRelations1766477000000 implements MigrationInterface
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_knowledge_relations_source_type"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_knowledge_relations_type"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_knowledge_relations_target"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_knowledge_relations_source"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_knowledge_relations_source_type"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_knowledge_relations_type"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_knowledge_relations_target"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_knowledge_relations_source"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "knowledge_relations"`);
-    await queryRunner.query(`DROP TYPE IF EXISTS "knowledge_relation_type_enum"`);
+    await queryRunner.query(
+      `DROP TYPE IF EXISTS "knowledge_relation_type_enum"`,
+    );
   }
 }

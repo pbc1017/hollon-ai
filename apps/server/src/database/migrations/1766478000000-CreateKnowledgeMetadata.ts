@@ -31,9 +31,15 @@ export class CreateKnowledgeMetadata1766478000000 implements MigrationInterface 
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_knowledge_metadata_key_value"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_knowledge_metadata_key"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_knowledge_metadata_item"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_knowledge_metadata_key_value"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_knowledge_metadata_key"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_knowledge_metadata_item"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "knowledge_metadata"`);
   }
 }
