@@ -19,6 +19,7 @@ describe('TaskPoolService', () => {
   const mockHollonRepo = {
     findOne: jest.fn(),
     find: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
     manager: {
       getRepository: jest.fn().mockReturnValue({
         find: jest.fn().mockResolvedValue([]),

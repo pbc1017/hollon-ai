@@ -156,7 +156,10 @@ describe('Integration: Scenario 1 - Happy Path', () => {
       expect(result.task).toBeDefined();
       expect(result.task?.id).toBe(task.id);
       expect(result.task?.assignedHollonId).toBe(hollon.id);
-      expect(result.task?.status).toBe(TaskStatus.IN_PROGRESS);
+      // Note: After pullNextTask (claimTask), non-review tasks remain in READY status.
+      // Status changes to IN_PROGRESS in executeTask after worktree is created.
+      // This prevents tasks being IN_PROGRESS with null workingDirectory.
+      expect(result.task?.status).toBe(TaskStatus.READY);
     });
 
     it('should execute hollon cycle', async () => {
@@ -184,8 +187,10 @@ describe('Integration: Scenario 1 - Happy Path', () => {
       });
 
       expect(updatedTask).toBeDefined();
-      // Task should be either IN_PROGRESS or COMPLETED depending on execution
+      // Task should be either READY (claimed but not yet executed),
+      // IN_PROGRESS (executing), COMPLETED, or IN_REVIEW
       expect([
+        TaskStatus.READY, // Claimed but executeTask not yet called
         TaskStatus.IN_PROGRESS,
         TaskStatus.COMPLETED,
         TaskStatus.IN_REVIEW,

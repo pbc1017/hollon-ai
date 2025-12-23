@@ -138,7 +138,9 @@ describe('Phase 3.7: Infinite Loop Prevention (Exponential Backoff)', () => {
 
       expect(result.task).toBeDefined();
       expect(result.task?.id).toBe(task.id);
-      expect(result.task?.status).toBe(TaskStatus.IN_PROGRESS);
+      // Note: After pullNextTask (claimTask), non-review tasks remain in READY status.
+      // Status changes to IN_PROGRESS in executeTask after worktree is created.
+      expect(result.task?.status).toBe(TaskStatus.READY);
     });
 
     it('should fail task and set 5-minute backoff', async () => {
