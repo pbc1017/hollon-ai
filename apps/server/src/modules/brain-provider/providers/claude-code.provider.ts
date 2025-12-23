@@ -105,6 +105,13 @@ export class ClaudeCodeProvider implements IBrainProvider {
     if (request.systemPrompt) {
       args.push('--system-prompt', request.systemPrompt);
     }
+    // Phase 4.1 Fix #7: Disallow specific tools for decomposition mode
+    if (request.options?.disallowedTools?.length) {
+      args.push(
+        '--disallowed-tools',
+        request.options.disallowedTools.join(','),
+      );
+    }
 
     // Estimate cost before execution
     const estimatedCost = this.costCalculator.estimateCost(

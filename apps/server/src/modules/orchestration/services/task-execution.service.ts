@@ -698,6 +698,12 @@ export class TaskExecutionService {
           // only return JSON, not create actual code files.
           workingDirectory: os.tmpdir(),
         },
+        options: {
+          // Phase 4.1 Fix #7: Disable file system tools for decomposition mode
+          // Prevents Claude from: creating files (Write/Edit), running git commands (Bash),
+          // or navigating to main project directory. Only analysis and JSON output allowed.
+          disallowedTools: ['Write', 'Edit', 'Bash', 'MultiEdit'],
+        },
       },
       {
         organizationId: task.organizationId,

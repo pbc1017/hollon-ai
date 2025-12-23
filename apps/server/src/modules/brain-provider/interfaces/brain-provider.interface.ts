@@ -10,6 +10,8 @@ export interface BrainRequest {
   options?: {
     timeoutMs?: number;
     maxTokens?: number;
+    // Phase 4.1 Fix #7: Disallow specific tools (e.g., for decomposition mode)
+    disallowedTools?: string[];
   };
 }
 
