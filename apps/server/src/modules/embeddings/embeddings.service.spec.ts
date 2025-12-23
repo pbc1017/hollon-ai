@@ -4,7 +4,10 @@ import { BadRequestException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { EmbeddingsService, EmbeddingBatchRequest } from './embeddings.service';
 import { Document, DocumentType } from '../document/entities/document.entity';
-import { CostRecord, CostRecordType } from '../cost-tracking/entities/cost-record.entity';
+import {
+  CostRecord,
+  CostRecordType,
+} from '../cost-tracking/entities/cost-record.entity';
 import { ConfigService } from '@nestjs/config';
 
 describe('EmbeddingsService', () => {
@@ -69,8 +72,12 @@ describe('EmbeddingsService', () => {
     }).compile();
 
     service = module.get<EmbeddingsService>(EmbeddingsService);
-    documentRepo = module.get<Repository<Document>>(getRepositoryToken(Document));
-    costRecordRepo = module.get<Repository<CostRecord>>(getRepositoryToken(CostRecord));
+    documentRepo = module.get<Repository<Document>>(
+      getRepositoryToken(Document),
+    );
+    costRecordRepo = module.get<Repository<CostRecord>>(
+      getRepositoryToken(CostRecord),
+    );
     configService = module.get<ConfigService>(ConfigService);
   });
 
@@ -111,7 +118,9 @@ describe('EmbeddingsService', () => {
         embedding: JSON.stringify([0.1, 0.2, 0.3]),
       };
 
-      jest.spyOn(documentRepo, 'find').mockResolvedValue([docWithEmbedding as Document]);
+      jest
+        .spyOn(documentRepo, 'find')
+        .mockResolvedValue([docWithEmbedding as Document]);
 
       const request: EmbeddingBatchRequest = {
         documentIds: [mockDocId1],
@@ -129,9 +138,14 @@ describe('EmbeddingsService', () => {
     it('should successfully embed documents', async () => {
       jest
         .spyOn(documentRepo, 'find')
-        .mockResolvedValue([mockDocument1 as Document, mockDocument2 as Document]);
+        .mockResolvedValue([
+          mockDocument1 as Document,
+          mockDocument2 as Document,
+        ]);
 
-      jest.spyOn(documentRepo, 'update').mockResolvedValue({ affected: 1 } as any);
+      jest
+        .spyOn(documentRepo, 'update')
+        .mockResolvedValue({ affected: 1 } as any);
 
       // Mock OpenAI API response
       const mockOpenAIResponse = {
@@ -182,7 +196,9 @@ describe('EmbeddingsService', () => {
         .spyOn(documentRepo, 'find')
         .mockResolvedValue([mockDocument1 as Document]);
 
-      jest.spyOn(documentRepo, 'update').mockResolvedValue({ affected: 1 } as any);
+      jest
+        .spyOn(documentRepo, 'update')
+        .mockResolvedValue({ affected: 1 } as any);
 
       const mockOpenAIResponse = {
         object: 'list',
@@ -206,7 +222,9 @@ describe('EmbeddingsService', () => {
       } as any);
 
       const createSpy = jest.spyOn(costRecordRepo, 'create');
-      const saveSpy = jest.spyOn(costRecordRepo, 'save').mockResolvedValue({} as CostRecord);
+      const saveSpy = jest
+        .spyOn(costRecordRepo, 'save')
+        .mockResolvedValue({} as CostRecord);
 
       const request: EmbeddingBatchRequest = {
         documentIds: [mockDocId1],
@@ -234,12 +252,16 @@ describe('EmbeddingsService', () => {
         .spyOn(documentRepo, 'find')
         .mockResolvedValue([mockDocument1 as Document]);
 
-      jest.spyOn(documentRepo, 'update').mockResolvedValue({ affected: 0 } as any);
+      jest
+        .spyOn(documentRepo, 'update')
+        .mockResolvedValue({ affected: 0 } as any);
 
       global.fetch = jest.fn().mockResolvedValue({
         ok: false,
         status: 429,
-        json: jest.fn().mockResolvedValue({ error: { message: 'Rate limited' } }),
+        json: jest
+          .fn()
+          .mockResolvedValue({ error: { message: 'Rate limited' } }),
       } as any);
 
       jest.spyOn(costRecordRepo, 'create').mockReturnValue({} as CostRecord);
@@ -268,7 +290,9 @@ describe('EmbeddingsService', () => {
       })) as Document[];
 
       jest.spyOn(documentRepo, 'find').mockResolvedValue(largeDocSet);
-      jest.spyOn(documentRepo, 'update').mockResolvedValue({ affected: 1 } as any);
+      jest
+        .spyOn(documentRepo, 'update')
+        .mockResolvedValue({ affected: 1 } as any);
 
       const mockOpenAIResponse = {
         object: 'list',
@@ -293,7 +317,7 @@ describe('EmbeddingsService', () => {
       jest.spyOn(costRecordRepo, 'save').mockResolvedValue({} as CostRecord);
 
       const request: EmbeddingBatchRequest = {
-        documentIds: largeDocSet.map(d => d.id),
+        documentIds: largeDocSet.map((d) => d.id),
         organizationId: mockOrgId,
       };
 
@@ -307,12 +331,16 @@ describe('EmbeddingsService', () => {
 
   describe('embedDocument', () => {
     it('should embed a single document', async () => {
-      jest.spyOn(documentRepo, 'find').mockResolvedValue([mockDocument1 as Document]);
+      jest
+        .spyOn(documentRepo, 'find')
+        .mockResolvedValue([mockDocument1 as Document]);
       jest
         .spyOn(documentRepo, 'findOne')
         .mockResolvedValueOnce(undefined) // First call in embedDocument
         .mockResolvedValueOnce(mockDocument1 as Document); // Second call to check API key
-      jest.spyOn(documentRepo, 'update').mockResolvedValue({ affected: 1 } as any);
+      jest
+        .spyOn(documentRepo, 'update')
+        .mockResolvedValue({ affected: 1 } as any);
 
       const mockEmbeddingVector = Array(1536).fill(0.1);
       const mockOpenAIResponse = {
@@ -377,7 +405,9 @@ describe('EmbeddingsService', () => {
       jest
         .spyOn(documentRepo, 'find')
         .mockResolvedValue([mockDocument1 as Document]);
-      jest.spyOn(documentRepo, 'update').mockResolvedValue({ affected: 1 } as any);
+      jest
+        .spyOn(documentRepo, 'update')
+        .mockResolvedValue({ affected: 1 } as any);
 
       // 1M tokens should cost $0.02 = 2 cents
       const mockOpenAIResponse = {
@@ -402,7 +432,9 @@ describe('EmbeddingsService', () => {
       } as any);
 
       jest.spyOn(costRecordRepo, 'create').mockReturnValue({} as CostRecord);
-      const saveSpy = jest.spyOn(costRecordRepo, 'save').mockResolvedValue({} as CostRecord);
+      const saveSpy = jest
+        .spyOn(costRecordRepo, 'save')
+        .mockResolvedValue({} as CostRecord);
 
       const request: EmbeddingBatchRequest = {
         documentIds: [mockDocId1],
@@ -430,7 +462,9 @@ describe('EmbeddingsService', () => {
         .mockResolvedValueOnce({
           ok: false,
           status: 429,
-          json: jest.fn().mockResolvedValue({ error: { message: 'Rate limited' } }),
+          json: jest
+            .fn()
+            .mockResolvedValue({ error: { message: 'Rate limited' } }),
         })
         .mockResolvedValueOnce({
           ok: true,
@@ -451,7 +485,9 @@ describe('EmbeddingsService', () => {
           }),
         });
 
-      jest.spyOn(documentRepo, 'update').mockResolvedValue({ affected: 1 } as any);
+      jest
+        .spyOn(documentRepo, 'update')
+        .mockResolvedValue({ affected: 1 } as any);
       jest.spyOn(costRecordRepo, 'create').mockReturnValue({} as CostRecord);
       jest.spyOn(costRecordRepo, 'save').mockResolvedValue({} as CostRecord);
 

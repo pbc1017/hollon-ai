@@ -3,7 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Document } from '../document/entities/document.entity';
-import { CostRecord, CostRecordType } from '../cost-tracking/entities/cost-record.entity';
+import {
+  CostRecord,
+  CostRecordType,
+} from '../cost-tracking/entities/cost-record.entity';
 
 /**
  * OpenAI Embedding API 응답 타입
@@ -308,7 +311,10 @@ export class EmbeddingsService {
     }
 
     const processed =
-      documents.length - failed.filter((id) => jobStatuses.find((js) => js.documentId === id && js.retryCount > 0)).length;
+      documents.length -
+      failed.filter((id) =>
+        jobStatuses.find((js) => js.documentId === id && js.retryCount > 0),
+      ).length;
     const finalFailed = failed.length;
 
     return {
@@ -359,11 +365,15 @@ export class EmbeddingsService {
           }
 
           succeeded.count++;
-          this.logger.debug(`Document ${doc.id.slice(0, 8)} embedded successfully`);
+          this.logger.debug(
+            `Document ${doc.id.slice(0, 8)} embedded successfully`,
+          );
         } catch (updateError) {
           this.logger.error(
             `Failed to save embedding for document ${doc.id}: ${
-              updateError instanceof Error ? updateError.message : 'Unknown error'
+              updateError instanceof Error
+                ? updateError.message
+                : 'Unknown error'
             }`,
           );
           failedIds.push(doc.id);
@@ -531,7 +541,9 @@ export class EmbeddingsService {
     });
 
     if (!updatedDoc?.embedding) {
-      throw new BadRequestException('Failed to retrieve embedding after creation');
+      throw new BadRequestException(
+        'Failed to retrieve embedding after creation',
+      );
     }
 
     return updatedDoc.embedding;

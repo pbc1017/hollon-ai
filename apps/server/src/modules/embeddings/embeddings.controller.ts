@@ -1,5 +1,9 @@
 import { Controller, Post, Body, BadRequestException } from '@nestjs/common';
-import { EmbeddingsService, EmbeddingBatchRequest, EmbeddingBatchResult } from './embeddings.service';
+import {
+  EmbeddingsService,
+  EmbeddingBatchRequest,
+  EmbeddingBatchResult,
+} from './embeddings.service';
 
 @Controller('embeddings')
 export class EmbeddingsController {
