@@ -5,6 +5,7 @@ The Embeddings Module provides batch processing capabilities for generating vect
 ## Overview
 
 This module handles:
+
 - **Batch Embedding Generation**: Process multiple documents efficiently with OpenAI API
 - **Token Usage Monitoring**: Track input tokens consumed by the embedding process
 - **Cost Tracking**: Record all embedding costs in the CostRecord entity
@@ -27,7 +28,7 @@ async embeddingBatchJob(request: EmbeddingBatchRequest): Promise<EmbeddingBatchR
 2. **Batch Splitting**: Divides large document sets into OpenAI API-compliant batches (max 100)
 3. **OpenAI Integration**: Makes authenticated requests to OpenAI's embedding API
 4. **Error Handling**: Gracefully handles API errors with detailed logging
-5. **Retry Strategy**: 
+5. **Retry Strategy**:
    - Implements exponential backoff (1s, 2s, 3s delays)
    - Configurable max retry attempts (default: 3)
    - Retries only failed documents, not entire batches
@@ -41,13 +42,10 @@ async embeddingBatchJob(request: EmbeddingBatchRequest): Promise<EmbeddingBatchR
 Trigger batch embedding job for multiple documents.
 
 **Request Body:**
+
 ```json
 {
-  "documentIds": [
-    "uuid1",
-    "uuid2",
-    "uuid3"
-  ],
+  "documentIds": ["uuid1", "uuid2", "uuid3"],
   "organizationId": "uuid",
   "retryFailedItems": true,
   "maxRetries": 3
@@ -55,12 +53,14 @@ Trigger batch embedding job for multiple documents.
 ```
 
 **Parameters:**
+
 - `documentIds` (string[]): Array of document IDs to embed
 - `organizationId` (string): Organization ID for authorization
 - `retryFailedItems` (boolean, optional): Enable automatic retry (default: true)
 - `maxRetries` (number, optional): Max retry attempts for failed items (default: 3)
 
 **Response:**
+
 ```json
 {
   "processed": 100,
@@ -74,6 +74,7 @@ Trigger batch embedding job for multiple documents.
 ```
 
 **Fields:**
+
 - `processed`: Number of successfully embedded documents
 - `failed`: Number of documents that failed after all retries
 - `totalTokens`: Total input tokens consumed
@@ -85,23 +86,29 @@ Trigger batch embedding job for multiple documents.
 ## Cost Model
 
 The module uses OpenAI's `text-embedding-3-small` model with the following pricing:
+
 - **Cost**: $0.02 per 1M tokens
 - **Tokens**: Only input tokens count (output tokens = 0 for embeddings)
 
 ### Cost Calculation Example:
+
 - 10,000 tokens → (10,000 / 1,000,000) × $0.02 × 100 = 20 cents
 - 1,000,000 tokens → (1,000,000 / 1,000,000) × $0.02 × 100 = 200 cents ($2.00)
 
 ## Database Integration
 
 ### Document Entity
+
 Embeddings are stored in the `embedding` column of the `documents` table:
+
 - Type: `text` (JSON serialized)
 - Format: `[0.123, 0.456, ...]` (1536-dimensional vector)
 - Nullable: Yes (for documents without embeddings)
 
 ### CostRecord Entity
+
 All embedding costs are logged:
+
 - `type`: `CostRecordType.OTHER` (embeddings are not BRAIN_EXECUTION)
 - `providerId`: `'openai_api'`
 - `modelUsed`: `'text-embedding-3-small'`
@@ -116,7 +123,7 @@ The module implements intelligent retry logic:
 
 1. **First Attempt**: All documents in the batch are processed
 2. **Failed Documents**: Only documents that failed are retried
-3. **Exponential Backoff**: 
+3. **Exponential Backoff**:
    - Attempt 1: immediate
    - Attempt 2: 1 second delay
    - Attempt 3: 2 second delay
@@ -124,6 +131,7 @@ The module implements intelligent retry logic:
 4. **Configurable**: `maxRetries` parameter controls max attempts
 
 ### Failure Scenarios:
+
 - **API Rate Limiting (429)**: Retried
 - **Temporary Network Issues (5xx)**: Retried
 - **Invalid Input (4xx, non-429)**: Not retried (logged as permanent failure)
@@ -143,6 +151,7 @@ All Results Combined → Cost Recorded
 ```
 
 Benefits:
+
 - Respects OpenAI API limits
 - Parallel processing possible (independent batches)
 - Efficient token usage tracking
@@ -215,6 +224,7 @@ npm run test -- embeddings.service.spec.ts
 ```
 
 Key test scenarios:
+
 - Batch embedding with successful API response
 - Error handling for missing API key
 - Cost calculation accuracy
@@ -241,6 +251,7 @@ OPENAI_API_KEY=sk-...
 ```
 
 The service automatically:
+
 - Validates API key exists
 - Uses `text-embedding-3-small` model
 - Applies correct pricing calculations

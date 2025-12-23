@@ -26,7 +26,7 @@ describe('EmbeddingsService', () => {
     content: 'This is a test document for embedding.',
     type: DocumentType.KNOWLEDGE,
     organizationId: mockOrgId,
-    embedding: null,
+    embedding: undefined,
   };
 
   const mockDocument2: Partial<Document> = {
@@ -35,7 +35,7 @@ describe('EmbeddingsService', () => {
     content: 'Another test document with different content.',
     type: DocumentType.KNOWLEDGE,
     organizationId: mockOrgId,
-    embedding: null,
+    embedding: undefined,
   };
 
   beforeEach(async () => {
@@ -46,6 +46,7 @@ describe('EmbeddingsService', () => {
           provide: getRepositoryToken(Document),
           useValue: {
             find: jest.fn(),
+            findOne: jest.fn(),
             update: jest.fn(),
             save: jest.fn(),
           },
@@ -286,8 +287,8 @@ describe('EmbeddingsService', () => {
         content: `Content ${i}`,
         type: DocumentType.KNOWLEDGE,
         organizationId: mockOrgId,
-        embedding: null,
-      })) as Document[];
+        embedding: undefined,
+      })) as unknown as Document[];
 
       jest.spyOn(documentRepo, 'find').mockResolvedValue(largeDocSet);
       jest
@@ -336,8 +337,9 @@ describe('EmbeddingsService', () => {
         .mockResolvedValue([mockDocument1 as Document]);
       jest
         .spyOn(documentRepo, 'findOne')
-        .mockResolvedValueOnce(undefined) // First call in embedDocument
-        .mockResolvedValueOnce(mockDocument1 as Document); // Second call to check API key
+        .mockResolvedValueOnce(null as any) // First call in embedDocument returns no document
+        .mockResolvedValueOnce(mockDocument1 as Document) // Then embeddingBatchJob finds it
+        .mockResolvedValueOnce(mockDocument1 as Document); // After batch job finds updated doc
       jest
         .spyOn(documentRepo, 'update')
         .mockResolvedValue({ affected: 1 } as any);

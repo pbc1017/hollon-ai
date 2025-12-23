@@ -310,11 +310,6 @@ export class EmbeddingsService {
       }
     }
 
-    const processed =
-      documents.length -
-      failed.filter((id) =>
-        jobStatuses.find((js) => js.documentId === id && js.retryCount > 0),
-      ).length;
     const finalFailed = failed.length;
 
     return {
