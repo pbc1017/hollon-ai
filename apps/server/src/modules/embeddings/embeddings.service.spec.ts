@@ -249,6 +249,11 @@ describe('EmbeddingsService', () => {
     });
 
     it('should handle OpenAI API errors and mark documents as failed', async () => {
+      // Mock the delay to avoid test timeout (service has retry logic with 1s+ delays)
+      jest
+        .spyOn(service as any, 'delay')
+        .mockImplementation(() => Promise.resolve());
+
       jest
         .spyOn(documentRepo, 'find')
         .mockResolvedValue([mockDocument1 as Document]);
@@ -277,7 +282,7 @@ describe('EmbeddingsService', () => {
 
       expect(result.failed).toBe(1);
       expect(result.failedDocumentIds).toContain(mockDocId1);
-    });
+    }, 10000);
 
     it('should handle batch splitting for large document sets', async () => {
       // Create 150 mock documents (exceeds MAX_BATCH_SIZE of 100)
@@ -332,19 +337,27 @@ describe('EmbeddingsService', () => {
 
   describe('embedDocument', () => {
     it('should embed a single document', async () => {
+      const mockEmbeddingVector = Array(1536).fill(0.1);
+      const docWithEmbedding = {
+        ...mockDocument1,
+        embedding: JSON.stringify(mockEmbeddingVector),
+      };
+
+      // findOne is called:
+      // 1. In embedDocument - to check if document exists (should return doc without embedding)
+      // 2. In embedDocument - after embeddingBatchJob to get updated doc with embedding
+      jest
+        .spyOn(documentRepo, 'findOne')
+        .mockResolvedValueOnce(mockDocument1 as Document) // First: doc exists, no embedding
+        .mockResolvedValueOnce(docWithEmbedding as Document); // After batch: doc with embedding
+
       jest
         .spyOn(documentRepo, 'find')
         .mockResolvedValue([mockDocument1 as Document]);
       jest
-        .spyOn(documentRepo, 'findOne')
-        .mockResolvedValueOnce(null as any) // First call in embedDocument returns no document
-        .mockResolvedValueOnce(mockDocument1 as Document) // Then embeddingBatchJob finds it
-        .mockResolvedValueOnce(mockDocument1 as Document); // After batch job finds updated doc
-      jest
         .spyOn(documentRepo, 'update')
         .mockResolvedValue({ affected: 1 } as any);
 
-      const mockEmbeddingVector = Array(1536).fill(0.1);
       const mockOpenAIResponse = {
         object: 'list',
         data: [
@@ -368,17 +381,6 @@ describe('EmbeddingsService', () => {
 
       jest.spyOn(costRecordRepo, 'create').mockReturnValue({} as CostRecord);
       jest.spyOn(costRecordRepo, 'save').mockResolvedValue({} as CostRecord);
-
-      // Mock the final findOne call to return document with embedding
-      const docWithEmbedding = {
-        ...mockDocument1,
-        embedding: JSON.stringify(mockEmbeddingVector),
-      };
-
-      jest
-        .spyOn(documentRepo, 'findOne')
-        .mockResolvedValueOnce(mockDocument1 as Document) // First check
-        .mockResolvedValueOnce(docWithEmbedding as Document); // After batch job
 
       const embedding = await service.embedDocument(mockDocId1, mockOrgId);
 
@@ -433,7 +435,10 @@ describe('EmbeddingsService', () => {
         json: jest.fn().mockResolvedValue(mockOpenAIResponse),
       } as any);
 
-      jest.spyOn(costRecordRepo, 'create').mockReturnValue({} as CostRecord);
+      // create should return the input object so save receives the full record
+      jest
+        .spyOn(costRecordRepo, 'create')
+        .mockImplementation((data) => data as CostRecord);
       const saveSpy = jest
         .spyOn(costRecordRepo, 'save')
         .mockResolvedValue({} as CostRecord);
