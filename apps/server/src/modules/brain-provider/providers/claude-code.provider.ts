@@ -15,6 +15,10 @@ import { BrainExecutionError } from '../exceptions/brain-execution.error';
 export class ClaudeCodeProvider implements IBrainProvider {
   private readonly logger = new Logger(ClaudeCodeProvider.name);
 
+  // Model configuration with fallback support
+  private readonly PRIMARY_MODEL = 'sonnet';
+  private readonly FALLBACK_MODEL = 'haiku';
+
   constructor(
     private readonly processManager: ProcessManagerService,
     private readonly costCalculator: CostCalculatorService,
@@ -24,6 +28,60 @@ export class ClaudeCodeProvider implements IBrainProvider {
   ) {}
 
   async execute(request: BrainRequest): Promise<BrainResponse> {
+    // Try primary model (Sonnet) first
+    try {
+      return await this.executeWithModel(request, this.PRIMARY_MODEL);
+    } catch (error) {
+      // Check if it's a rate limit error
+      if (this.isRateLimitError(error)) {
+        this.logger.warn(
+          `Rate limit hit on ${this.PRIMARY_MODEL}, falling back to ${this.FALLBACK_MODEL}`,
+        );
+        // Retry with fallback model (Haiku)
+        return await this.executeWithModel(request, this.FALLBACK_MODEL);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Check if the error is a rate limit error
+   */
+  private isRateLimitError(error: unknown): boolean {
+    if (error instanceof BrainExecutionError) {
+      const errorText = `${error.message} ${error.stderr || ''}`.toLowerCase();
+      return (
+        errorText.includes('rate limit') ||
+        errorText.includes('rate_limit') ||
+        errorText.includes('limit reached') || // Claude CLI rate limit message
+        errorText.includes('429') ||
+        errorText.includes('overloaded') ||
+        errorText.includes('too many requests') ||
+        errorText.includes('capacity') ||
+        errorText.includes('quota')
+      );
+    }
+    if (error instanceof Error) {
+      const errorText = error.message.toLowerCase();
+      return (
+        errorText.includes('rate limit') ||
+        errorText.includes('rate_limit') ||
+        errorText.includes('limit reached') || // Claude CLI rate limit message
+        errorText.includes('429') ||
+        errorText.includes('overloaded') ||
+        errorText.includes('too many requests')
+      );
+    }
+    return false;
+  }
+
+  /**
+   * Execute with a specific model
+   */
+  private async executeWithModel(
+    request: BrainRequest,
+    modelName: string,
+  ): Promise<BrainResponse> {
     const startTime = Date.now();
 
     // Get configuration
@@ -35,13 +93,14 @@ export class ClaudeCodeProvider implements IBrainProvider {
     const timeoutMs =
       request.options?.timeoutMs || config.timeoutSeconds * 1000;
 
-    // Build command arguments
-    // Note: --print 옵션 제거 - 실제 파일 수정이 가능하도록
+    // Build command arguments with model
     const args = [
       '-p', // prompt를 stdin으로 받음
       '--output-format',
       'text',
       '--dangerously-skip-permissions',
+      '--model',
+      modelName,
     ];
     if (request.systemPrompt) {
       args.push('--system-prompt', request.systemPrompt);
@@ -58,18 +117,8 @@ export class ClaudeCodeProvider implements IBrainProvider {
     );
 
     this.logger.log(
-      `Executing Claude Code: timeout=${timeoutMs}ms, ` +
+      `Executing Claude Code with model=${modelName}: timeout=${timeoutMs}ms, ` +
         `estimated_cost=$${estimatedCost.totalCostCents.toFixed(4)}`,
-    );
-
-    // Enhanced debug logging for ENOENT diagnosis
-    this.logger.debug(`[CLAUDE DEBUG] claudePath: "${claudePath}"`);
-    this.logger.debug(
-      `[CLAUDE DEBUG] workingDirectory: "${request.context?.workingDirectory || 'not set'}"`,
-    );
-    this.logger.debug(`[CLAUDE DEBUG] args: ${JSON.stringify(args)}`);
-    this.logger.debug(
-      `[CLAUDE DEBUG] request.context: ${JSON.stringify(request.context)}`,
     );
 
     try {
@@ -84,9 +133,12 @@ export class ClaudeCodeProvider implements IBrainProvider {
 
       // Check exit code
       if (processResult.exitCode !== 0) {
+        // Include both stdout and stderr for rate limit detection
+        // Rate limit messages appear in stdout, not stderr
+        const combinedOutput = `${processResult.stdout || ''}\n${processResult.stderr || ''}`;
         throw new BrainExecutionError(
           `Claude Code exited with code ${processResult.exitCode}`,
-          processResult.stderr,
+          combinedOutput,
           processResult.exitCode,
         );
       }
@@ -102,7 +154,7 @@ export class ClaudeCodeProvider implements IBrainProvider {
       const duration = Date.now() - startTime;
 
       this.logger.log(
-        `Claude Code execution completed: duration=${duration}ms, ` +
+        `Claude Code execution completed (model=${modelName}): duration=${duration}ms, ` +
           `output_length=${parsed.output.length}`,
       );
 
@@ -111,7 +163,7 @@ export class ClaudeCodeProvider implements IBrainProvider {
         output: parsed.output,
         duration: processResult.duration,
         cost: estimatedCost,
-        metadata: parsed.metadata,
+        metadata: { ...parsed.metadata, modelUsed: modelName },
       };
     } catch (error) {
       const duration = Date.now() - startTime;
@@ -121,12 +173,12 @@ export class ClaudeCodeProvider implements IBrainProvider {
       // Log detailed error information for debugging
       if (error instanceof BrainExecutionError) {
         this.logger.error(
-          `Claude Code execution failed: ${errorMessage}, ` +
+          `Claude Code execution failed (model=${modelName}): ${errorMessage}, ` +
             `exitCode=${error.exitCode}, duration=${duration}ms`,
         );
       } else {
         this.logger.error(
-          `Claude Code execution failed: ${errorMessage}, duration=${duration}ms`,
+          `Claude Code execution failed (model=${modelName}): ${errorMessage}, duration=${duration}ms`,
         );
       }
 
