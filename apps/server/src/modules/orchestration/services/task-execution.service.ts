@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { promisify } from 'util';
 import { exec } from 'child_process';
 import * as path from 'path';
+import * as os from 'os';
 import {
   Task,
   TaskStatus,
@@ -692,7 +693,10 @@ export class TaskExecutionService {
         prompt,
         systemPrompt: hollon.role?.systemPrompt || hollon.systemPrompt,
         context: {
-          workingDirectory: process.cwd(), // 워크트리 없음
+          // Phase 4.1 Fix #6: Use temp directory for decomposition to prevent
+          // Claude from creating files on main branch. Decomposition should
+          // only return JSON, not create actual code files.
+          workingDirectory: os.tmpdir(),
         },
       },
       {
@@ -777,6 +781,9 @@ IMPORTANT:
 - Tasks with dependencies will be marked as BLOCKED until their dependencies complete
 
 Return ONLY the JSON, no other text.
+
+CRITICAL: Do NOT create, write, or modify any files. Do NOT use file system tools.
+This is a PLANNING task only. Output ONLY the JSON response.
 `.trim();
   }
 
