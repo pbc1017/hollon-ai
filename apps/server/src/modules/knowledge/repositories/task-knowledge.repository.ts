@@ -1,13 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, FindOptionsWhere } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import {
   Knowledge,
   KnowledgeRelation,
   Embedding,
   KnowledgeMetadata,
   KnowledgeCategory,
-  KnowledgeSource,
   RelationType,
 } from '../entities';
 import {
@@ -20,8 +19,6 @@ import {
 
 @Injectable()
 export class TaskKnowledgeRepository {
-  private readonly logger = new Logger(TaskKnowledgeRepository.name);
-
   constructor(
     @InjectRepository(Knowledge)
     private readonly knowledgeRepo: Repository<Knowledge>,
@@ -152,7 +149,9 @@ export class TaskKnowledgeRepository {
     id: string,
     dto: UpdateKnowledgeDto,
   ): Promise<Knowledge> {
-    await this.knowledgeRepo.update(id, dto);
+    // TypeORM's update method has strict typing for metadata field
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await this.knowledgeRepo.update(id, dto as any);
     const updated = await this.getKnowledgeById(id);
     if (!updated) {
       throw new Error(`Knowledge with id ${id} not found`);
@@ -442,7 +441,9 @@ export class TaskKnowledgeRepository {
     updates: Array<{ id: string; data: UpdateKnowledgeDto }>,
   ): Promise<void> {
     for (const { id, data } of updates) {
-      await this.knowledgeRepo.update(id, data);
+      // TypeORM's update method has strict typing for metadata field
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await this.knowledgeRepo.update(id, data as any);
     }
   }
 
