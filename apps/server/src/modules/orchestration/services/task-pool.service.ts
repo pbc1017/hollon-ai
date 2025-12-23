@@ -58,12 +58,18 @@ export class TaskPoolService {
     const now = new Date();
 
     // Check if this hollon is a manager (Phase 4)
+    // Manager = manages teams OR has subordinate hollons
     const managedTeams = await this.hollonRepo.manager
       .getRepository(Team)
       .find({
         where: { managerHollonId: hollon.id },
       });
-    const isManager = managedTeams.length > 0;
+
+    const subordinates = await this.hollonRepo.count({
+      where: { managerId: hollon.id },
+    });
+
+    const isManager = managedTeams.length > 0 || subordinates > 0;
 
     // Priority 0: Review tasks (highest priority - Phase 3.10)
     let task = await this.findReviewReadyTask(hollonId);

@@ -106,8 +106,10 @@ export class TeamTaskDistributionService {
   ): Promise<DistributionPlan> {
     const manager = team.manager!;
 
-    // Build context about team members
-    const teamMembers = team.hollons || [];
+    // Build context about team members (exclude manager from distribution pool)
+    const teamMembers = (team.hollons || []).filter(
+      (hollon) => hollon.id !== manager.id,
+    );
     const memberInfo = await Promise.all(
       teamMembers.map(async (hollon) => {
         const currentTasks = await this.taskRepo.count({
@@ -384,16 +386,18 @@ Break down this team task into 3-7 subtasks and assign each to the most suitable
         continue;
       }
 
-      // Update subtask with assignment and reviewer
+      // Update subtask with reviewer (no pre-assignment - use pull-based)
       // Phase 3.16: Set reviewer to parent task's manager
       const reviewerId = teamTask.assignedHollonId;
 
       this.logger.debug(
-        `Setting subtask "${sp.title}" (${subtask.id}): assignedHollonId=${hollonId}, reviewerHollonId=${reviewerId}`,
+        `Setting subtask "${sp.title}" (${subtask.id}): reviewerHollonId=${reviewerId}, status=READY (pull-based, no pre-assignment)`,
       );
 
+      // Phase 4: Pull-based assignment - don't set assignedHollonId
+      // Let idle team members pull from the pool via TaskPoolService
       await this.taskRepo.update(subtask.id, {
-        assignedHollonId: hollonId,
+        // assignedHollonId: NOT SET (null) - will be assigned when pulled
         reviewerHollonId: reviewerId, // Manager reviews subtasks
         status: TaskStatus.READY,
       });

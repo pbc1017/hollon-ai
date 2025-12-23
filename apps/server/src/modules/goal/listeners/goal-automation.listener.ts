@@ -481,7 +481,37 @@ export class GoalAutomationListener {
         `Available execution slots: ${availableSlots}/${MAX_CONCURRENT_TASKS} (${currentlyExecuting} currently in progress)`,
       );
 
-      // READY 상태이고 Hollon에게 할당된 Task 찾기
+      // Phase 4: Pull-based task assignment for idle hollons
+      // Find idle permanent hollons and let them pull tasks from the pool
+      const idleHollons = await this.hollonRepo
+        .createQueryBuilder('h')
+        .leftJoin(
+          Task,
+          't',
+          't.assignedHollonId = h.id AND t.status = :inProgress',
+          { inProgress: TaskStatus.IN_PROGRESS },
+        )
+        .where('h.lifecycle = :permanent', { permanent: 'permanent' })
+        .andWhere('t.id IS NULL') // No IN_PROGRESS tasks
+        .limit(availableSlots)
+        .getMany();
+
+      this.logger.debug(`Found ${idleHollons.length} idle hollons`);
+
+      // Let idle hollons pull tasks from the pool
+      for (const hollon of idleHollons) {
+        try {
+          this.logger.log(`Idle hollon ${hollon.name} pulling next task...`);
+          await this.hollonOrchestratorService.runCycle(hollon.id);
+        } catch (error) {
+          this.logger.error(
+            `Failed to run cycle for idle hollon ${hollon.name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
+          // Continue with other hollons
+        }
+      }
+
+      // READY 상태이고 Hollon에게 할당된 Task 찾기 (legacy pre-assigned tasks)
       const readyTasks = await this.taskRepo
         .createQueryBuilder('task')
         .where('task.status = :status', { status: TaskStatus.READY })
