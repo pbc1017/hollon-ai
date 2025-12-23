@@ -852,14 +852,15 @@ export class GoalAutomationListener {
               // Get task metadata
               const metadata = (task.metadata || {}) as Record<string, unknown>;
               const currentRetryCount = (metadata.ciRetryCount as number) || 0;
-              const maxRetries = 3;
+              const maxRetries = 5; // Phase 4.1: Increased from 3 to 5
 
-              // Get failed check names and detailed CI logs
+              // Get failed check names
               const failedCheckNames = checks
                 .filter((check) => check.state !== 'success')
                 .map((check) => check.name || 'Unknown check')
                 .filter((name): name is string => name !== undefined);
 
+              // Phase 4.1 Fix #3: Fetch actual CI execution logs for better error diagnosis
               let ciLogs = '';
               try {
                 const { stdout } = await execAsync(
@@ -870,13 +871,48 @@ export class GoalAutomationListener {
                   state: string;
                   detailsUrl: string;
                 }>;
-                const failedDetails = detailedChecks
-                  .filter((check) => check.state !== 'success')
-                  .map((check) => `${check.name}: ${check.detailsUrl}`)
-                  .join('\n');
+
+                const failedChecksWithLogs: string[] = [];
+
+                for (const check of detailedChecks.filter(
+                  (c) => c.state !== 'success',
+                )) {
+                  // Extract run ID from detailsUrl (format: .../runs/<run-id>/job/<job-id>)
+                  const runIdMatch = check.detailsUrl?.match(/\/runs\/(\d+)/);
+                  if (runIdMatch) {
+                    const runId = runIdMatch[1];
+                    try {
+                      // Fetch actual failed logs from GitHub Actions (limit to 200 lines)
+                      const { stdout: logOutput } = await execAsync(
+                        `gh run view ${runId} --log-failed 2>/dev/null | head -200`,
+                        { timeout: 30000 }, // 30 second timeout
+                      );
+                      if (logOutput.trim()) {
+                        failedChecksWithLogs.push(
+                          `### ${check.name}\n\`\`\`\n${logOutput.trim()}\n\`\`\``,
+                        );
+                      } else {
+                        failedChecksWithLogs.push(
+                          `### ${check.name}\nNo logs available. Details: ${check.detailsUrl}`,
+                        );
+                      }
+                    } catch {
+                      // Fallback to just the URL if log fetch fails
+                      failedChecksWithLogs.push(
+                        `### ${check.name}\nDetails: ${check.detailsUrl}`,
+                      );
+                    }
+                  } else {
+                    failedChecksWithLogs.push(
+                      `### ${check.name}\nDetails: ${check.detailsUrl || 'No URL'}`,
+                    );
+                  }
+                }
+
                 ciLogs =
-                  failedDetails ||
-                  `Failed checks: ${failedCheckNames.join(', ')}`;
+                  failedChecksWithLogs.length > 0
+                    ? failedChecksWithLogs.join('\n\n')
+                    : `Failed checks: ${failedCheckNames.join(', ')}`;
               } catch {
                 this.logger.debug('Could not fetch detailed CI logs');
                 ciLogs = `Failed checks: ${failedCheckNames.join(', ')}`;
@@ -888,22 +924,28 @@ export class GoalAutomationListener {
                   `Retrying task ${task.id} (attempt ${currentRetryCount + 1}/${maxRetries})`,
                 );
 
-                // Create feedback message for the brain
+                // Create feedback message for the brain with PostgreSQL hints
                 const feedback = `
-CI Checks Failed (Attempt ${currentRetryCount + 1}/${maxRetries}):
+## CI Checks Failed (Attempt ${currentRetryCount + 1}/${maxRetries})
 
 ${ciLogs}
 
-The following CI checks failed:
+### Failed Checks Summary
 ${failedCheckNames.map((check) => `- ${check}`).join('\n')}
 
-Please review the CI errors and fix the issues in your code. 
-${currentRetryCount + 1 < maxRetries ? 'You will have another chance to fix this.' : 'This is the final attempt.'}
+### Common Issues & Hints
+- **PostgreSQL Syntax**: PostgreSQL does NOT support MySQL-style prefix indexing like \`column(255)\`. Use \`text_pattern_ops\` or full column indexing instead.
+- **Type Errors**: Check for missing imports, incorrect types, or null safety issues.
+- **Test Failures**: Review the test output and ensure your changes don't break existing functionality.
+- **Lint Errors**: Run \`pnpm lint\` locally to identify formatting issues.
 
-Make sure to:
-1. Review the error messages carefully
-2. Fix any linting, type, or test failures
-3. Ensure all tests pass locally before committing
+### Instructions
+${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCount - 1} more attempts after this one.` : '⚠️ This is the FINAL attempt. Be extra careful!'}
+
+1. Read the error logs above carefully
+2. Identify the root cause (syntax error, type mismatch, test failure, etc.)
+3. Fix the issues in the same branch - do NOT create a new PR
+4. Commit and push your fixes
 `.trim();
 
                 // Task를 READY로 설정하여 pullNextTask에서 선택될 수 있도록 함
@@ -931,16 +973,25 @@ Make sure to:
                   );
                 }
               } else {
-                // 최대 재시도 횟수 초과
+                // Phase 4.1 Fix #5: Maximum retries exceeded - escalate to manager
                 this.logger.error(
-                  `Task ${task.id} exceeded max retries (${maxRetries}), marking as FAILED`,
+                  `Task ${task.id} exceeded max retries (${maxRetries}), escalating to manager`,
                 );
-                task.status = TaskStatus.FAILED;
+
+                // Mark task as BLOCKED instead of FAILED for manager intervention
+                task.status = TaskStatus.BLOCKED;
                 task.metadata = {
                   ...metadata,
-                  failureReason: 'CI checks failed after maximum retries',
+                  failureReason: `CI checks failed after ${maxRetries} attempts. Requires manager intervention.`,
+                  escalatedAt: new Date().toISOString(),
+                  lastCILogs: ciLogs,
                 } as Record<string, unknown>;
                 await this.taskRepo.save(task);
+
+                // TODO: Notify manager hollon for review/intervention
+                this.logger.warn(
+                  `Task ${task.id} escalated to BLOCKED status for manager review`,
+                );
               }
             } else {
               // CI 통과 - READY_FOR_REVIEW로 전환

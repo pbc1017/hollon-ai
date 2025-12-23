@@ -897,8 +897,29 @@ ${i + 1}. **${item.title}**
       return task.workingDirectory;
     }
 
+    // Phase 4.1 Fix #1: If subtask has no worktree, check parent's worktree dynamically
+    // This handles cases where subtask was created before parent started
+    if (task.parentTaskId) {
+      const parentTask = await this.taskRepo.findOne({
+        where: { id: task.parentTaskId },
+      });
+      if (parentTask?.workingDirectory) {
+        this.logger.log(
+          `Subtask ${task.id.slice(0, 8)} inheriting parent's worktree at execution time: ${parentTask.workingDirectory}`,
+        );
+        // Update task's workingDirectory for future reference
+        await this.taskRepo.update(task.id, {
+          workingDirectory: parentTask.workingDirectory,
+        });
+        return parentTask.workingDirectory;
+      }
+    }
+
+    // Phase 4.1 Fix #2: Worktree must be created at git root, not in project subdirectory
+    // project.workingDirectory may be apps/server, but .git is at project root
+    const gitRoot = path.resolve(project.workingDirectory, '..');
     const worktreePath = path.join(
-      project.workingDirectory,
+      gitRoot,
       '.git-worktrees',
       `hollon-${hollon.id.slice(0, 8)}`,
       `task-${task.id.slice(0, 8)}`,
@@ -953,13 +974,12 @@ ${i + 1}. **${item.title}**
       `Creating task worktree for ${hollon.name} / task ${task.id.slice(0, 8)} from ${baseBranch}`,
     );
 
-    // Use git lock to prevent concurrent git operations
-    await this.withGitLock(project.workingDirectory, async () => {
+    // Use git lock to prevent concurrent git operations (use gitRoot for lock)
+    await this.withGitLock(gitRoot, async () => {
       try {
         // Ensure parent directory exists
         const hollonDir = path.join(
-          project.workingDirectory,
-          '..',
+          gitRoot,
           '.git-worktrees',
           `hollon-${hollon.id.slice(0, 8)}`,
         );
@@ -970,7 +990,7 @@ ${i + 1}. **${item.title}**
         let useOriginBranch = true;
         try {
           await execAsync('git fetch origin', {
-            cwd: project.workingDirectory,
+            cwd: gitRoot,
           });
           this.logger.log('✅ Git fetch succeeded');
         } catch (fetchError) {
@@ -999,7 +1019,7 @@ ${i + 1}. **${item.title}**
         await execAsync(
           `git worktree add -b ${tempBranch} ${worktreePath} ${branchRef}`,
           {
-            cwd: project.workingDirectory,
+            cwd: gitRoot,
           },
         );
 
