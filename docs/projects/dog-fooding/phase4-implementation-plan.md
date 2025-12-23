@@ -395,8 +395,9 @@ Organization: Hollon AI Development
 {
   title: "Phase 4.1: 지식 시스템 구축",
   description: "Task 완료 후 자동으로 지식이 축적되고, 다음 Task 실행 시 자동으로 참조되는 시스템 구현",
-  assignedTeamId: backendEngineering.id,  // 범용 팀!
-  assignedHollonId: techLeadAlpha.id,     // Manager에게 배정
+  teamId: backendEngineering.id,          // 담당 팀
+  ownerHollonId: ctoZeus.id,              // CTO가 Goal 소유 (전략적 레벨)
+  // → Team Manager (TechLead-Alpha)가 Team Epic으로 분해
   acceptanceCriteria: [
     "KnowledgeExtractionService 구현",
     "VectorSearchService 구현",
