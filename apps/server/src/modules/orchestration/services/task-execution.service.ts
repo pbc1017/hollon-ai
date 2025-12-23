@@ -1971,8 +1971,10 @@ Make sure to:
   /**
    * Phase 4: Wait for CI checks to start and complete
    * Polls the PR until CI checks are done (success or failure)
+   * @deprecated No longer used - CI monitoring now handled by autoCheckPRCI Cron
    */
-  private async waitForCIChecks(
+  // @ts-expect-error - Kept for reference, may be useful for debugging
+  private async _waitForCIChecks(
     prUrl: string,
     worktreePath: string,
     maxWaitMinutes: number = 10,
@@ -2115,7 +2117,11 @@ Make sure to:
     return pr.id;
   }
 
-  private async requestCodeReview(task: Task, prUrl: string): Promise<void> {
+  /**
+   * @deprecated No longer used - Review requests now handled by autoCheckPRCI Cron after CI passes
+   */
+  // @ts-expect-error - Kept for reference, may be useful for debugging
+  private async _requestCodeReview(task: Task, prUrl: string): Promise<void> {
     const prNumber = this.extractPRNumber(prUrl);
 
     if (!prNumber) {
