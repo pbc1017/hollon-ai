@@ -558,8 +558,11 @@ Suggest task reassignments to:
         continue;
       }
 
+      // Phase 4 Fix: Clear assignedTeamId to satisfy XOR constraint
+      // Non-team_epic tasks can have either assignedTeamId OR assignedHollonId, not both
       await this.taskRepo.update(task.id, {
         assignedHollonId: newHollonId,
+        assignedTeamId: null, // XOR: hollon is assigned, clear team
         status: TaskStatus.READY, // Reset to READY for new assignee
       });
 

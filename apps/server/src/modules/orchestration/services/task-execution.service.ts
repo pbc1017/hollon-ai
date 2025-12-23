@@ -598,12 +598,14 @@ export class TaskExecutionService {
         // 팀원 중 적절한 홀론 선택
         const assignedHollon = await this.selectBestHollon(team, workItem);
 
+        // Phase 4 Fix: XOR constraint requires either assignedTeamId OR assignedHollonId, not both
+        // If hollon is assigned, don't set assignedTeamId. Otherwise, inherit from parent for team-based task pulling.
         const implTask = this.taskRepo.create({
           organizationId: task.organizationId,
           projectId: task.projectId,
           parentTaskId: task.id, // ✅ 부모 참조
           creatorHollonId: hollon.id, // ✅ 에스컬레이션용
-          assignedTeamId: task.assignedTeamId, // Phase 4: Inherit team from parent
+          assignedTeamId: assignedHollon ? null : task.assignedTeamId, // XOR: team only if no hollon
           title: workItem.title,
           description: workItem.description,
           type: TaskType.IMPLEMENTATION,
@@ -1034,7 +1036,7 @@ ${i + 1}. **${item.title}**
    * Phase 3.12: Hollon별 브랜치 생성 (Task worktree 내)
    * - 브랜치명: feature/{hollonName}/task-{taskId}
    * - 작업자를 브랜치명으로 명확히 식별
-   * Phase 4: Duplicate branch prevention - delete remote branch if exists
+   * Phase 4 Fix: Reuse existing remote branch instead of deleting (preserves PRs)
    */
   private async createBranch(
     hollon: Hollon,
@@ -1050,29 +1052,6 @@ ${i + 1}. **${item.title}**
     );
 
     try {
-      // Phase 4: Check if branch exists remotely and delete it
-      try {
-        const { stdout } = await execAsync(
-          `git ls-remote --heads origin ${branchName}`,
-          { cwd: worktreePath },
-        );
-
-        if (stdout.trim()) {
-          this.logger.warn(
-            `Remote branch ${branchName} already exists, deleting it`,
-          );
-          await execAsync(`git push origin --delete ${branchName}`, {
-            cwd: worktreePath,
-          });
-          this.logger.log(`Deleted remote branch ${branchName}`);
-        }
-      } catch (checkError) {
-        // Ignore errors from ls-remote or delete (branch might not exist)
-        this.logger.debug(
-          `Branch check/delete skipped: ${checkError instanceof Error ? checkError.message : 'Unknown error'}`,
-        );
-      }
-
       // Check if we're already on the correct branch (worktree reuse case)
       const { stdout: currentBranch } = await execAsync(
         `git branch --show-current`,
@@ -1088,6 +1067,46 @@ ${i + 1}. **${item.title}**
         return branchName;
       }
 
+      // Phase 4 Fix: Check if branch exists remotely and REUSE it instead of deleting
+      // This preserves existing PRs and allows CI retry to push fixes to same branch
+      try {
+        const { stdout } = await execAsync(
+          `git ls-remote --heads origin ${branchName}`,
+          { cwd: worktreePath },
+        );
+
+        if (stdout.trim()) {
+          // Branch exists remotely - fetch and checkout instead of deleting
+          this.logger.log(
+            `Remote branch ${branchName} exists, fetching and checking out (preserving PR)`,
+          );
+
+          // Fetch the remote branch
+          await execAsync(`git fetch origin ${branchName}`, {
+            cwd: worktreePath,
+          });
+
+          // Rename current branch to the feature branch
+          await execAsync(`git branch -m ${branchName}`, {
+            cwd: worktreePath,
+          });
+
+          // Reset to match remote (get the latest changes from previous attempt)
+          await execAsync(`git reset --hard origin/${branchName}`, {
+            cwd: worktreePath,
+          });
+
+          this.logger.log(`Checked out existing remote branch ${branchName}`);
+          return branchName;
+        }
+      } catch (checkError) {
+        // Ignore errors from ls-remote (branch might not exist)
+        this.logger.debug(
+          `Branch remote check skipped: ${checkError instanceof Error ? checkError.message : 'Unknown error'}`,
+        );
+      }
+
+      // Branch doesn't exist remotely - create new branch
       // The worktree was created with a temporary branch, now rename it to the feature branch
       // Git automatically creates the necessary directory structure for nested branches
       await execAsync(`git branch -m ${branchName}`, {
@@ -1666,12 +1685,14 @@ ${i + 1}. **${item.title}**
         subtaskData,
       );
 
+      // Phase 4 Fix: XOR constraint requires either assignedTeamId OR assignedHollonId, not both
+      // Since subtask is assigned to subHollon, don't set assignedTeamId
       const subtask = this.taskRepo.create({
         organizationId: task.organizationId,
         projectId: task.projectId,
         parentTaskId: task.id, // Link to parent
         creatorHollonId: hollon.id,
-        assignedTeamId: task.assignedTeamId, // Phase 4: Inherit team from parent
+        assignedTeamId: null, // XOR: hollon is assigned, so no team
         title: subtaskData.title,
         description: subtaskData.description,
         type: TaskType.IMPLEMENTATION,

@@ -507,31 +507,40 @@ export class TaskPoolService {
   /**
    * Atomically claim a task for the hollon
    * Phase 3.10: Handle READY_FOR_REVIEW → IN_REVIEW transition
+   * Phase 4 Fix: For non-review tasks, don't set IN_PROGRESS here.
+   * Let executeTask set IN_PROGRESS after worktree is created to prevent
+   * tasks being stuck in IN_PROGRESS with null workingDirectory.
    */
   private async claimTask(
     task: Task,
     hollon: Hollon,
     reason: string,
   ): Promise<TaskPullResult> {
-    // Determine target status based on current status
     const isReviewTask = task.status === TaskStatus.READY_FOR_REVIEW;
-    const newStatus = isReviewTask
-      ? TaskStatus.IN_REVIEW
-      : TaskStatus.IN_PROGRESS;
 
     // Prepare update data
     const updateData: any = {
       assignedHollonId: hollon.id,
-      status: newStatus,
     };
 
-    // Add review tracking for review tasks
+    // Phase 4 Fix: Clear assignedTeamId for non-team_epic tasks to satisfy XOR constraint
+    // The CHK_tasks_assignment_xor constraint requires: for non-team_epic tasks,
+    // either assignedTeamId OR assignedHollonId can be set, but not both.
+    // Tasks may have inherited assignedTeamId from their parent, so we clear it here.
+    if (task.type !== TaskType.TEAM_EPIC) {
+      updateData.assignedTeamId = null;
+    }
+
+    // For review tasks, set status to IN_REVIEW immediately
+    // For non-review tasks, DON'T set status here - let executeTask do it
+    // after worktree is created. This prevents tasks being IN_PROGRESS
+    // with null workingDirectory if worktree creation fails.
     if (isReviewTask) {
+      updateData.status = TaskStatus.IN_REVIEW;
       updateData.lastReviewedAt = new Date();
       updateData.reviewCount = () => 'review_count + 1'; // Increment reviewCount
-    } else {
-      updateData.startedAt = new Date();
     }
+    // Note: startedAt will be set by executeTask when status changes to IN_PROGRESS
 
     // Build dynamic WHERE clause based on task type
     const allowedStatuses = isReviewTask
@@ -569,8 +578,12 @@ export class TaskPoolService {
       relations: ['project'],
     });
 
+    const statusChange = isReviewTask
+      ? `${task.status} → ${TaskStatus.IN_REVIEW}`
+      : `${task.status} (unchanged until worktree ready)`;
+
     this.logger.log(
-      `Task claimed: ${task.id} by ${hollon.name} (reason: ${reason}, status: ${task.status} → ${newStatus})`,
+      `Task claimed: ${task.id} by ${hollon.name} (reason: ${reason}, status: ${statusChange})`,
     );
 
     return {
