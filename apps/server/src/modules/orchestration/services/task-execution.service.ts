@@ -603,6 +603,7 @@ export class TaskExecutionService {
           projectId: task.projectId,
           parentTaskId: task.id, // ✅ 부모 참조
           creatorHollonId: hollon.id, // ✅ 에스컬레이션용
+          assignedTeamId: task.assignedTeamId, // Phase 4: Inherit team from parent
           title: workItem.title,
           description: workItem.description,
           type: TaskType.IMPLEMENTATION,
@@ -1670,6 +1671,7 @@ ${i + 1}. **${item.title}**
         projectId: task.projectId,
         parentTaskId: task.id, // Link to parent
         creatorHollonId: hollon.id,
+        assignedTeamId: task.assignedTeamId, // Phase 4: Inherit team from parent
         title: subtaskData.title,
         description: subtaskData.description,
         type: TaskType.IMPLEMENTATION,

@@ -1172,7 +1172,8 @@ Make sure to:
       // 2. Team별로 그룹화
       const tasksByTeam = new Map<string, Task[]>();
       for (const task of waitingTasks) {
-        const teamId = task.project?.assignedTeam?.id;
+        // Task의 assignedTeamId를 우선 사용, 없으면 Project의 team 사용
+        const teamId = task.assignedTeamId || task.project?.assignedTeam?.id;
         if (!teamId) {
           this.logger.warn(`Task ${task.id} has no team - skipping`);
           continue;

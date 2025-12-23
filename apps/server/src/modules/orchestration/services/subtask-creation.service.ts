@@ -121,6 +121,7 @@ export class SubtaskCreationService {
           parentTaskId: parentTaskId,
           projectId: parentTask.projectId,
           organizationId: parentTask.organizationId, // Phase 3.8: Set organizationId
+          assignedTeamId: parentTask.assignedTeamId, // Phase 4: Inherit team from parent
           depth: (parentTask.depth || 0) + 1, // Phase 3.8: Set depth
           status: TaskStatus.READY,
           assignedHollonId: null, // Subtasks start unassigned

@@ -447,6 +447,7 @@ ${factors.riskFactors.map((f) => `- ${f}`).join('\n')}
       description: spike.description,
       projectId: parentTask.projectId,
       organizationId: parentTask.organizationId,
+      assignedTeamId: parentTask.assignedTeamId, // Phase 4: Inherit team from parent
       priority: TaskPriority.P2_HIGH, // Spike는 높은 우선순위
       status: TaskStatus.PENDING,
       parentTaskId: spike.parentTaskId,
