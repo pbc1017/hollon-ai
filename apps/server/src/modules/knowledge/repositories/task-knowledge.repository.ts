@@ -61,7 +61,7 @@ export class TaskKnowledgeRepository {
         .leftJoinAndSelect('k.relationsAsTarget', 'targets');
     }
 
-    return await queryBuilder.where('k.id = :id', { id }).getOne() || null;
+    return (await queryBuilder.where('k.id = :id', { id }).getOne()) || null;
   }
 
   /**
@@ -136,10 +136,9 @@ export class TaskKnowledgeRepository {
     return await this.knowledgeRepo
       .createQueryBuilder('k')
       .where('k.organization_id = :orgId', { orgId: organizationId })
-      .andWhere(
-        '(k.title ILIKE :search OR k.content ILIKE :search)',
-        { search: searchPattern },
-      )
+      .andWhere('(k.title ILIKE :search OR k.content ILIKE :search)', {
+        search: searchPattern,
+      })
       .orderBy('k.usage_count', 'DESC')
       .addOrderBy('k.created_at', 'DESC')
       .take(limit)
@@ -297,10 +296,7 @@ export class TaskKnowledgeRepository {
   /**
    * Update embedding
    */
-  async updateEmbedding(
-    id: string,
-    vector: number[],
-  ): Promise<Embedding> {
+  async updateEmbedding(id: string, vector: number[]): Promise<Embedding> {
     await this.embeddingRepo.update(id, {
       vector: JSON.stringify(vector),
     });
@@ -398,9 +394,7 @@ export class TaskKnowledgeRepository {
   /**
    * Bulk create embeddings
    */
-  async bulkCreateEmbeddings(
-    dtos: CreateEmbeddingDto[],
-  ): Promise<Embedding[]> {
+  async bulkCreateEmbeddings(dtos: CreateEmbeddingDto[]): Promise<Embedding[]> {
     if (dtos.length === 0) {
       return [];
     }

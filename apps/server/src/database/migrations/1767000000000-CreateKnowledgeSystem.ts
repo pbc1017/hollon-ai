@@ -55,12 +55,24 @@ export class CreateKnowledgeSystem1767000000000 implements MigrationInterface {
     `);
 
     // Create indexes for knowledge table
-    await queryRunner.query(`CREATE INDEX "IDX_knowledge_organization" ON "knowledge" ("organization_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_knowledge_category_org" ON "knowledge" ("category", "organization_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_knowledge_source" ON "knowledge" ("source")`);
-    await queryRunner.query(`CREATE INDEX "IDX_knowledge_task" ON "knowledge" ("relevant_task_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_knowledge_hollon" ON "knowledge" ("created_by_hollon_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_knowledge_tags" ON "knowledge" USING GIN ("tags")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_knowledge_organization" ON "knowledge" ("organization_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_knowledge_category_org" ON "knowledge" ("category", "organization_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_knowledge_source" ON "knowledge" ("source")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_knowledge_task" ON "knowledge" ("relevant_task_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_knowledge_hollon" ON "knowledge" ("created_by_hollon_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_knowledge_tags" ON "knowledge" USING GIN ("tags")`,
+    );
 
     // Create Relation Type Enum
     await queryRunner.query(`
@@ -95,9 +107,15 @@ export class CreateKnowledgeSystem1767000000000 implements MigrationInterface {
     `);
 
     // Create indexes for knowledge relations table
-    await queryRunner.query(`CREATE INDEX "IDX_knowledge_relations_source" ON "knowledge_relations" ("source_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_knowledge_relations_target" ON "knowledge_relations" ("target_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_knowledge_relations_type" ON "knowledge_relations" ("type")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_knowledge_relations_source" ON "knowledge_relations" ("source_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_knowledge_relations_target" ON "knowledge_relations" ("target_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_knowledge_relations_type" ON "knowledge_relations" ("type")`,
+    );
 
     // Create Embedding Model Enum
     await queryRunner.query(`
@@ -129,9 +147,15 @@ export class CreateKnowledgeSystem1767000000000 implements MigrationInterface {
     `);
 
     // Create indexes for embeddings table
-    await queryRunner.query(`CREATE INDEX "IDX_embeddings_knowledge" ON "embeddings" ("knowledge_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_embeddings_model" ON "embeddings" ("model")`);
-    await queryRunner.query(`CREATE INDEX "IDX_embeddings_is_active" ON "embeddings" ("is_active")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_embeddings_knowledge" ON "embeddings" ("knowledge_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_embeddings_model" ON "embeddings" ("model")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_embeddings_is_active" ON "embeddings" ("is_active")`,
+    );
 
     // Create Metadata Key Type Enum
     await queryRunner.query(`
@@ -164,9 +188,15 @@ export class CreateKnowledgeSystem1767000000000 implements MigrationInterface {
     `);
 
     // Create indexes for knowledge metadata table
-    await queryRunner.query(`CREATE INDEX "IDX_knowledge_metadata_knowledge" ON "knowledge_metadata" ("knowledge_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_knowledge_metadata_type" ON "knowledge_metadata" ("key_type")`);
-    await queryRunner.query(`CREATE INDEX "IDX_knowledge_metadata_type_value" ON "knowledge_metadata" ("key_type", "value")`);
+    await queryRunner.query(
+      `CREATE INDEX "IDX_knowledge_metadata_knowledge" ON "knowledge_metadata" ("knowledge_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_knowledge_metadata_type" ON "knowledge_metadata" ("key_type")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_knowledge_metadata_type_value" ON "knowledge_metadata" ("key_type", "value")`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
