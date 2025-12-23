@@ -54,9 +54,10 @@ export class Document extends BaseEntity {
   metadata: Record<string, unknown>;
 
   // Vector embedding for RAG (pgvector)
-  // Note: 실제 vector 타입은 migration에서 설정
-  @Column({ type: 'text', nullable: true })
-  embedding: string;
+  // Stores 1536-dimensional embeddings from LLM models like OpenAI
+  // Used for semantic similarity search and retrieval-augmented generation
+  @Column({ type: 'simple-array', nullable: true })
+  embedding: number[] | null;
 
   // Relations
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
