@@ -1057,7 +1057,7 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
         reviewerId: managerHollon.id,
       })
       .leftJoinAndSelect('task.project', 'project')
-      .leftJoinAndSelect('task.project.organization', 'organization')
+      .leftJoinAndSelect('project.organization', 'organization')
       .getMany();
 
     if (subtasksToReview.length === 0) {
