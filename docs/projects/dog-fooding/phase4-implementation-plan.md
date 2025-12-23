@@ -395,10 +395,12 @@ Organization: Hollon AI Development
 {
   title: "Phase 4.1: 지식 시스템 구축",
   description: "Task 완료 후 자동으로 지식이 축적되고, 다음 Task 실행 시 자동으로 참조되는 시스템 구현",
-  teamId: backendEngineering.id,          // 담당 팀
+  teamId: null,                           // Goal은 특정 팀에 속하지 않음 (조직 레벨)
   ownerHollonId: ctoZeus.id,              // CTO가 Goal 소유 (전략적 레벨)
-  // → Team Manager (TechLead-Alpha)가 Team Epic으로 분해
-  acceptanceCriteria: [
+  // 분해 계층:
+  // 1. CTO-Zeus: Goal → Team Epic으로 분해 (각 팀별 할당)
+  // 2. Team Lead: Team Epic → 구현 Task로 분해 (팀원별 할당)
+  successCriteria: [
     "KnowledgeExtractionService 구현",
     "VectorSearchService 구현",
     "KnowledgeGraphService 구현",
@@ -411,8 +413,8 @@ Organization: Hollon AI Development
 }
 
 // GoalAutomationListener (Cron) 자동 처리:
-// 1. T+1분: autoDecomposeGoals() → Goal을 Task들로 분해
-// 2. T+2분: autoExecuteTasks() → 각 Task 실행
+// 1. T+1분: autoDecomposeGoals() → CTO가 Goal을 Team Epic으로 분해
+// 2. T+2분: autoExecuteTasks() → Team Lead가 Team Epic을 구현 Task로 분해, 팀원이 구현
 // 3. T+3분: autoReviewTasks() → 코드 리뷰 및 머지
 // → Human은 Goal만 생성하면 끝!
 ```
