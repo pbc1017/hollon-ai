@@ -1,3 +1,4 @@
+import * as os from 'os';
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -511,6 +512,15 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
           prompt: decompositionPrompt,
           systemPrompt:
             'You are a task decomposition expert. Return ONLY valid JSON with no markdown formatting.',
+          context: {
+            // Phase 4.1 Fix #10: Use temp directory for decomposition
+            // to prevent file modifications. Decomposition should only return JSON.
+            workingDirectory: os.tmpdir(),
+          },
+          options: {
+            // Phase 4.1 Fix #10: Disable file system tools for decomposition
+            disallowedTools: ['Write', 'Edit', 'Bash', 'MultiEdit'],
+          },
         },
         {
           organizationId: parentHollon.organizationId,
@@ -828,6 +838,15 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
         {
           prompt: composedPrompt.userPrompt,
           systemPrompt: composedPrompt.systemPrompt,
+          context: {
+            // Phase 4.1 Fix #10: Use temp directory for review mode
+            // to prevent file modifications. Review should only return JSON decision.
+            workingDirectory: os.tmpdir(),
+          },
+          options: {
+            // Phase 4.1 Fix #10: Disable file system tools for review mode
+            disallowedTools: ['Write', 'Edit', 'Bash', 'MultiEdit'],
+          },
         },
         {
           organizationId: hollon.organizationId,
@@ -1342,11 +1361,15 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
         {
           prompt,
           context: {
-            // Phase 3.12: Use task-specific worktree path if available
-            workingDirectory:
-              parentTask.workingDirectory ||
-              parentTask.project.workingDirectory,
+            // Phase 4.1 Fix #10: Use temp directory for parent completion check
+            // to prevent file modifications on main repo. This is an analysis-only
+            // call that should only return JSON decision, not modify code.
+            workingDirectory: os.tmpdir(),
             taskId: parentTask.id,
+          },
+          options: {
+            // Phase 4.1 Fix #10: Disable file system tools for analysis-only calls
+            disallowedTools: ['Write', 'Edit', 'Bash', 'MultiEdit'],
           },
         },
         {
