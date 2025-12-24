@@ -19,6 +19,7 @@
 | d4ebd7e | #2.1 | Use `git rev-parse --show-toplevel` to detect actual git root (fixes `apps/` vs `hollon-ai/` issue) |
 | 58838a3 | #11  | 3-layer worktree protection: cleanup all tasks, verify path exists, fail if cwd missing             |
 | c184767 | #12  | Use `os.tmpdir()` + `disallowedTools` for analysis-only Brain Provider calls                        |
+| 1d93145 | #13  | Reuse existing PR during CI retry instead of failing with "already exists" error                    |
 
 ---
 
@@ -88,6 +89,14 @@
 | Hollons Working   | 3     |
 | Claude Processes  | 3+    |
 | Open PRs          | 3     |
+
+### PR Status (Post-Fix #13)
+
+| PR  | CI Status           | Task Status | Issue                 |
+| --- | ------------------- | ----------- | --------------------- |
+| #84 | ✅ ALL SUCCESS      | `ready`     | Fix #13 후 retry 필요 |
+| #85 | ❌ Integration FAIL | `ready`     | CI 수정 후 retry 필요 |
+| #86 | ✅ ALL SUCCESS      | `ready`     | Fix #13 후 retry 필요 |
 
 ---
 
@@ -160,4 +169,60 @@ const cwd = options.cwd || os.tmpdir(); // 기존: process.cwd()
 
 ---
 
-**Last Updated**: 2025-12-24T15:55:00+09:00
+### Issue #13: CI Retry Fails Due to "PR Already Exists" Error
+
+**발견 시간**: 2025-12-24 16:00 KST
+
+**증상**:
+
+- PR이 있는 Task 3개가 모두 `ready` 상태에서 진행되지 않음
+- CI가 통과한 PR도 `IN_REVIEW`로 전환되지 않아 manager review가 trigger 되지 않음
+- `autoCheckPRCI`가 `IN_REVIEW` 상태만 확인하므로 `ready` 상태의 Task는 무시됨
+
+**근본 원인**:
+
+1. CI 실패 시 `autoCheckPRCI`가 Task를 `READY`로 설정
+2. `runCycle()` 호출 → Hollon이 Task를 다시 실행
+3. `createPullRequest()`가 기존 PR 확인 없이 `gh pr create` 호출
+4. `gh pr create` 실패: "a pull request for branch xxx already exists"
+5. 예외 발생 → Task 실행 실패 → `READY` 상태 유지
+6. Task가 `IN_REVIEW`가 아니므로 `autoCheckPRCI`가 무시
+
+**영향받는 코드**:
+
+```typescript
+// task-execution.service.ts:1917
+const { stdout } = await execAsync(
+  `gh pr create --title "${task.title}" --body "${prBody}" --base ${baseBranch}`,
+  // ❌ 기존 PR 존재 여부 확인 없음!
+);
+```
+
+**해결 (Fix #13)**:
+
+```typescript
+// Fix #13: Check if PR already exists for this branch (CI retry case)
+try {
+  const { stdout: existingPR } = await execAsync(
+    `gh pr view ${currentBranch} --json url --jq '.url'`,
+    { cwd: worktreePath },
+  );
+
+  if (existingPR.trim()) {
+    this.logger.log(
+      `Fix #13: PR already exists, reusing: ${existingPR.trim()}`,
+    );
+    return existingPR.trim();
+  }
+} catch {
+  // No existing PR, proceed to create one
+}
+```
+
+**추가 수정**: `savePRRecord`에서도 중복 체크 추가
+
+**상태**: ✅ 수정 완료 (1d93145)
+
+---
+
+**Last Updated**: 2025-12-24T16:05:00+09:00
