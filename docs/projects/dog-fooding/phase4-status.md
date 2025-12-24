@@ -69,6 +69,7 @@
 | 15:15      | Code generation active      | ✅     | 8+ Claude processes, commits in progress   |
 | 15:30      | Issue #12 발견              | ⚠️     | main repo에 vector-search 파일 생성됨      |
 | 15:45      | Fix #12 적용                | ✅     | os.tmpdir() + disallowedTools 적용         |
+| 15:50      | 서버 재시작, PR 3개 확인    | ✅     | Main repo 오염 없음, 3 hollons 작업 중     |
 
 ---
 
@@ -79,14 +80,14 @@
 | Projects          | 6     |
 | Goals             | 1     |
 | Tasks Total       | 45    |
-| Tasks In Progress | 13    |
+| Tasks In Progress | 9     |
 | Tasks Completed   | 0     |
-| Tasks Ready       | 32    |
+| Tasks Ready       | 36    |
 | Tasks Blocked     | 0     |
 | Worktrees Active  | 7     |
-| Hollons Working   | 6     |
-| Claude Processes  | 8+    |
-| Open PRs          | 0     |
+| Hollons Working   | 3     |
+| Claude Processes  | 3+    |
+| Open PRs          | 3     |
 
 ---
 
@@ -100,9 +101,9 @@
 | InfraLead-Hotel      | Manager - Infra     | idle    |
 | BackendDev-Bravo     | Senior Backend      | working |
 | BackendDev-Charlie   | Senior Backend      | working |
-| BackendDev-Delta     | Junior Backend      | working |
-| DataEngineer-Foxtrot | Senior Data         | working |
-| MLEngineer-Golf      | Senior ML           | working |
+| BackendDev-Delta     | Junior Backend      | idle    |
+| DataEngineer-Foxtrot | Senior Data         | idle    |
+| MLEngineer-Golf      | Senior ML           | idle    |
 | DevOps-India         | Senior DevOps       | working |
 
 ---
@@ -159,4 +160,4 @@ const cwd = options.cwd || os.tmpdir(); // 기존: process.cwd()
 
 ---
 
-**Last Updated**: 2025-12-24T15:50:00+09:00
+**Last Updated**: 2025-12-24T15:55:00+09:00
