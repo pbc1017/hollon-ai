@@ -1909,6 +1909,27 @@ ${i + 1}. **${item.title}**
         cwd: worktreePath,
       });
 
+      // Fix #13: Check if PR already exists for this branch (CI retry case)
+      try {
+        const { stdout: existingPR } = await execAsync(
+          `gh pr view ${currentBranch} --json url --jq '.url'`,
+          { cwd: worktreePath },
+        );
+
+        if (existingPR.trim()) {
+          const existingUrl = existingPR.trim();
+          this.logger.log(
+            `Fix #13: PR already exists for branch ${currentBranch}, reusing: ${existingUrl}`,
+          );
+          return existingUrl;
+        }
+      } catch {
+        // No existing PR, proceed to create one
+        this.logger.debug(
+          `No existing PR for branch ${currentBranch}, creating new PR`,
+        );
+      }
+
       // 3. PR body 구성
       const prBody = this.buildPRBody(task);
 
@@ -2208,6 +2229,21 @@ Make sure to:
     this.logger.log(
       `Saving PR #${prNumber} to database for task ${task.id.slice(0, 8)}`,
     );
+
+    // Fix #13: Check if PR record already exists (CI retry case)
+    const existingPRs = await this.codeReviewPort.findPullRequestsByTaskId(
+      task.id,
+    );
+
+    if (existingPRs.length > 0) {
+      const existingPR = existingPRs.find((pr) => pr.prNumber === prNumber);
+      if (existingPR) {
+        this.logger.log(
+          `Fix #13: PR record already exists for task ${task.id.slice(0, 8)}: ${existingPR.id}`,
+        );
+        return existingPR.id;
+      }
+    }
 
     // Get current branch name
     const { stdout } = await execAsync(`git branch --show-current`, {
