@@ -22,6 +22,18 @@ export class ProcessManagerService implements IProcessManager {
       let stderr = '';
       let timedOut = false;
 
+      // Fix #11: Fail if cwd is provided but doesn't exist (no fallback to process.cwd())
+      // This prevents Brain Provider from accidentally running in main repo
+      if (options.cwd && !existsSync(options.cwd)) {
+        reject(
+          new BrainExecutionError(
+            `Fix #11: Working directory does not exist: ${options.cwd}. This prevents main repo pollution.`,
+            `CWD not found: ${options.cwd}`,
+          ),
+        );
+        return;
+      }
+
       const cwd = options.cwd || process.cwd();
 
       // Enhanced debug logging for ENOENT diagnosis

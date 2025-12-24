@@ -923,28 +923,47 @@ ${i + 1}. **${item.title}**
     task: Task,
   ): Promise<string> {
     // Phase 3.12: Reuse existing worktree if already set (subtasks from temporary hollon)
+    // Fix #11: Verify inherited path actually exists on disk
     if (task.workingDirectory) {
-      this.logger.log(
-        `Reusing inherited worktree for subtask ${task.id.slice(0, 8)}: ${task.workingDirectory}`,
-      );
-      return task.workingDirectory;
+      const exists = await this.worktreeExists(task.workingDirectory);
+      if (exists) {
+        this.logger.log(
+          `Reusing inherited worktree for subtask ${task.id.slice(0, 8)}: ${task.workingDirectory}`,
+        );
+        return task.workingDirectory;
+      } else {
+        this.logger.warn(
+          `Fix #11: Inherited worktree path does not exist: ${task.workingDirectory}. Clearing stale reference and creating new worktree.`,
+        );
+        await this.taskRepo.update(task.id, { workingDirectory: null });
+      }
     }
 
     // Phase 4.1 Fix #1: If subtask has no worktree, check parent's worktree dynamically
     // This handles cases where subtask was created before parent started
+    // Fix #11: Verify parent's path exists on disk before inheriting
     if (task.parentTaskId) {
       const parentTask = await this.taskRepo.findOne({
         where: { id: task.parentTaskId },
       });
       if (parentTask?.workingDirectory) {
-        this.logger.log(
-          `Subtask ${task.id.slice(0, 8)} inheriting parent's worktree at execution time: ${parentTask.workingDirectory}`,
+        const parentExists = await this.worktreeExists(
+          parentTask.workingDirectory,
         );
-        // Update task's workingDirectory for future reference
-        await this.taskRepo.update(task.id, {
-          workingDirectory: parentTask.workingDirectory,
-        });
-        return parentTask.workingDirectory;
+        if (parentExists) {
+          this.logger.log(
+            `Subtask ${task.id.slice(0, 8)} inheriting parent's worktree at execution time: ${parentTask.workingDirectory}`,
+          );
+          // Update task's workingDirectory for future reference
+          await this.taskRepo.update(task.id, {
+            workingDirectory: parentTask.workingDirectory,
+          });
+          return parentTask.workingDirectory;
+        } else {
+          this.logger.warn(
+            `Fix #11: Parent's worktree path does not exist: ${parentTask.workingDirectory}. Will create new worktree.`,
+          );
+        }
       }
     }
 
@@ -1078,7 +1097,7 @@ ${i + 1}. **${item.title}**
         const errorMessage = err?.message || 'Unknown error';
         const stderr = err?.stderr || '';
         const fullError = stderr
-          ? `${errorMessage}\\nstderr: ${stderr}`
+          ? `${errorMessage}\nstderr: ${stderr}`
           : errorMessage;
         this.logger.error(
           `Failed to create task worktree from ${baseBranch}: ${fullError}`,
@@ -1212,7 +1231,7 @@ ${i + 1}. **${item.title}**
    */
   async cleanupTaskWorktree(
     worktreePath: string,
-    taskId?: string,
+    _taskId?: string,
   ): Promise<void> {
     this.logger.debug(`Cleaning up task worktree: ${worktreePath}`);
 
@@ -1220,15 +1239,15 @@ ${i + 1}. **${item.title}**
       await execAsync(`git worktree remove ${worktreePath} --force`);
       this.logger.log(`Task worktree removed: ${worktreePath}`);
 
-      // Phase 3.12: Clear workingDirectory field after successful cleanup
-      if (taskId) {
-        await this.taskRepo.update(taskId, {
-          workingDirectory: null,
-        });
-        this.logger.log(
-          `Task workingDirectory cleared for task ${taskId.slice(0, 8)}`,
-        );
-      }
+      // Fix #11: Clear workingDirectory for ALL tasks that reference this worktree path
+      // This prevents stale references when subtasks inherit parent's worktree
+      const updateResult = await this.taskRepo.update(
+        { workingDirectory: worktreePath },
+        { workingDirectory: null },
+      );
+      this.logger.log(
+        `Cleared workingDirectory for ${updateResult.affected || 0} tasks referencing ${worktreePath}`,
+      );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
