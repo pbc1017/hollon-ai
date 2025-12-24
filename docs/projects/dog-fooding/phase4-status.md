@@ -20,6 +20,7 @@
 | 58838a3 | #11  | 3-layer worktree protection: cleanup all tasks, verify path exists, fail if cwd missing             |
 | c184767 | #12  | Use `os.tmpdir()` + `disallowedTools` for analysis-only Brain Provider calls                        |
 | 1d93145 | #13  | Reuse existing PR during CI retry instead of failing with "already exists" error                    |
+| 7eb8bf3 | #14  | Normalize CI state comparison to lowercase (gh CLI returns uppercase SUCCESS/FAILURE)               |
 
 ---
 
@@ -90,13 +91,15 @@
 | Claude Processes  | 3+    |
 | Open PRs          | 3     |
 
-### PR Status (Post-Fix #13)
+### PR Status (Post-Fix #14)
 
-| PR  | CI Status           | Task Status | Issue                 |
-| --- | ------------------- | ----------- | --------------------- |
-| #84 | ✅ ALL SUCCESS      | `ready`     | Fix #13 후 retry 필요 |
-| #85 | ❌ Integration FAIL | `ready`     | CI 수정 후 retry 필요 |
-| #86 | ✅ ALL SUCCESS      | `ready`     | Fix #13 후 retry 필요 |
+| PR  | CI Status           | Task Status        | Issue                                 |
+| --- | ------------------- | ------------------ | ------------------------------------- |
+| #84 | ✅ ALL SUCCESS      | `ready_for_review` | ✅ Manager review 대기 중             |
+| #85 | ❌ Integration FAIL | `ready`            | CI 수정 필요 (Integration Tests 실패) |
+| #86 | ✅ ALL SUCCESS      | `ready_for_review` | ✅ Manager review 대기 중             |
+| #85 | ❌ Integration FAIL | `ready`            | CI 수정 후 retry 필요                 |
+| #86 | ✅ ALL SUCCESS      | `ready`            | Fix #13 후 retry 필요                 |
 
 ---
 
@@ -225,4 +228,45 @@ try {
 
 ---
 
-**Last Updated**: 2025-12-24T16:05:00+09:00
+### Issue #14: CI State Case Sensitivity Bug
+
+**발견 시간**: 2025-12-24 16:10 KST
+
+**증상**:
+
+- CI가 모두 통과한 PR도 "CI checks failed" 로그 출력
+- Task가 `READY_FOR_REVIEW`로 전환되지 않고 계속 `READY` 상태 유지
+
+**근본 원인**:
+
+- `gh pr checks --json` 명령은 state를 대문자로 반환 (`SUCCESS`, `FAILURE`)
+- `autoCheckPRCI` 코드는 소문자로 비교 (`'success'`)
+- 대소문자 불일치로 모든 CI가 실패로 감지됨
+
+**영향받는 코드**:
+
+```typescript
+const hasFailedChecks = checks.some(
+  (check) => check.state !== 'success', // ❌ 'SUCCESS'와 비교 필요
+);
+```
+
+**해결 (Fix #14)**:
+
+```typescript
+// Fix #14: Normalize to lowercase for comparison
+const normalizedChecks = checks.map((check) => ({
+  ...check,
+  state: check.state?.toLowerCase() || '',
+}));
+
+const hasFailedChecks = normalizedChecks.some(
+  (check) => check.state !== 'success',
+);
+```
+
+**상태**: ✅ 수정 완료 (7eb8bf3)
+
+---
+
+**Last Updated**: 2025-12-24T16:20:00+09:00
