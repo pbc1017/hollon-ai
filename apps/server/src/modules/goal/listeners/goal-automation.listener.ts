@@ -824,16 +824,23 @@ export class GoalAutomationListener {
               name?: string;
             }>;
 
+            // Fix #14: gh CLI returns uppercase states (SUCCESS, FAILURE, PENDING)
+            // Normalize to lowercase for comparison
+            const normalizedChecks = checks.map((check) => ({
+              ...check,
+              state: check.state?.toLowerCase() || '',
+            }));
+
             // 모든 체크가 성공했는지 확인
-            const hasFailedChecks = checks.some(
+            const hasFailedChecks = normalizedChecks.some(
               (check) => check.state !== 'success',
             );
 
-            const hasPendingChecks = checks.some(
+            const hasPendingChecks = normalizedChecks.some(
               (check) =>
                 check.state === 'pending' ||
                 check.state === 'in_progress' ||
-                check.state === null,
+                check.state === '',
             );
 
             if (hasPendingChecks) {
