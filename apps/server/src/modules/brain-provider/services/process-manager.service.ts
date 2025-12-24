@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { spawn, ChildProcess } from 'child_process';
 import { existsSync } from 'fs';
+import * as os from 'os';
 import {
   IProcessManager,
   ProcessOptions,
@@ -34,7 +35,10 @@ export class ProcessManagerService implements IProcessManager {
         return;
       }
 
-      const cwd = options.cwd || process.cwd();
+      // Fix #12: Use os.tmpdir() as default to prevent main repo pollution
+      // Analysis-only Brain Provider calls (without explicit cwd) will run in temp dir
+      // Implementation tasks must explicitly pass worktreePath as cwd
+      const cwd = options.cwd || os.tmpdir();
 
       // Enhanced debug logging for ENOENT diagnosis
       this.logger.debug(`[SPAWN DEBUG] Command: "${options.command}"`);

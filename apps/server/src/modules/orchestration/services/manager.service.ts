@@ -271,6 +271,7 @@ Options:
   ]
 }`;
 
+    // Fix #12: Add disallowedTools for analysis-only Brain Provider calls
     const response = await this.brainProvider.executeWithTracking(
       {
         prompt,
@@ -279,6 +280,9 @@ Options:
         context: {
           hollonId: manager.id,
           taskId: teamTask.id,
+        },
+        options: {
+          disallowedTools: ['Write', 'Edit', 'Bash', 'MultiEdit'],
         },
       },
       {
@@ -423,6 +427,7 @@ Suggest task reassignments to:
   "reasoning": "Overall strategy explanation"
 }`;
 
+    // Fix #12: Add disallowedTools for analysis-only Brain Provider calls
     const response = await this.brainProvider.executeWithTracking(
       {
         prompt,
@@ -431,6 +436,9 @@ Suggest task reassignments to:
         context: {
           hollonId: manager.id,
           taskId: teamTaskId,
+        },
+        options: {
+          disallowedTools: ['Write', 'Edit', 'Bash', 'MultiEdit'],
         },
       },
       {
