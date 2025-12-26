@@ -1,13 +1,29 @@
 import {
   IsString,
   IsOptional,
-  IsUUID,
+  IsObject,
   IsArray,
   MaxLength,
-  IsBoolean,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
-export class CreatePromptTemplateDto {
+export class VariableSchema {
+  @IsString()
+  name: string;
+
+  @IsString()
+  type: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  required?: boolean;
+}
+
+export class PromptTemplateDto {
   @IsString()
   @MaxLength(100)
   name: string;
@@ -16,42 +32,12 @@ export class CreatePromptTemplateDto {
   template: string;
 
   @IsOptional()
-  @IsString()
-  description?: string;
-
-  @IsUUID()
-  organizationId: string;
-
-  @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  requiredVariables?: string[];
+  @ValidateNested({ each: true })
+  @Type(() => VariableSchema)
+  variablesSchema?: VariableSchema[];
 
   @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
-}
-
-export class UpdatePromptTemplateDto {
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  name?: string;
-
-  @IsOptional()
-  @IsString()
-  template?: string;
-
-  @IsOptional()
-  @IsString()
-  description?: string;
-
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  requiredVariables?: string[];
-
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
+  @IsObject()
+  metadata?: Record<string, any>;
 }
