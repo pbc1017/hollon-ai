@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+<<<<<<< HEAD
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { VectorSearchService } from './vector-search.service';
@@ -43,5 +44,12 @@ import { VectorEmbedding } from '../../entities/vector-embedding.entity';
   ],
   providers: [VectorSearchService, VectorSearchConfigService],
   exports: [VectorSearchService, VectorSearchConfigService],
+=======
+import { VectorSearchService } from './vector-search.service';
+
+@Module({
+  providers: [VectorSearchService],
+  exports: [VectorSearchService],
+>>>>>>> 054d77b (feat: Add VectorSearchService dependency to PromptComposerService)
 })
 export class VectorSearchModule {}

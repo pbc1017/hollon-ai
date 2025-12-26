@@ -3,14 +3,14 @@ import { ComposePromptDto } from './dto/compose-prompt.dto';
 import { ComposedPromptResponseDto } from './dto/composed-prompt-response.dto';
 import { KnowledgeExtractionService } from '../knowledge-extraction/services/knowledge-extraction.service';
 import { KnowledgeGraphService } from '../knowledge-graph/knowledge-graph.service';
+import { VectorSearchService } from '../vector-search/vector-search.service';
 
 @Injectable()
 export class PromptComposerService {
   constructor(
     private readonly knowledgeExtractionService: KnowledgeExtractionService,
     private readonly knowledgeGraphService: KnowledgeGraphService,
-    // TODO: Add VectorSearchService when it becomes available
-    // private readonly vectorSearchService: VectorSearchService,
+    private readonly vectorSearchService: VectorSearchService,
   ) {}
 
   // Placeholder methods - to be implemented in future tasks
