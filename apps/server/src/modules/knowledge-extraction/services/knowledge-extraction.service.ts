@@ -270,6 +270,34 @@ export class KnowledgeExtractionService {
   }
 
   /**
+   * Find knowledge items by source
+   *
+   * Retrieves all knowledge items from a specific source within an organization.
+   * Useful for filtering knowledge by its origin (e.g., specific documents, conversations, or systems).
+   *
+   * @param organizationId - UUID of the organization
+   * @param source - Knowledge source identifier
+   *
+   * @returns Promise resolving to array of knowledge items, ordered by extractedAt DESC
+   *
+   * @performance Uses index on source for optimized query
+   *
+   * @example
+   * ```typescript
+   * const sourceKnowledge = await service.findBySource('org-123', 'slack-channel-123');
+   * ```
+   */
+  async findBySource(
+    organizationId: string,
+    source: string,
+  ): Promise<KnowledgeItem[]> {
+    return this.knowledgeItemRepository.find({
+      where: { organizationId, source },
+      order: { extractedAt: 'DESC' },
+    });
+  }
+
+  /**
    * Find knowledge items extracted within a date range
    *
    * Retrieves knowledge items extracted within a specified time window.
@@ -543,6 +571,32 @@ export class KnowledgeExtractionService {
       .getRawMany();
 
     return result.map((r) => r.type);
+  }
+
+  /**
+   * Get unique sources for an organization
+   *
+   * Retrieves a list of all distinct knowledge sources that exist for an organization.
+   * Useful for building filter dropdowns and understanding the knowledge origins.
+   *
+   * @param organizationId - UUID of the organization
+   *
+   * @returns Promise resolving to array of unique source strings
+   *
+   * @example
+   * ```typescript
+   * const sources = await service.getUniqueSources('org-123');
+   * // Result: ['slack-channel-123', 'email-thread-456', 'document-789']
+   * ```
+   */
+  async getUniqueSources(organizationId: string): Promise<string[]> {
+    const result = await this.knowledgeItemRepository
+      .createQueryBuilder('ki')
+      .select('DISTINCT ki.source', 'source')
+      .where('ki.organization_id = :organizationId', { organizationId })
+      .getRawMany();
+
+    return result.map((r) => r.source);
   }
 
   // ============================================================================
