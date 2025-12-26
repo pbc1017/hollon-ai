@@ -1,9 +1,4 @@
-import {
-  IsString,
-  IsObject,
-  IsOptional,
-  IsNumber,
-} from 'class-validator';
+import { IsString, IsObject, IsOptional, IsNumber } from 'class-validator';
 
 export class ComposedPromptResponseDto {
   @IsString()
