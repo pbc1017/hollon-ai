@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In, QueryDeepPartialEntity } from 'typeorm';
 import { KnowledgeItem } from '../entities/knowledge-item.entity';
 
 @Injectable()
@@ -28,11 +28,15 @@ export class KnowledgeExtractionService {
     }
 
     const result = await this.knowledgeItemRepository.insert(
-      items as any[], // TypeORM's insert type is too strict for our use case
+      items as QueryDeepPartialEntity<KnowledgeItem>[],
     );
-    const insertedIds = result.identifiers.map((identifier) => identifier.id);
+    const insertedIds = result.identifiers.map(
+      (identifier) => identifier.id as string,
+    );
 
-    return this.knowledgeItemRepository.findByIds(insertedIds);
+    return this.knowledgeItemRepository.find({
+      where: { id: In(insertedIds) },
+    });
   }
 
   /**
@@ -112,7 +116,7 @@ export class KnowledgeExtractionService {
   ): Promise<KnowledgeItem | null> {
     await this.knowledgeItemRepository.update(
       id,
-      updateDto as any, // TypeORM's update type is too strict for our use case
+      updateDto as QueryDeepPartialEntity<KnowledgeItem>,
     );
     return this.findById(id);
   }
