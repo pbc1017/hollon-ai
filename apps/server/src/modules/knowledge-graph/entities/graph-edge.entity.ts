@@ -2,24 +2,42 @@ import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { GraphNode } from './graph-node.entity';
 
+export enum EdgeType {
+  RELATED_TO = 'related_to',
+  DEPENDS_ON = 'depends_on',
+  PART_OF = 'part_of',
+  CAUSES = 'causes',
+  ASSIGNED_TO = 'assigned_to',
+  CREATED_BY = 'created_by',
+  REFERENCES = 'references',
+  FOLLOWS = 'follows',
+}
+
 @Entity('graph_edges')
+@Index(['organizationId', 'edgeType'])
 @Index(['sourceNodeId', 'targetNodeId'])
-@Index(['relationshipType'])
 export class GraphEdge extends BaseEntity {
+  @Column({ name: 'organization_id' })
+  organizationId: string;
+
   @Column('uuid')
   sourceNodeId: string;
 
   @Column('uuid')
   targetNodeId: string;
 
-  @Column()
-  relationshipType: string;
+  @Column({
+    type: 'enum',
+    enum: EdgeType,
+    name: 'edge_type',
+  })
+  edgeType: EdgeType;
 
-  @Column('float', { default: 1.0 })
-  weight: number;
+  @Column('float', { nullable: true })
+  weight: number | null;
 
-  @Column('jsonb', { nullable: true })
-  metadata: Record<string, any> | null;
+  @Column('jsonb', { nullable: true, name: 'properties' })
+  properties: Record<string, any> | null;
 
   @ManyToOne(() => GraphNode, (node) => node.outgoingEdges, {
     onDelete: 'CASCADE',

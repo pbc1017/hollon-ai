@@ -1,8 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { KnowledgeGraphService } from './knowledge-graph.service';
-import { GraphNode } from './entities/graph-node.entity';
-import { GraphEdge } from './entities/graph-edge.entity';
+import { GraphNode, NodeType } from './entities/graph-node.entity';
+import { GraphEdge, EdgeType } from './entities/graph-edge.entity';
 
 describe('KnowledgeGraphService', () => {
   let service: KnowledgeGraphService;
@@ -27,15 +27,19 @@ describe('KnowledgeGraphService', () => {
     externalId: 'ext-123',
     externalType: 'document',
     organizationId: 'org-123',
-    metadata: { title: 'Test Document' },
+    nodeType: NodeType.DOCUMENT,
+    label: 'Test Document',
+    properties: { title: 'Test Document' },
   };
 
   const mockEdge: Partial<GraphEdge> = {
     id: 'edge-123',
+    organizationId: 'org-123',
     sourceNodeId: 'node-123',
     targetNodeId: 'node-456',
-    relationshipType: 'references',
-    metadata: { weight: 1.0 },
+    edgeType: EdgeType.REFERENCES,
+    weight: 1.0,
+    properties: { metadata: 'test' },
   };
 
   beforeEach(async () => {
@@ -85,9 +89,10 @@ describe('KnowledgeGraphService', () => {
   describe('createEdge', () => {
     it('should create a new edge', async () => {
       const edgeData: Partial<GraphEdge> = {
+        organizationId: 'org-123',
         sourceNodeId: 'node-123',
         targetNodeId: 'node-456',
-        relationshipType: 'references',
+        edgeType: EdgeType.REFERENCES,
       };
 
       mockGraphEdgeRepository.create.mockReturnValue(mockEdge);
