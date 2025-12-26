@@ -12,9 +12,9 @@ export class VectorSearchService {
    * @returns Array of knowledge items with similarity scores
    */
   async searchSimilar(
-    query: string,
-    organizationId: string,
-    options?: {
+    _query: string,
+    _organizationId: string,
+    _options?: {
       limit?: number;
       threshold?: number;
       projectId?: string | null;
@@ -30,7 +30,7 @@ export class VectorSearchService {
    * @param text - The text to generate embeddings for
    * @returns The embedding vector
    */
-  async generateEmbedding(text: string): Promise<number[]> {
+  async generateEmbedding(_text: string): Promise<number[]> {
     // TODO: Implement embedding generation
     return [];
   }
@@ -41,7 +41,7 @@ export class VectorSearchService {
    * @param text - The text content to index
    * @returns void
    */
-  async indexItem(itemId: string, text: string): Promise<void> {
+  async indexItem(_itemId: string, _text: string): Promise<void> {
     // TODO: Implement knowledge item indexing
   }
 
@@ -50,7 +50,7 @@ export class VectorSearchService {
    * @param itemId - The knowledge item ID to remove
    * @returns void
    */
-  async removeFromIndex(itemId: string): Promise<void> {
+  async removeFromIndex(_itemId: string): Promise<void> {
     // TODO: Implement index removal
   }
 
