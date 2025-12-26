@@ -1,20 +1,19 @@
-import { IsString, IsObject, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsObject,
+  IsOptional,
+  IsNumber,
+} from 'class-validator';
 
 export class ComposedPromptResponseDto {
   @IsString()
   composedPrompt: string;
 
-  @IsString()
-  templateName: string;
-
-  @IsObject()
-  variables: Record<string, any>;
-
   @IsOptional()
   @IsObject()
-  metadata?: {
-    templateVersion?: string;
-    composedAt?: Date;
-    variablesUsed?: string[];
-  };
+  metadata?: Record<string, any>;
+
+  @IsOptional()
+  @IsNumber()
+  tokensEstimate?: number;
 }
