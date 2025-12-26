@@ -38,7 +38,12 @@ export class GraphNode extends BaseEntity {
   @Column({ name: 'external_id', type: 'uuid', nullable: true })
   externalId: string | null;
 
-  @Column({ name: 'external_type', length: 100, nullable: true })
+  @Column({
+    name: 'external_type',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+  })
   externalType: string | null;
 
   @OneToMany(() => GraphEdge, (edge) => edge.sourceNode)
