@@ -11,9 +11,8 @@ export class PromptComposerService {
     // TODO: Implement prompt composition logic
     return {
       composedPrompt: '',
-      templateName: dto.templateName,
-      variables: dto.variables || {},
       metadata: {
+        templateId: dto.templateId,
         composedAt: new Date(),
         variablesUsed: Object.keys(dto.variables || {}),
       },
