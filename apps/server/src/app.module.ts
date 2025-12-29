@@ -27,6 +27,7 @@ import { GoalModule } from './modules/goal/goal.module';
 import { DddProvidersModule } from './modules/ddd-providers/ddd-providers.module';
 import { KnowledgeGraphModule } from './modules/knowledge-graph/knowledge-graph.module';
 import { PromptComposerModule } from './modules/prompt-composer/prompt-composer.module';
+import { VectorSearchModule } from './modules/vector-search/vector-search.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { PromptComposerModule } from './modules/prompt-composer/prompt-composer.
     // Knowledge Graph & Prompt Composer
     KnowledgeGraphModule,
     PromptComposerModule,
+    VectorSearchModule,
   ],
 })
 export class AppModule {}
