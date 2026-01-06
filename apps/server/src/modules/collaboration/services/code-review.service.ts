@@ -358,6 +358,46 @@ export class CodeReviewService implements ICodeReviewService {
         );
       }
     }
+
+    // Fix #22: Also unblock child tasks (parent-child relationship)
+    this.logger.log(
+      `Checking for blocked child tasks of completed parent ${completedTask.id.slice(0, 8)}...`,
+    );
+
+    const blockedChildren = await this.taskRepo.find({
+      where: {
+        parentTaskId: completedTask.id,
+        status: TaskStatus.BLOCKED,
+      },
+    });
+
+    if (blockedChildren.length === 0) {
+      this.logger.log(
+        `No BLOCKED child tasks found for parent ${completedTask.id.slice(0, 8)}`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `Found ${blockedChildren.length} BLOCKED child tasks for parent ${completedTask.id.slice(0, 8)}`,
+    );
+
+    let unblockedCount = 0;
+    for (const child of blockedChildren) {
+      await this.taskRepo.update(child.id, {
+        status: TaskStatus.READY,
+        blockedReason: null,
+      });
+
+      unblockedCount++;
+      this.logger.log(
+        `✅ Unblocked child task ${child.id.slice(0, 8)}: ${child.title} (parent completed)`,
+      );
+    }
+
+    this.logger.log(
+      `✅ Unblocked ${unblockedCount} child task(s) of parent ${completedTask.id.slice(0, 8)}`,
+    );
   }
 
   /**
@@ -1146,13 +1186,14 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
           );
         }
       } else {
+        // Fix #23: Remove --auto flag (requires branch protection rules)
         // gh pr merge 실행
         this.logger.log(
-          `Executing: gh pr merge ${prNumber} --repo ${owner}/${repo} --squash --auto`,
+          `Executing: gh pr merge ${prNumber} --repo ${owner}/${repo} --squash`,
         );
 
         const { stdout, stderr } = await execAsync(
-          `gh pr merge ${prNumber} --repo ${owner}/${repo} --squash --auto`,
+          `gh pr merge ${prNumber} --repo ${owner}/${repo} --squash`,
           {
             timeout: 30000, // 30초 타임아웃
           },

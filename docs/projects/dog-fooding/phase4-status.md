@@ -21,6 +21,8 @@
 | c184767 | #12  | Use `os.tmpdir()` + `disallowedTools` for analysis-only Brain Provider calls                        |
 | 1d93145 | #13  | Reuse existing PR during CI retry instead of failing with "already exists" error                    |
 | 7eb8bf3 | #14  | Normalize CI state comparison to lowercase (gh CLI returns uppercase SUCCESS/FAILURE)               |
+| TBD     | #22  | Add parent-child unblock logic to PR merge workflow                                                 |
+| TBD     | #23  | Remove --auto flag from gh pr merge (requires branch protection rules)                              |
 
 ---
 
