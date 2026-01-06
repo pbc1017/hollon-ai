@@ -21,16 +21,20 @@ This document describes the module organization patterns, conventions, and best 
 The project has **28 modules** organized into several categories:
 
 ### 1. Root Module
+
 - **AppModule** (`app.module.ts`): Application entry point that imports all feature and infrastructure modules
 
 ### 2. Infrastructure Modules
+
 - **ConfigModule**: Global configuration (from `@nestjs/config`)
 - **TypeOrmModule**: Database connection and entity management
 - **ScheduleModule**: Scheduled tasks (conditionally loaded)
 - **PostgresListenerModule**: Database event listener (Global)
 
 ### 3. Feature Modules (23 modules)
+
 Core business logic modules including:
+
 - **HealthModule**: Health check endpoints
 - **OrganizationModule**, **TeamModule**, **RoleModule**: Organizational structure
 - **HollonModule**: AI agent management
@@ -44,6 +48,7 @@ Core business logic modules including:
 - And more...
 
 ### 4. Special Purpose Modules
+
 - **DddProvidersModule**: Global DDD port bindings (Global)
 
 ---
@@ -61,11 +66,13 @@ imports: [
 ```
 
 **Examples:**
+
 - **Simple**: `KnowledgeGraphModule` registers `Node` and `Edge`
 - **Multiple entities**: `TaskModule` registers `Task`, `Hollon`, `Project`, `Document`
 - **Cross-module entities**: `OrchestrationModule` registers 11 entities from different modules
 
 **When to use:**
+
 - Any module that needs database access via repositories
 - Include all entities the module will query, even from other modules
 
@@ -78,15 +85,17 @@ imports: [
   DocumentModule,
   BrainProviderModule,
   // ...
-]
+];
 ```
 
 **Examples:**
+
 - **TaskModule** imports `DocumentModule`
 - **BrainProviderModule** imports `ConfigModule` and `DocumentModule`
 - **MessageModule** imports `CollaborationModule` and `TaskModule`
 
 **When to use:**
+
 - When you need services exported by another module
 - Prefer this over direct service imports to maintain proper DI boundaries
 
@@ -102,6 +111,7 @@ Some modules are marked `@Global()` and automatically available:
 ```
 
 **When to use:**
+
 - For truly cross-cutting concerns (config, logging, etc.)
 - Use sparingly - only 2 custom modules are global in this project
 
@@ -115,16 +125,17 @@ ConfigModule.forRoot({
   isGlobal: true,
   load: [configuration],
   envFilePath: ['../../.env.local', '../../.env'],
-})
+});
 
 TypeOrmModule.forRootAsync({
   imports: [ConfigModule],
   useFactory: (configService: ConfigService) => databaseConfig(configService),
   inject: [ConfigService],
-})
+});
 ```
 
 **When to use:**
+
 - Only in `AppModule` for global infrastructure setup
 - Never in feature modules (use `forFeature` instead)
 
@@ -137,10 +148,11 @@ imports: [
   ...(process.env.DISABLE_SCHEDULER !== 'true'
     ? [ScheduleModule.forRoot()]
     : []),
-]
+];
 ```
 
 **When to use:**
+
 - When a module should only load in certain environments
 - Rare - only used for scheduler in this project
 
@@ -157,15 +169,17 @@ providers: [
   ServiceA,
   ServiceB,
   // ...
-]
+];
 ```
 
 **Examples:**
+
 - **HealthModule**: `[HealthService]`
 - **DocumentModule**: `[DocumentService]`
 - **TaskModule**: `[TaskService, DependencyAnalyzerService, ...]` (6 services)
 
 **When to use:**
+
 - Default pattern for all `@Injectable()` services
 - Services are automatically singleton-scoped
 
@@ -184,15 +198,17 @@ providers: [
   PriorityRebalancerService,
   UncertaintyDecisionService,
   PivotResponseService,
-]
+];
 ```
 
 **Examples:**
+
 - **TaskModule**: Main service + 5 supporting services
 - **BrainProviderModule**: Services organized by concern (process, cost, response, config) + providers
 - **OrchestrationModule**: 14 application services + DDD adapters
 
 **When to use:**
+
 - Complex modules with multiple service layers
 - Use comments to group services by responsibility
 
@@ -210,10 +226,11 @@ providers: [
     provide: 'IRepositoryPort',
     useClass: RepositoryAdapter,
   },
-]
+];
 ```
 
 **Examples:**
+
 - **DddProvidersModule**:
   ```typescript
   {
@@ -230,11 +247,13 @@ providers: [
   ```
 
 **When to use:**
+
 - Implementing DDD ports and adapters
 - Decoupling modules via interfaces
 - Testing (swap implementations)
 
 **Types:**
+
 - `useExisting`: Alias to another provider (shares instance)
 - `useClass`: Creates new instance of the class
 - `useFactory`: Dynamic provider creation
@@ -261,12 +280,13 @@ providers: [
     provide: 'IHollonManagementPort',
     useClass: HollonManagementAdapter,
   },
-]
+];
 ```
 
 **Example:** **OrchestrationModule** (most complex module)
 
 **When to use:**
+
 - Modules implementing DDD patterns
 - Modules with both internal services and port adapters
 
@@ -277,21 +297,23 @@ Include event listeners and guards as providers:
 ```typescript
 providers: [
   MessageService,
-  MessageListener,  // Event listener
-]
+  MessageListener, // Event listener
+];
 
 providers: [
   RealtimeGateway,
-  WsAuthGuard,  // WebSocket guard
-]
+  WsAuthGuard, // WebSocket guard
+];
 ```
 
 **Examples:**
+
 - **MessageModule**: `MessageListener`
 - **HollonModule**: `HollonCleanupListener`
 - **RealtimeModule**: `WsAuthGuard`
 
 **When to use:**
+
 - Event listeners that respond to domain events
 - Guards for route/gateway protection
 
@@ -304,16 +326,18 @@ providers: [
 **Common Pattern** - Export only the primary service:
 
 ```typescript
-exports: [MainService]
+exports: [MainService];
 ```
 
 **Examples:**
+
 - **DocumentModule**: `[DocumentService]`
 - **MessageModule**: `[MessageService]`
 - **KnowledgeGraphModule**: `[KnowledgeGraphService]`
 - **HollonModule**: `[HollonService]`
 
 **When to use:**
+
 - Simple modules with one main service
 - Hide implementation details (other services stay private)
 
@@ -322,19 +346,17 @@ exports: [MainService]
 Export multiple services for external use:
 
 ```typescript
-exports: [
-  ServiceA,
-  ServiceB,
-  ServiceC,
-]
+exports: [ServiceA, ServiceB, ServiceC];
 ```
 
 **Examples:**
+
 - **TaskModule**: Exports 6 services (all providers)
 - **BrainProviderModule**: `[BrainProviderService, ClaudeCodeProvider, ProcessManagerService]`
 - **CollaborationModule**: Exports 5 services (all providers)
 
 **When to use:**
+
 - When multiple services form the module's public API
 - Supporting services are needed by other modules
 
@@ -357,11 +379,13 @@ exports: [
 ```
 
 **Example:**
+
 - **OrchestrationModule**:
   - Provides 14 services + 3 adapters
   - Exports only 7 services (hides internal details)
 
 **When to use:**
+
 - To hide internal implementation services
 - To maintain a clean public API
 
@@ -380,9 +404,11 @@ exports: ['IServicePort']
 ```
 
 **Example:**
+
 - **DddProvidersModule**: Exports `'IHollonService'`, `'ICodeReviewService'`, `'IMessageService'`
 
 **When to use:**
+
 - Global DDD provider modules
 - When consumers should depend on interfaces, not implementations
 
@@ -391,14 +417,16 @@ exports: ['IServicePort']
 Some modules don't export anything:
 
 ```typescript
-exports: []  // or omitted entirely
+exports: []; // or omitted entirely
 ```
 
 **Examples:**
+
 - **HealthModule**: No exports (just controllers)
 - **AppModule**: No exports (root module)
 
 **When to use:**
+
 - Modules that only expose controllers/gateways
 - Root application module
 - Self-contained modules
@@ -414,39 +442,35 @@ Use `forwardRef()` when two modules need each other:
 ```typescript
 import { Module, forwardRef } from '@nestjs/common';
 
-imports: [
-  forwardRef(() => ModuleB),
-]
+imports: [forwardRef(() => ModuleB)];
 ```
 
 **Examples:**
+
 - **MessageModule**:
   ```typescript
-  imports: [
-    forwardRef(() => CollaborationModule),
-    TaskModule,
-  ]
+  imports: [forwardRef(() => CollaborationModule), TaskModule];
   ```
 - **HollonModule**:
   ```typescript
   imports: [
     forwardRef(() => TeamModule),
     forwardRef(() => OrchestrationModule),
-  ]
+  ];
   ```
 - **OrchestrationModule**:
   ```typescript
-  imports: [
-    forwardRef(() => GoalModule),
-  ]
+  imports: [forwardRef(() => GoalModule)];
   ```
 
 **When to use:**
+
 - When you get circular dependency errors
 - Both modules need each other's services
 - Apply to both sides of the circular dependency
 
 **Common circular pairs:**
+
 - Message ↔ Collaboration
 - Hollon ↔ Team
 - Hollon ↔ Orchestration
@@ -470,6 +494,7 @@ Use global port providers to break circular dependencies:
 **Example:** **OrchestrationModule** uses port adapters instead of direct imports
 
 **When to use:**
+
 - Complex modules with many dependencies
 - To maintain clean architecture boundaries
 - When `forwardRef` becomes too messy
@@ -496,6 +521,7 @@ export class SomeModule {}
 **Examples:**
 
 1. **PostgresListenerModule**:
+
    ```typescript
    @Global()
    @Module({
@@ -519,15 +545,18 @@ export class SomeModule {}
    ```
 
 **When to use:**
+
 - For cross-cutting infrastructure (listeners, loggers, etc.)
 - For DDD port providers used across many modules
 - **Use sparingly** - only 2 modules are global in this project
 
 **Advantages:**
+
 - No need to import in every module
 - Cleaner import lists
 
 **Disadvantages:**
+
 - Hidden dependencies (less explicit)
 - Can make testing harder
 
@@ -593,6 +622,7 @@ constructor(
 ```
 
 **Benefits:**
+
 1. Decouples modules (no direct dependencies)
 2. Avoids circular dependencies
 3. Easier testing (mock interfaces)
@@ -600,11 +630,13 @@ constructor(
 5. Follows hexagonal architecture
 
 **When to use:**
+
 - Complex modules with many inter-dependencies
 - When circular dependencies become problematic
 - For better testability and maintainability
 
 **Pattern Recognition:**
+
 - Comments like `// ✅ DDD:` mark DDD-related code
 - Adapters in `infrastructure/adapters/` directories
 - Interface bindings with `provide: 'IServiceName'`
@@ -656,6 +688,7 @@ modules/
 ### Examples:
 
 **Simple Module (HealthModule):**
+
 ```
 health/
 ├── health.module.ts
@@ -664,6 +697,7 @@ health/
 ```
 
 **Complex Module (TaskModule):**
+
 ```
 task/
 ├── entities/
@@ -680,6 +714,7 @@ task/
 ```
 
 **DDD Module (OrchestrationModule):**
+
 ```
 orchestration/
 ├── infrastructure/
@@ -767,31 +802,37 @@ orchestration/
 **Total Modules Analyzed**: 28
 
 **Module Complexity Distribution:**
+
 - **Simple** (1-2 providers): 4 modules (Health, Document, PostgresListener, Realtime)
 - **Medium** (3-5 providers): 10 modules (KnowledgeGraph, Message, BrainProvider, etc.)
 - **Complex** (6+ providers): 14 modules (Task, Orchestration, Collaboration, etc.)
 
 **Most Complex Module**: **OrchestrationModule**
+
 - 11 entities registered
 - 17 providers (14 services + 3 adapters)
 - 7 exports
 - 2 module imports (uses DDD pattern for most dependencies)
 
 **Global Modules**: 2
+
 - PostgresListenerModule
 - DddProvidersModule
 
 **Modules Using forwardRef**: 4
+
 - MessageModule
 - HollonModule
 - OrchestrationModule
 - CollaborationModule
 
 **Modules Using DDD Pattern**: 2
+
 - DddProvidersModule (global provider)
 - OrchestrationModule (consumer of ports)
 
 **Common Import Combinations:**
+
 - TypeOrmModule.forFeature + other feature modules (most common)
 - ConfigModule (for configuration)
 - BrainProviderModule (for AI capabilities)
