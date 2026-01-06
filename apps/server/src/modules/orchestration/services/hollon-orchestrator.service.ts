@@ -554,12 +554,33 @@ ${composedPrompt.userPrompt.substring(0, 500)}...
 
       for (const subtaskSpec of decomposition.subtasks) {
         // 4.1 Find role
-        const role = availableRoles.find((r) => r.id === subtaskSpec.roleId);
+        let role = availableRoles.find((r) => r.id === subtaskSpec.roleId);
         if (!role) {
+          // Fix #21-B: Fallback to parent hollon's role instead of skipping
           this.logger.warn(
-            `Role ${subtaskSpec.roleId} not found - skipping subtask "${subtaskSpec.title}"`,
+            `Role ${subtaskSpec.roleId} not found - using parent hollon's role as fallback for subtask "${subtaskSpec.title}"`,
           );
-          continue;
+
+          // Use parent hollon's role as fallback
+          role = await this.roleRepo.findOne({
+            where: { id: parentHollon.roleId },
+          });
+
+          if (!role) {
+            // Last resort: try to find any available role
+            role = availableRoles[0];
+            this.logger.warn(
+              `Parent role also not found - using first available role ${role?.name} for subtask "${subtaskSpec.title}"`,
+            );
+          }
+
+          if (!role) {
+            // Absolutely no roles available - skip this subtask
+            this.logger.error(
+              `No roles available at all - skipping subtask "${subtaskSpec.title}"`,
+            );
+            continue;
+          }
         }
 
         // 4.2 Create temporary Sub-Hollon

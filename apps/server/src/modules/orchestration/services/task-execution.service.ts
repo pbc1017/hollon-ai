@@ -2354,8 +2354,32 @@ Make sure to:
       return;
     }
 
+    // Fix #21-A: Determine reviewer (team manager) before marking READY_FOR_REVIEW
+    const assignedHollon = await this.hollonRepo.findOne({
+      where: { id: parentTask.assignedHollonId },
+      relations: ['team'],
+    });
+
+    let reviewerId: string | null = null;
+    if (assignedHollon?.team?.managerHollonId) {
+      reviewerId = assignedHollon.team.managerHollonId;
+    } else if (parentTask.creatorHollonId) {
+      // Fallback: use creator as reviewer if no team manager
+      reviewerId = parentTask.creatorHollonId;
+      this.logger.warn(
+        `No team manager found for task ${parentTask.id.slice(0, 8)}, using creator ${reviewerId.slice(0, 8)} as reviewer`,
+      );
+    } else {
+      // Last resort: use assigned hollon as reviewer
+      reviewerId = parentTask.assignedHollonId;
+      this.logger.warn(
+        `No team manager or creator found for task ${parentTask.id.slice(0, 8)}, using assigned hollon ${reviewerId?.slice(0, 8)} as reviewer`,
+      );
+    }
+
     this.logger.log(
-      `✅ All ${siblings.length} subtasks completed for parent task ${parentTask.id.slice(0, 8)}, marking as READY_FOR_REVIEW for manager review`,
+      `✅ All ${siblings.length} subtasks completed for parent task ${parentTask.id.slice(0, 8)}, ` +
+        `marking as READY_FOR_REVIEW for manager ${reviewerId?.slice(0, 8)} review`,
     );
 
     // Mark parent task as READY_FOR_REVIEW so manager can review before resuming
@@ -2363,6 +2387,7 @@ Make sure to:
     await this.taskRepo.update(parentTask.id, {
       status: TaskStatus.READY_FOR_REVIEW,
       assignedHollonId: parentTask.assignedHollonId, // Keep the same hollon
+      reviewerHollonId: reviewerId, // Fix #21-A: Set reviewer!
     });
 
     this.logger.log(
