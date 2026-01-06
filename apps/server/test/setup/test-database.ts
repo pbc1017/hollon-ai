@@ -21,11 +21,13 @@ export function getTestDatabaseConfig(configService: ConfigService) {
     database: configService.get('DB_NAME', 'hollon'),
     schema: schemaName,
     entities: [__dirname + '/../../src/**/*.entity{.ts,.js}'],
+    migrations: [__dirname + '/../../src/database/migrations/*{.ts,.js}'],
     synchronize: false, // Use migrations for schema management
     logging: false,
     // Set search_path to ensure unqualified table names use the correct schema
+    // Include 'hollon' schema to access pgvector extension
     extra: {
-      options: `-c search_path=${schemaName},public`,
+      options: `-c search_path=${schemaName},public,hollon`,
     },
   };
 }
@@ -42,8 +44,15 @@ export async function setupTestSchema(dataSource: DataSource): Promise<void> {
     await dataSource.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`);
     console.log(`✓ Test schema created: ${schema}`);
 
-    // Run migrations on the test schema
-    await dataSource.runMigrations({ transaction: 'all' });
+    // Enable pgvector extension (must be done before running migrations)
+    // Extensions are installed at the database level, not schema level
+    // This must be done outside of TypeORM's migration transaction
+    await dataSource.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+    console.log(`✓ pgvector extension enabled`);
+
+    // Run migrations on the test schema with per-migration transactions
+    // This allows migrations that need non-transactional operations to work
+    await dataSource.runMigrations({ transaction: 'each' });
     console.log(`✓ Migrations completed for: ${schema}`);
   } catch (error) {
     console.error(`✗ Failed to setup test schema ${schema}:`, error);

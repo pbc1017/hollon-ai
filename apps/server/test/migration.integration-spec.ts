@@ -78,8 +78,11 @@ describe('Database Migrations', () => {
     });
 
     it('should have applied migrations', async () => {
+      const schema =
+        (dataSource.options as { schema?: string }).schema || 'public';
+
       const migrations = await dataSource.query(
-        'SELECT * FROM migrations ORDER BY id',
+        `SELECT * FROM ${schema}.migrations ORDER BY id`,
       );
 
       expect(migrations.length).toBeGreaterThan(0);
@@ -137,8 +140,8 @@ describe('Database Migrations', () => {
     it('should clean database without errors', async () => {
       // Insert test data
       await dataSource.query(`
-        INSERT INTO organizations (id, name, slug, created_at, updated_at)
-        VALUES (gen_random_uuid(), 'Test Org', 'test-org', NOW(), NOW())
+        INSERT INTO organizations (id, name, created_at, updated_at)
+        VALUES (gen_random_uuid(), 'Test Org', NOW(), NOW())
       `);
 
       // Verify data exists

@@ -27,6 +27,18 @@ E2E tests use **PostgreSQL schema-based isolation**:
 - Supports parallel test execution with multiple Jest workers
 - Each worker gets its own schema: `hollon_test_worker_N`
 
+### pgvector Extension
+
+The test database requires the **pgvector** extension for vector similarity search:
+
+- Extension is enabled database-wide (not per-schema)
+- Docker image: `pgvector/pgvector:pg16`
+- Migration file: `apps/server/src/database/migrations/1733295000000-InitialSchema.ts`
+- The migration includes:
+  - `up()`: `CREATE EXTENSION IF NOT EXISTS vector`
+  - `down()`: `DROP EXTENSION IF EXISTS vector`
+- Test setup automatically enables the extension before running migrations
+
 ## Test Organization
 
 ```
@@ -104,7 +116,40 @@ pnpm --filter=@hollon-ai/server test:cov
 
 ### Database Configuration
 
-E2E tests use the test database utilities (`test/setup/test-database.ts`):
+E2E tests use the test database utilities (`test/setup/test-database.ts`).
+
+#### Connection Details
+
+The test database connects to PostgreSQL with the following configuration:
+
+```typescript
+{
+  type: 'postgres',
+  host: 'localhost',
+  port: 5434,  // Test database port (dev uses 5432)
+  username: 'hollon',
+  password: 'hollon_dev_password',
+  database: 'hollon',
+  schema: 'hollon_test_worker_N',  // N = Jest worker ID
+  synchronize: false,  // Use migrations only
+  migrations: ['src/database/migrations/*{.ts,.js}'],
+  entities: ['src/**/*.entity{.ts,.js}'],
+  extra: {
+    // Includes 'hollon' schema for pgvector extension access
+    options: '-c search_path=${schemaName},public,hollon'
+  }
+}
+```
+
+**Key Points**:
+- **Port 5434** is used for test database (vs 5432 for development)
+- **Schema isolation** via `hollon_test_worker_N` allows parallel test execution
+- **search_path** includes `hollon` schema to access pgvector extension
+- **Migrations** are run automatically during test setup
+
+#### Usage
+
+E2E tests use the test database utilities:
 
 ```typescript
 import { getTestDatabaseConfig } from '../setup/test-database';
