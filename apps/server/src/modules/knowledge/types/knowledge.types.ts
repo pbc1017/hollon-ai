@@ -464,7 +464,7 @@ export interface KnowledgeImportOptions {
   validate?: boolean;
 
   /** Automatic categorization */
-  autoCategorizе?: boolean;
+  autoCategorize?: boolean;
 
   /** Organization context */
   organizationId: string;

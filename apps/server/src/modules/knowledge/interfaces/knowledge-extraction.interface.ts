@@ -77,7 +77,7 @@ export interface ExtractionOptions {
   minConfidence?: number;
 
   /** Enable automatic categorization */
-  autoCategorizе?: boolean;
+  autoCategorize?: boolean;
 
   /** Extract relationships between entities */
   extractRelationships?: boolean;
