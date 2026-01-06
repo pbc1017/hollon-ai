@@ -28,10 +28,32 @@ export enum EmbeddingSourceType {
 export class VectorEmbedding extends BaseEntity {
   /**
    * The vector embedding (1536 dimensions for OpenAI ada-002)
-   * Note: This is typed as 'text' in TypeORM but migrations should use vector(1536)
+   * Stored as pgvector's vector type for efficient similarity search
    */
-  @Column({ type: 'text', nullable: false })
-  embedding: string;
+  @Column({
+    type: 'vector',
+    nullable: false,
+    transformer: {
+      to: (value: number[] | string) => {
+        // Convert array to pgvector format: [1,2,3] -> '[1,2,3]'
+        if (Array.isArray(value)) {
+          return `[${value.join(',').trim()}]`;
+        }
+        return value;
+      },
+      from: (value: string) => {
+        // Convert pgvector format to array: '[1,2,3]' -> [1,2,3]
+        if (typeof value === 'string' && value.startsWith('[')) {
+          return value
+            .slice(1, -1)
+            .split(',')
+            .map((x) => parseFloat(x.trim()));
+        }
+        return value;
+      },
+    },
+  })
+  embedding: number[] | string;
 
   /**
    * Type of the source entity
