@@ -13,6 +13,82 @@ export class KnowledgeExtractionService {
   /**
    * Create a new knowledge item
    */
+  /**
+   * Extract text content from a message and prepare it for knowledge storage
+   * Handles various message formats and edge cases
+   */
+  extractTextFromMessage(
+    message: {
+      content: string;
+      id?: string;
+      conversationId?: string;
+      messageType?: string;
+      metadata?: Record<string, any>;
+      createdAt?: Date;
+    },
+    organizationId: string,
+  ): Partial<KnowledgeItem> | null {
+    // Handle empty or invalid content
+    if (!message.content || typeof message.content !== 'string') {
+      return null;
+    }
+
+    // Trim and normalize whitespace
+    const normalizedContent = message.content.trim().replace(/\s+/g, ' ');
+
+    // Skip if content is empty after normalization
+    if (normalizedContent.length === 0) {
+      return null;
+    }
+
+    // Build metadata combining message metadata with extraction info
+    const extractionMetadata: Record<string, any> = {
+      messageId: message.id,
+      conversationId: message.conversationId,
+      messageType: message.messageType,
+      originalCreatedAt: message.createdAt,
+      extractedLength: normalizedContent.length,
+      ...(message.metadata || {}),
+    };
+
+    // Construct knowledge item
+    const knowledgeItem: Partial<KnowledgeItem> = {
+      content: normalizedContent,
+      source: message.conversationId
+        ? `conversation:${message.conversationId}`
+        : 'message',
+      extractedAt: new Date(),
+      metadata: extractionMetadata,
+      organizationId,
+    };
+
+    return knowledgeItem;
+  }
+
+  /**
+   * Extract text content from multiple messages in batch
+   * Filters out invalid messages and returns only valid knowledge items
+   */
+  extractTextFromMessages(
+    messages: Array<{
+      content: string;
+      id?: string;
+      conversationId?: string;
+      messageType?: string;
+      metadata?: Record<string, any>;
+      createdAt?: Date;
+    }>,
+    organizationId: string,
+  ): Partial<KnowledgeItem>[] {
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return [];
+    }
+
+    return messages
+      .map((message) => this.extractTextFromMessage(message, organizationId))
+      .filter((item): item is Partial<KnowledgeItem> => item !== null);
+  }
+
   async create(createDto: Partial<KnowledgeItem>): Promise<KnowledgeItem> {
     const knowledgeItem = this.knowledgeItemRepository.create(createDto);
     return this.knowledgeItemRepository.save(knowledgeItem);
