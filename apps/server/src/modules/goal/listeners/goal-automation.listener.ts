@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { promisify } from 'util';
 import { exec } from 'child_process';
+import * as path from 'path';
 import { Goal, GoalStatus } from '../entities/goal.entity';
 import { Task, TaskStatus, TaskType } from '../../task/entities/task.entity';
 import { TaskPullRequest } from '../../collaboration/entities/task-pull-request.entity';
@@ -1460,11 +1461,56 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
         return false;
       }
 
-      // 2. Worktree 경로 존재 확인
+      // 2. Worktree 경로 존재 확인 (Fix #27: 없으면 재생성)
+      let worktreeExists = false;
       try {
         await execAsync(`test -d "${worktreePath}"`);
+        worktreeExists = true;
       } catch {
-        this.logger.error(`Worktree path ${worktreePath} does not exist`);
+        this.logger.warn(
+          `Worktree path ${worktreePath} does not exist, attempting to recreate...`,
+        );
+
+        // Recreate worktree for conflict resolution
+        try {
+          // Get git root from working directory
+          const { stdout: gitRootOutput } = await execAsync(
+            'git rev-parse --show-toplevel',
+            { cwd: path.dirname(worktreePath) },
+          );
+          const gitRoot = gitRootOutput.trim();
+          const branchName = pr.branchName;
+
+          if (!branchName) {
+            this.logger.error(
+              `PR #${pr.prNumber} has no branch name, cannot recreate worktree`,
+            );
+            return false;
+          }
+
+          // Create worktree directory
+          await execAsync(`mkdir -p "${path.dirname(worktreePath)}"`);
+
+          // Add worktree for the branch
+          await execAsync(
+            `git worktree add "${worktreePath}" "${branchName}"`,
+            { cwd: gitRoot },
+          );
+
+          this.logger.log(
+            `✅ Successfully recreated worktree at ${worktreePath}`,
+          );
+          worktreeExists = true;
+        } catch (recreateError) {
+          this.logger.error(
+            `Failed to recreate worktree: ${recreateError instanceof Error ? recreateError.message : 'Unknown error'}`,
+          );
+          return false;
+        }
+      }
+
+      if (!worktreeExists) {
+        this.logger.error(`Unable to establish worktree at ${worktreePath}`);
         return false;
       }
 
