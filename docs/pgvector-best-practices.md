@@ -29,26 +29,26 @@ pgvector provides open-source vector similarity search for PostgreSQL with:
 
 ### 1.2 Distance Metrics
 
-| Operator | Distance Type | Use Case |
-|----------|--------------|----------|
-| `<->` | L2 (Euclidean) | General-purpose similarity |
-| `<=>` | Cosine distance | Text embeddings (most common) |
-| `<#>` | Inner product | When vectors are normalized |
-| `<+>` | L1 (Manhattan) | Specialized applications |
-| `<~>` | Hamming distance | Binary vectors only |
-| `<%>` | Jaccard distance | Binary vectors only |
+| Operator | Distance Type    | Use Case                      |
+| -------- | ---------------- | ----------------------------- |
+| `<->`    | L2 (Euclidean)   | General-purpose similarity    |
+| `<=>`    | Cosine distance  | Text embeddings (most common) |
+| `<#>`    | Inner product    | When vectors are normalized   |
+| `<+>`    | L1 (Manhattan)   | Specialized applications      |
+| `<~>`    | Hamming distance | Binary vectors only           |
+| `<%>`    | Jaccard distance | Binary vectors only           |
 
 **Recommendation**: Use cosine distance (`<=>`) for text embeddings as it's invariant to vector magnitude and works well with OpenAI/Cohere embeddings.
 
 ### 1.3 Common Embedding Dimensions
 
-| Model | Dimensions | Notes |
-|-------|-----------|-------|
-| OpenAI text-embedding-ada-002 | 1536 | Industry standard |
-| OpenAI text-embedding-3-small | 1536 | Latest, improved quality |
-| OpenAI text-embedding-3-large | 3072 | Higher quality, 2x storage |
-| Cohere embed-english-v3.0 | 1024 | Efficient alternative |
-| sentence-transformers | 384-1024 | Open-source options |
+| Model                         | Dimensions | Notes                      |
+| ----------------------------- | ---------- | -------------------------- |
+| OpenAI text-embedding-ada-002 | 1536       | Industry standard          |
+| OpenAI text-embedding-3-small | 1536       | Latest, improved quality   |
+| OpenAI text-embedding-3-large | 3072       | Higher quality, 2x storage |
+| Cohere embed-english-v3.0     | 1024       | Efficient alternative      |
+| sentence-transformers         | 384-1024   | Open-source options        |
 
 **Project Standard**: Currently using 1536 dimensions (OpenAI ada-002 compatible)
 
@@ -87,7 +87,7 @@ export class VectorTransformer implements ValueTransformer {
     // Validate dimensions if specified
     if (this.expectedDimension && value.length !== this.expectedDimension) {
       throw new Error(
-        `Vector dimension mismatch: expected ${this.expectedDimension}, got ${value.length}`
+        `Vector dimension mismatch: expected ${this.expectedDimension}, got ${value.length}`,
       );
     }
 
@@ -120,7 +120,7 @@ export class VectorTransformer implements ValueTransformer {
     // Validate dimensions if specified
     if (this.expectedDimension && numbers.length !== this.expectedDimension) {
       throw new Error(
-        `Vector dimension mismatch: expected ${this.expectedDimension}, got ${numbers.length}`
+        `Vector dimension mismatch: expected ${this.expectedDimension}, got ${numbers.length}`,
       );
     }
 
@@ -227,14 +227,14 @@ await queryRunner.query(`
 
 Based on comprehensive performance research, here's the comparison:
 
-| Metric | IVFFlat | HNSW |
-|--------|---------|------|
-| **Build Speed** | 32x faster | Slower (hours for large datasets) |
-| **Query Speed** | 2.6 QPS @ 0.998 recall | 40.5 QPS @ 0.998 recall (15.5x faster) |
-| **Memory Usage** | 257MB | 729MB (2.8x more) |
-| **Update Resilience** | Poor (centroids not recalculated) | Good (graph adapts) |
-| **Recall Quality** | Lower, degrades with updates | Higher, more stable |
-| **Best For** | Static datasets, fast builds | Dynamic datasets, query speed |
+| Metric                | IVFFlat                           | HNSW                                   |
+| --------------------- | --------------------------------- | -------------------------------------- |
+| **Build Speed**       | 32x faster                        | Slower (hours for large datasets)      |
+| **Query Speed**       | 2.6 QPS @ 0.998 recall            | 40.5 QPS @ 0.998 recall (15.5x faster) |
+| **Memory Usage**      | 257MB                             | 729MB (2.8x more)                      |
+| **Update Resilience** | Poor (centroids not recalculated) | Good (graph adapts)                    |
+| **Recall Quality**    | Lower, degrades with updates      | Higher, more stable                    |
+| **Best For**          | Static datasets, fast builds      | Dynamic datasets, query speed          |
 
 ### 3.2 Index Selection Decision Tree
 
@@ -288,7 +288,9 @@ export class AddVectorIndexes1234567890001 implements MigrationInterface {
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP INDEX IF EXISTS idx_vector_embeddings_hnsw`);
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_vector_embeddings_org_source`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_vector_embeddings_org_source`,
+    );
     await queryRunner.query(`DROP INDEX IF EXISTS idx_vector_embeddings_tags`);
   }
 }
@@ -423,25 +425,25 @@ export class AddHybridSearchIndexes1234567890002 implements MigrationInterface {
  */
 export interface VectorMetadata {
   // Model information
-  embeddingModel: string;           // e.g., 'openai_ada_002'
-  embeddingModelVersion: string;    // e.g., '2023-11-07'
+  embeddingModel: string; // e.g., 'openai_ada_002'
+  embeddingModelVersion: string; // e.g., '2023-11-07'
 
   // Processing information
-  processingTimestamp: string;      // ISO 8601 format
-  processingMethod?: string;        // e.g., 'chunked', 'summarized'
+  processingTimestamp: string; // ISO 8601 format
+  processingMethod?: string; // e.g., 'chunked', 'summarized'
 
   // Content structure
-  chunkIndex?: number;              // For multi-chunk content
-  totalChunks?: number;             // Total chunks for this source
-  tokenCount?: number;              // Tokens in embedded content
+  chunkIndex?: number; // For multi-chunk content
+  totalChunks?: number; // Total chunks for this source
+  tokenCount?: number; // Tokens in embedded content
 
   // Source tracking
-  sourceUrl?: string;               // Original content URL
-  sourceHash?: string;              // Content hash for deduplication
-  language?: string;                // ISO 639-1 code (e.g., 'en')
+  sourceUrl?: string; // Original content URL
+  sourceHash?: string; // Content hash for deduplication
+  language?: string; // ISO 639-1 code (e.g., 'en')
 
   // Quality metrics
-  quality?: number;                 // 0-1 confidence score
+  quality?: number; // 0-1 confidence score
   reviewStatus?: 'pending' | 'approved' | 'rejected';
 
   // Custom fields (project-specific)
@@ -586,7 +588,7 @@ postgres:
     POSTGRES_DB: hollon
   volumes:
     - postgres_data:/var/lib/postgresql/data
-  shm_size: 1gb  # Important for pgvector performance
+  shm_size: 1gb # Important for pgvector performance
 ```
 
 **Recommendation**: Add resource limits and health checks:
@@ -599,7 +601,7 @@ postgres:
     POSTGRES_DB: hollon
   volumes:
     - postgres_data:/var/lib/postgresql/data
-  shm_size: 2gb  # Increase for better performance
+  shm_size: 2gb # Increase for better performance
   deploy:
     resources:
       limits:
@@ -609,7 +611,7 @@ postgres:
         cpus: '2'
         memory: 4G
   healthcheck:
-    test: ["CMD-SHELL", "pg_isready -U hollon"]
+    test: ['CMD-SHELL', 'pg_isready -U hollon']
     interval: 10s
     timeout: 5s
     retries: 5
@@ -689,7 +691,8 @@ SELECT
 
 ```typescript
 // GOOD: Filter first, then vector search
-const results = await dataSource.query(`
+const results = await dataSource.query(
+  `
   SELECT
     id,
     content,
@@ -701,15 +704,20 @@ const results = await dataSource.query(`
     AND project_id = $4
   ORDER BY embedding <=> $1::vector
   LIMIT 10
-`, [queryVector, orgId, sourceType, projectId]);
+`,
+  [queryVector, orgId, sourceType, projectId],
+);
 
 // BAD: Vector search without filtering
-const results = await dataSource.query(`
+const results = await dataSource.query(
+  `
   SELECT *
   FROM vector_embeddings
   ORDER BY embedding <=> $1::vector
   LIMIT 10
-`, [queryVector]);
+`,
+  [queryVector],
+);
 ```
 
 **Best Practice #2: Use Iterative Scanning (pgvector 0.8.0+)**
@@ -721,7 +729,8 @@ For filtered vector searches with better recall:
 await dataSource.query(`SET LOCAL enable_indexscan = off`);
 await dataSource.query(`SET LOCAL enable_seqscan = off`);
 
-const results = await dataSource.query(`
+const results = await dataSource.query(
+  `
   SELECT
     id,
     content,
@@ -732,7 +741,9 @@ const results = await dataSource.query(`
     AND tags && $3  -- Array overlap
   ORDER BY embedding <=> $1::vector
   LIMIT 10
-`, [queryVector, orgId, requiredTags]);
+`,
+  [queryVector, orgId, requiredTags],
+);
 ```
 
 **Best Practice #3: Implement Distance Threshold**
@@ -741,7 +752,8 @@ const results = await dataSource.query(`
 // Only return results above similarity threshold
 const SIMILARITY_THRESHOLD = 0.3; // Cosine distance < 0.3
 
-const results = await dataSource.query(`
+const results = await dataSource.query(
+  `
   SELECT
     id,
     content,
@@ -752,7 +764,9 @@ const results = await dataSource.query(`
     AND (embedding <=> $1::vector) < $3
   ORDER BY embedding <=> $1::vector
   LIMIT 10
-`, [queryVector, orgId, SIMILARITY_THRESHOLD]);
+`,
+  [queryVector, orgId, SIMILARITY_THRESHOLD],
+);
 ```
 
 ### 6.2 Embedding Generation Optimization
@@ -765,7 +779,7 @@ const results = await dataSource.query(`
  */
 async function generateEmbeddingsBatch(
   texts: string[],
-  batchSize: number = 100
+  batchSize: number = 100,
 ): Promise<number[][]> {
   const embeddings: number[][] = [];
 
@@ -833,15 +847,15 @@ export default new DataSource({
 
   // Connection pooling
   extra: {
-    max: 20,                    // Maximum pool size
-    min: 5,                     // Minimum pool size
-    idleTimeoutMillis: 30000,   // Close idle connections
+    max: 20, // Maximum pool size
+    min: 5, // Minimum pool size
+    idleTimeoutMillis: 30000, // Close idle connections
     connectionTimeoutMillis: 2000,
   },
 
   // Performance settings
-  logging: false,               // Disable in production
-  maxQueryExecutionTime: 5000,  // Log slow queries
+  logging: false, // Disable in production
+  maxQueryExecutionTime: 5000, // Log slow queries
 });
 ```
 
@@ -1025,24 +1039,24 @@ ORDER BY similarity;
 
 ### Dimension Standards
 
-| Dimensions | Use Case | Storage per Vector |
-|-----------|----------|-------------------|
-| 384 | Lightweight models | ~1.5 KB |
-| 768 | Standard transformers | ~3 KB |
-| 1024 | Cohere embeddings | ~4 KB |
-| 1536 | OpenAI standard | ~6 KB |
-| 3072 | OpenAI large | ~12 KB |
+| Dimensions | Use Case              | Storage per Vector |
+| ---------- | --------------------- | ------------------ |
+| 384        | Lightweight models    | ~1.5 KB            |
+| 768        | Standard transformers | ~3 KB              |
+| 1024       | Cohere embeddings     | ~4 KB              |
+| 1536       | OpenAI standard       | ~6 KB              |
+| 3072       | OpenAI large          | ~12 KB             |
 
 ### Performance Benchmarks
 
 Based on research with 1M vectors, 1536 dimensions:
 
-| Operation | IVFFlat | HNSW |
-|-----------|---------|------|
-| Index build | 128s | 4065s |
-| Query @ 0.9 recall | ~100 QPS | ~500 QPS |
-| Query @ 0.998 recall | 2.6 QPS | 40.5 QPS |
-| Memory usage | 257 MB | 729 MB |
+| Operation            | IVFFlat  | HNSW     |
+| -------------------- | -------- | -------- |
+| Index build          | 128s     | 4065s    |
+| Query @ 0.9 recall   | ~100 QPS | ~500 QPS |
+| Query @ 0.998 recall | 2.6 QPS  | 40.5 QPS |
+| Memory usage         | 257 MB   | 729 MB   |
 
 ---
 
