@@ -1,10 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, QueryDeepPartialEntity } from 'typeorm';
 import { KnowledgeItem } from '../entities/knowledge-item.entity';
 
 @Injectable()
 export class KnowledgeExtractionService {
+  private readonly logger = new Logger(KnowledgeExtractionService.name);
+
   constructor(
     @InjectRepository(KnowledgeItem)
     private readonly knowledgeItemRepository: Repository<KnowledgeItem>,
