@@ -1539,15 +1539,14 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
         );
 
         // 6. Check if there are conflicts
-        const { stdout: statusOutput } = await execAsync(`git status`, {
-          cwd: worktreePath,
-        });
+        // Use git diff to detect unmerged files (language-independent)
+        const conflictFiles = await this.getConflictingFiles(worktreePath);
 
-        if (
-          !statusOutput.includes('both modified') &&
-          !statusOutput.includes('Unmerged paths')
-        ) {
+        if (conflictFiles.length === 0) {
           // No conflicts detected, might be another error
+          const { stdout: statusOutput } = await execAsync(`git status`, {
+            cwd: worktreePath,
+          });
           this.logger.error(
             `Rebase failed but no conflicts detected: ${statusOutput}`,
           );
@@ -1559,8 +1558,6 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
         this.logger.log(
           `Conflicts detected, calling Brain Provider to resolve...`,
         );
-
-        const conflictFiles = await this.getConflictingFiles(worktreePath);
         this.logger.log(`Conflicting files: ${conflictFiles.join(', ')}`);
 
         // 8. Fix #27: Attempt Brain Provider conflict resolution
