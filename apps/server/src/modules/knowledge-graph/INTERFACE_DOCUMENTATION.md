@@ -17,32 +17,26 @@ This document has been extended to include **missing utility methods** for compr
 1. **Bulk Operations** (4 methods)
    - Batch creation of nodes and edges
    - Bulk delete operations for efficiency
-   
 2. **Tag Management Operations** (4 methods)
    - Find nodes by tags with AND/OR logic
    - Add/remove tags from nodes
    - Get all available tags for autocomplete
-   
 3. **Property Query Operations** (4 methods)
    - Query by JSONB property key-value pairs
    - Find nodes/edges with specific property keys
    - Update individual properties without replacing entire object
-   
 4. **Advanced Search Operations** (3 methods)
    - Combined search across nodes and edges
    - Date range queries
    - Recently modified nodes tracking
-   
 5. **Graph Validation Operations** (3 methods)
    - Graph integrity validation
    - Orphaned node detection
    - Cycle detection for dependency management
-   
 6. **Import/Export Operations** (3 methods)
    - JSON export/import for subgraphs
    - Subgraph cloning across organizations
    - Knowledge sharing and templates
-   
 7. **Utility and Helper Operations** (8 methods)
    - Existence checks (lightweight validation)
    - Type-based counting
@@ -59,6 +53,7 @@ This document has been extended to include **missing utility methods** for compr
 ### New DTOs Required
 
 Added 9 new DTO categories with detailed field specifications:
+
 - AdvancedSearchDto
 - Tag Management DTOs (3 types)
 - PropertyQueryDto
@@ -843,28 +838,33 @@ Following project standards, each method should have:
 ## Next Steps
 
 ### Phase 1: Core Infrastructure (Priority 1)
+
 1. Create `dto/` directory with base DTOs (CreateNodeDto, UpdateNodeDto, CreateEdgeDto, UpdateEdgeDto)
 2. Implement core CRUD methods in KnowledgeGraphService (18 methods)
 3. Add corresponding controller endpoints
 4. Write unit tests for core operations
 
 ### Phase 2: Search and Query (Priority 2)
+
 5. Implement SearchNodesDto and AdvancedSearchDto
 6. Add search and query methods (7 methods)
 7. Implement tag management operations (4 methods)
 8. Implement property query operations (4 methods)
 
 ### Phase 3: Advanced Features (Priority 3)
+
 9. Add bulk operation methods (4 methods)
 10. Implement graph validation operations (3 methods)
 11. Add utility and helper methods (8 methods)
 
 ### Phase 4: Import/Export (Priority 4)
+
 12. Implement import/export operations (3 methods)
 13. Add JSON schema validation for import data
 14. Create export format documentation
 
 ### Continuous
+
 - Update this documentation as implementation progresses
 - Add integration tests for complex graph operations
 - Performance optimization for large graphs
