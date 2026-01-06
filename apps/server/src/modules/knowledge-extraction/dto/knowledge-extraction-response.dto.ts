@@ -14,7 +14,7 @@ export class KnowledgeExtractionResponseDto {
   content: string;
 
   @IsString()
-  source: string;
+  type: string;
 
   @IsDate()
   extractedAt: Date;

@@ -14,7 +14,7 @@ export class CreateKnowledgeExtractionDto {
 
   @IsString()
   @IsNotEmpty()
-  source: string;
+  type: string;
 
   @IsDateString()
   extractedAt: string;
