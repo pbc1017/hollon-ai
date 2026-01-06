@@ -345,9 +345,7 @@ export interface IKnowledgeExtractionService {
   /**
    * Extract knowledge from multiple documents
    */
-  batchExtract(
-    request: BatchExtractionRequest,
-  ): Promise<BatchExtractionResult>;
+  batchExtract(request: BatchExtractionRequest): Promise<BatchExtractionResult>;
 
   /**
    * Query and retrieve knowledge
@@ -362,9 +360,7 @@ export interface IKnowledgeExtractionService {
   /**
    * Store multiple knowledge items
    */
-  batchStore(
-    knowledge: ExtractedKnowledge[],
-  ): Promise<KnowledgeStorage[]>;
+  batchStore(knowledge: ExtractedKnowledge[]): Promise<KnowledgeStorage[]>;
 
   /**
    * Update existing knowledge
