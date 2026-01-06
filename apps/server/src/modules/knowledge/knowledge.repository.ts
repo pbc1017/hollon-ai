@@ -108,9 +108,7 @@ export class KnowledgeRepository extends Repository<Knowledge> {
       }
     });
 
-    return queryBuilder
-      .orderBy('knowledge.createdAt', 'DESC')
-      .getMany();
+    return queryBuilder.orderBy('knowledge.createdAt', 'DESC').getMany();
   }
 
   /**
@@ -119,10 +117,7 @@ export class KnowledgeRepository extends Repository<Knowledge> {
    * @param endDate - End date of the range
    * @returns Array of knowledge entities created within the date range
    */
-  async findByDateRange(
-    startDate: Date,
-    endDate: Date,
-  ): Promise<Knowledge[]> {
+  async findByDateRange(startDate: Date, endDate: Date): Promise<Knowledge[]> {
     return this.find({
       where: {
         createdAt: Between(startDate, endDate),
