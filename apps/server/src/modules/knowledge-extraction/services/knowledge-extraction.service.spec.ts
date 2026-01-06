@@ -116,15 +116,16 @@ describe('KnowledgeExtractionService', () => {
         new Error('Database error'),
       );
 
-      await expect(service.create(createDto)).rejects.toThrow(
-        'Database error',
-      );
+      await expect(service.create(createDto)).rejects.toThrow('Database error');
     });
   });
 
   describe('findAll', () => {
     it('should return all knowledge items with default pagination', async () => {
-      const items = [mockKnowledgeItem, { ...mockKnowledgeItem, id: 'knowledge-456' }];
+      const items = [
+        mockKnowledgeItem,
+        { ...mockKnowledgeItem, id: 'knowledge-456' },
+      ];
       mockKnowledgeItemRepository.find.mockResolvedValue(items);
 
       const result = await service.findAll();
@@ -187,7 +188,10 @@ describe('KnowledgeExtractionService', () => {
 
   describe('findByOrganization', () => {
     it('should return knowledge items for a specific organization', async () => {
-      const items = [mockKnowledgeItem, { ...mockKnowledgeItem, id: 'knowledge-456' }];
+      const items = [
+        mockKnowledgeItem,
+        { ...mockKnowledgeItem, id: 'knowledge-456' },
+      ];
       mockKnowledgeItemRepository.find.mockResolvedValue(items);
 
       const result = await service.findByOrganization('org-123');
@@ -285,7 +289,10 @@ describe('KnowledgeExtractionService', () => {
       };
 
       mockKnowledgeItemRepository.findOne.mockResolvedValue(mockKnowledgeItem);
-      const updatedItem = { ...mockKnowledgeItem, metadata: updateDto.metadata };
+      const updatedItem = {
+        ...mockKnowledgeItem,
+        metadata: updateDto.metadata,
+      };
       mockKnowledgeItemRepository.save.mockResolvedValue(updatedItem);
 
       const result = await service.update('knowledge-123', updateDto);
@@ -407,10 +414,7 @@ describe('KnowledgeExtractionService', () => {
       const items = [mockKnowledgeItem];
       mockKnowledgeItemRepository.find.mockResolvedValue(items);
 
-      const result = await service.searchBySimilarity(
-        'test query',
-        'org-123',
-      );
+      const result = await service.searchBySimilarity('test query', 'org-123');
 
       expect(mockKnowledgeItemRepository.find).toHaveBeenCalledWith({
         where: { organizationId: 'org-123' },
