@@ -13,11 +13,22 @@ export class KnowledgeGraphService {
     private readonly edgeRepository: Repository<Edge>,
   ) {}
 
-  // Placeholder methods - to be implemented in future tasks
+  /**
+   * Retrieves all nodes from the knowledge graph
+   * Placeholder method - to be implemented in future tasks
+   *
+   * @returns Promise resolving to an array of all Node entities
+   */
   async findAllNodes(): Promise<Node[]> {
     return this.nodeRepository.find();
   }
 
+  /**
+   * Retrieves all edges from the knowledge graph
+   * Placeholder method - to be implemented in future tasks
+   *
+   * @returns Promise resolving to an array of all Edge entities
+   */
   async findAllEdges(): Promise<Edge[]> {
     return this.edgeRepository.find();
   }
