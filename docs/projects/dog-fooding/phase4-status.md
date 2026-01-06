@@ -21,9 +21,10 @@
 | c184767 | #12  | Use `os.tmpdir()` + `disallowedTools` for analysis-only Brain Provider calls                        |
 | 1d93145 | #13  | Reuse existing PR during CI retry instead of failing with "already exists" error                    |
 | 7eb8bf3 | #14  | Normalize CI state comparison to lowercase (gh CLI returns uppercase SUCCESS/FAILURE)               |
-| TBD     | #22  | Add parent-child unblock logic to PR merge workflow                                                 |
-| TBD     | #23  | Remove --auto flag from gh pr merge (requires branch protection rules)                              |
-| TBD     | #24  | Auto-resolve merge conflicts: check mergeable before CI, rebase + force push (Brain Provider TODO)  |
+| N/A     | #22  | Add parent-child unblock logic to PR merge workflow (replaced by Fix #25)                           |
+| N/A     | #23  | Remove --auto flag from gh pr merge (requires branch protection rules)                              |
+| 0a3c12d | #24  | Auto-resolve merge conflicts: check mergeable before CI, rebase + force push                        |
+| 199536e | #25  | Auto-complete Team Epic when all children complete (during PR merge, not cron)                      |
 
 ---
 
@@ -272,4 +273,81 @@ const hasFailedChecks = normalizedChecks.some(
 
 ---
 
-**Last Updated**: 2025-12-24T16:20:00+09:00
+### Issue #25: Team Epic Deadlock - All Root Tasks Stuck in BLOCKED
+
+**발견 시간**: 2026-01-06 11:40 KST
+
+**증상**:
+
+- 6개의 Team Epic (depth=0) 모두 BLOCKED 상태
+- 169개의 ready 태스크가 Epic 의존성으로 인해 진행 불가
+- 33개 완료된 태스크 있지만 Epic은 여전히 BLOCKED
+
+**근본 원인**:
+
+- Goal 분해 시 Team Epic이 일반 태스크처럼 실행됨
+- Epic이 IN_PROGRESS 상태로 2+ 시간 stuck
+- Timeout 메커니즘이 Epic을 BLOCKED로 마킹
+- Epic의 자식 태스크들이 완료되어도 Epic 상태가 자동으로 COMPLETED로 변경되지 않음
+- 전체 의존성 그래프가 deadlock 상태
+
+**해결 (Fix #25)**:
+
+```typescript
+// code-review.service.ts:506-602
+private async checkAndCompleteParentEpic(completedTask: Task): Promise<void> {
+  // 1. Check if task has parent Epic (depth=0)
+  if (!completedTask.parentTaskId) return;
+
+  const parentTask = await this.taskRepo.findOne({
+    where: { id: completedTask.parentTaskId },
+  });
+
+  if (parentTask.depth !== 0) return; // Not a Team Epic
+
+  // 2. Query all children of Epic
+  const allChildren = await this.taskRepo.find({
+    where: { parentTaskId: parentTask.id },
+  });
+
+  // 3. Check if ALL children are COMPLETED
+  const allChildrenCompleted = allChildren.every(
+    (child) => child.status === TaskStatus.COMPLETED,
+  );
+
+  if (!allChildrenCompleted) return;
+
+  // 4. Mark Epic as COMPLETED
+  parentTask.status = TaskStatus.COMPLETED;
+  parentTask.completedAt = new Date();
+
+  // Clear blocked reason
+  if (parentTask.metadata) {
+    delete parentTask.metadata.blockedReason;
+    delete parentTask.metadata.escalatedAt;
+  }
+
+  await this.taskRepo.save(parentTask);
+
+  // 5. Unblock dependent tasks
+  await this.unblockDependentTasks(parentTask);
+}
+```
+
+**구현 위치**:
+
+- `mergePullRequest()` 메소드에서 태스크 완료 후 자동 호출
+- 새 cron 없이 기존 PR merge 플로우에 통합
+- Line 291: `await this.checkAndCompleteParentEpic(pr.task);`
+
+**예상 효과**:
+
+- PR 머지 시 자식 태스크 완료 → Epic 완료 체크 → 자동 완료
+- Dependency graph deadlock 해소
+- 169개 ready 태스크가 unblock되어 실행 가능
+
+**상태**: ✅ 수정 완료 (199536e), 테스트 대기 중 (다음 PR 머지 시 확인)
+
+---
+
+**Last Updated**: 2026-01-06T11:45:00+09:00
