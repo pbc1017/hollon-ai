@@ -118,9 +118,8 @@ describe('KnowledgeExtractionModule', () => {
         .compile();
 
       // Should be able to get the exported service
-      const service = consumerModule.get<VectorSearchService>(
-        VectorSearchService,
-      );
+      const service =
+        consumerModule.get<VectorSearchService>(VectorSearchService);
       expect(service).toBeDefined();
 
       await consumerModule.close();
@@ -163,9 +162,8 @@ describe('KnowledgeExtractionModule', () => {
       const extractionService = module.get<KnowledgeExtractionService>(
         KnowledgeExtractionService,
       );
-      const vectorService = module.get<VectorSearchService>(
-        VectorSearchService,
-      );
+      const vectorService =
+        module.get<VectorSearchService>(VectorSearchService);
 
       // Both services should be properly instantiated
       expect(extractionService).toBeDefined();
@@ -183,9 +181,8 @@ describe('KnowledgeExtractionModule', () => {
       const extractionService = module.get<KnowledgeExtractionService>(
         KnowledgeExtractionService,
       );
-      const vectorService = module.get<VectorSearchService>(
-        VectorSearchService,
-      );
+      const vectorService =
+        module.get<VectorSearchService>(VectorSearchService);
 
       expect(extractionService).toBeDefined();
       expect(vectorService).toBeDefined();
