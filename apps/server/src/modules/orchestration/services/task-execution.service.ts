@@ -1172,8 +1172,25 @@ ${i + 1}. **${item.title}**
             cwd: worktreePath,
           });
 
-          // Rename current branch to the feature branch
-          await execAsync(`git branch -m ${branchName}`, {
+          // Fix #22: Protect main branch from accidental rename
+          // Verify we're in a worktree and not on main branch before renaming
+          const { stdout: currentBranch } = await execAsync(
+            'git branch --show-current',
+            { cwd: worktreePath },
+          );
+          const branchToRename = currentBranch.trim();
+
+          if (branchToRename === 'main') {
+            this.logger.error(
+              `CRITICAL: Attempted to rename main branch! Aborting. worktreePath=${worktreePath}`,
+            );
+            throw new Error(
+              'Cannot rename main branch - worktree setup may be incorrect',
+            );
+          }
+
+          // Rename current branch to the feature branch (using -C for safety)
+          await execAsync(`git -C "${worktreePath}" branch -m ${branchName}`, {
             cwd: worktreePath,
           });
 
@@ -1195,7 +1212,25 @@ ${i + 1}. **${item.title}**
       // Branch doesn't exist remotely - create new branch
       // The worktree was created with a temporary branch, now rename it to the feature branch
       // Git automatically creates the necessary directory structure for nested branches
-      await execAsync(`git branch -m ${branchName}`, {
+
+      // Fix #22: Protect main branch from accidental rename
+      // Verify we're in a worktree and not on main branch before renaming
+      const { stdout: currentBranch2 } = await execAsync(
+        'git branch --show-current',
+        { cwd: worktreePath },
+      );
+      const branchToRename2 = currentBranch2.trim();
+
+      if (branchToRename2 === 'main') {
+        this.logger.error(
+          `CRITICAL: Attempted to rename main branch! Aborting. worktreePath=${worktreePath}`,
+        );
+        throw new Error(
+          'Cannot rename main branch - worktree setup may be incorrect',
+        );
+      }
+
+      await execAsync(`git -C "${worktreePath}" branch -m ${branchName}`, {
         cwd: worktreePath,
       });
 
