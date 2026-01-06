@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Node } from './entities/node.entity';
@@ -6,6 +6,8 @@ import { Edge } from './entities/edge.entity';
 
 @Injectable()
 export class KnowledgeGraphService {
+  private readonly logger = new Logger(KnowledgeGraphService.name);
+
   constructor(
     @InjectRepository(Node)
     private readonly nodeRepository: Repository<Node>,
