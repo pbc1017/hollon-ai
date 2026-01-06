@@ -56,7 +56,9 @@ function verifyEnvironmentVariables(): VerificationResult {
 /**
  * Verify database connection
  */
-async function verifyConnection(dataSource: DataSource): VerificationResult {
+async function verifyConnection(
+  dataSource: DataSource,
+): Promise<VerificationResult> {
   try {
     await dataSource.initialize();
     await dataSource.query('SELECT 1 as connected');
