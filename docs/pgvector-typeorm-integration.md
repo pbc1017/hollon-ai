@@ -16,6 +16,7 @@ await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
 ```
 
 **Key Points:**
+
 - The extension must be created before any tables with vector columns
 - Use `IF NOT EXISTS` to prevent errors on re-runs
 - Requires PostgreSQL 11+ and pgvector extension installed on the database server
@@ -52,6 +53,7 @@ export default new DataSource({
 Currently, the project uses a workaround for vector columns:
 
 **Migration (SQL):**
+
 ```typescript
 // Define vector column with explicit dimensionality in migration
 await queryRunner.query(`
@@ -63,6 +65,7 @@ await queryRunner.query(`
 ```
 
 **Entity (TypeScript):**
+
 ```typescript
 // apps/server/src/modules/document/entities/document.entity.ts
 @Entity('documents')
@@ -119,6 +122,7 @@ export class VectorTransformer implements ValueTransformer {
 ```
 
 **Usage in Entity:**
+
 ```typescript
 import { VectorTransformer } from '../../../common/database/vector.column-type';
 
@@ -145,10 +149,12 @@ embedding: number[] | null;
 ```
 
 **Pros:**
+
 - No custom transformer needed
 - Native TypeORM support
 
 **Cons:**
+
 - Cannot use vector similarity operators
 - No vector indexing support
 - Larger storage footprint
@@ -160,27 +166,32 @@ embedding: number[] | null;
 The project uses several patterns for metadata fields that complement vector storage:
 
 #### JSONB for Flexible Metadata
+
 ```typescript
 @Column({ type: 'jsonb', nullable: true })
 metadata: Record<string, unknown> | null;
 ```
 
 **Use Cases:**
+
 - Store embedding model information (model name, version, parameters)
 - Track vector generation metadata (timestamp, source, processing method)
 - Store chunking information for document embeddings
 
 #### Array Columns for Tags
+
 ```typescript
 @Column({ type: 'text', array: true, nullable: true })
 tags: string[];
 ```
 
 **Use Cases:**
+
 - Categorical metadata for filtering vector searches
 - Hybrid search combining vector similarity with exact tag matching
 
 #### Enum Columns for Type Safety
+
 ```typescript
 export enum DocumentType {
   TASK_CONTEXT = 'task_context',
@@ -205,7 +216,11 @@ export class Document extends BaseEntity {
   @Column({ type: 'text' })
   content: string;
 
-  @Column({ type: 'vector', nullable: true, transformer: new VectorTransformer() })
+  @Column({
+    type: 'vector',
+    nullable: true,
+    transformer: new VectorTransformer(),
+  })
   embedding: number[] | null;
 
   // Type and categorization
@@ -242,6 +257,7 @@ export class Document extends BaseEntity {
 ### 4.1 Dimension Configuration
 
 **Fixed Dimensions in Migration:**
+
 ```typescript
 // Create vector column with specific dimension
 await queryRunner.query(`
@@ -251,6 +267,7 @@ await queryRunner.query(`
 ```
 
 **Common Embedding Dimensions:**
+
 - OpenAI text-embedding-ada-002: 1536 dimensions
 - OpenAI text-embedding-3-small: 1536 dimensions
 - OpenAI text-embedding-3-large: 3072 dimensions
@@ -260,6 +277,7 @@ await queryRunner.query(`
 ### 4.2 Handling Multiple Embedding Models
 
 **Strategy 1: Multiple Vector Columns**
+
 ```typescript
 @Column({ type: 'vector', nullable: true, transformer: new VectorTransformer() })
 embedding_1536: number[] | null;
@@ -269,6 +287,7 @@ embedding_3072: number[] | null;
 ```
 
 **Strategy 2: Separate Tables by Dimension**
+
 ```typescript
 @Entity('documents_embeddings_1536')
 export class DocumentEmbedding1536 {
@@ -281,6 +300,7 @@ export class DocumentEmbedding1536 {
 ```
 
 **Strategy 3: Dynamic Dimensions (Advanced)**
+
 ```typescript
 // Use vector without dimension specification
 // Less efficient but more flexible
@@ -325,39 +345,45 @@ embedding: number[] | null;
 pgvector supports multiple index types for different use cases:
 
 #### IVFFlat (Inverted File with Flat compression)
+
 ```sql
-CREATE INDEX documents_embedding_ivfflat_idx 
-ON documents 
+CREATE INDEX documents_embedding_ivfflat_idx
+ON documents
 USING ivfflat (embedding vector_cosine_ops)
 WITH (lists = 100);
 ```
 
 **Characteristics:**
+
 - Good for datasets up to ~1M vectors
 - Faster index creation
 - Moderate query performance
 - `lists` parameter: √(total_rows) is a good starting point
 
 **Distance Operators:**
+
 - `vector_l2_ops` - Euclidean distance (L2)
 - `vector_ip_ops` - Inner product
 - `vector_cosine_ops` - Cosine distance
 
 #### HNSW (Hierarchical Navigable Small World)
+
 ```sql
-CREATE INDEX documents_embedding_hnsw_idx 
-ON documents 
+CREATE INDEX documents_embedding_hnsw_idx
+ON documents
 USING hnsw (embedding vector_cosine_ops)
 WITH (m = 16, ef_construction = 64);
 ```
 
 **Characteristics:**
+
 - Better for larger datasets (1M+ vectors)
 - Slower index creation
 - Better query performance
 - Higher memory usage
 
 **Parameters:**
+
 - `m` (default 16): Maximum connections per layer. Higher = better recall, more memory
 - `ef_construction` (default 64): Size of dynamic candidate list during construction. Higher = better index quality, slower build
 
@@ -382,7 +408,9 @@ export class AddVectorIndexToDocuments implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_documents_embedding_hnsw`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_documents_embedding_hnsw`,
+    );
     await queryRunner.query(`DROP INDEX IF EXISTS idx_documents_org_type`);
   }
 }
@@ -395,31 +423,35 @@ export class AddVectorIndexToDocuments implements MigrationInterface {
 await queryRunner.query(`SET hnsw.ef_search = 100`);
 
 // Perform similarity search
-const results = await queryRunner.query(`
+const results = await queryRunner.query(
+  `
   SELECT id, title, content, 
          embedding <=> $1::vector AS distance
   FROM documents
   WHERE organization_id = $2
   ORDER BY embedding <=> $1::vector
   LIMIT 10
-`, [embeddingVector, organizationId]);
+`,
+  [embeddingVector, organizationId],
+);
 ```
 
 ### 5.4 Index Selection Guidelines
 
-| Dataset Size | Recommended Index | Parameters |
-|--------------|------------------|------------|
-| < 10K rows | None (exact search) | - |
-| 10K - 100K | IVFFlat | lists = 100 |
-| 100K - 1M | IVFFlat | lists = 1000 |
-| 1M+ | HNSW | m = 16-32, ef_construction = 64-128 |
+| Dataset Size | Recommended Index   | Parameters                          |
+| ------------ | ------------------- | ----------------------------------- |
+| < 10K rows   | None (exact search) | -                                   |
+| 10K - 100K   | IVFFlat             | lists = 100                         |
+| 100K - 1M    | IVFFlat             | lists = 1000                        |
+| 1M+          | HNSW                | m = 16-32, ef_construction = 64-128 |
 
 ### 5.5 Hybrid Search Pattern
 
 Combine vector similarity with metadata filtering:
 
 ```typescript
-const results = await dataSource.query(`
+const results = await dataSource.query(
+  `
   SELECT 
     d.id,
     d.title,
@@ -433,22 +465,19 @@ const results = await dataSource.query(`
     AND d.tags && $4::text[]  -- Array overlap
   ORDER BY d.embedding <=> $1::vector
   LIMIT $5
-`, [
-  embeddingVector,
-  organizationId,
-  allowedTypes,
-  requiredTags,
-  limit
-]);
+`,
+  [embeddingVector, organizationId, allowedTypes, requiredTags, limit],
+);
 ```
 
 **Index Strategy for Hybrid Search:**
+
 ```sql
 -- Separate indexes for filtering and vector search
-CREATE INDEX idx_documents_org_type_tags ON documents (organization_id, type) 
+CREATE INDEX idx_documents_org_type_tags ON documents (organization_id, type)
   WHERE tags IS NOT NULL;
 
-CREATE INDEX idx_documents_embedding_hnsw ON documents 
+CREATE INDEX idx_documents_embedding_hnsw ON documents
   USING hnsw (embedding vector_cosine_ops);
 ```
 
