@@ -177,7 +177,9 @@ export class KnowledgeExtractionService {
 
         // Validate content length
         if (sanitizedContent.length > 1000000) {
-          errors.push(`Item ${i}: Content exceeds maximum allowed length (1MB)`);
+          errors.push(
+            `Item ${i}: Content exceeds maximum allowed length (1MB)`,
+          );
           continue;
         }
 
@@ -230,9 +232,7 @@ export class KnowledgeExtractionService {
 
     // If there are errors and no valid items, throw an error with all validation messages
     if (errors.length > 0 && sanitizedItems.length === 0) {
-      throw new Error(
-        `All items failed validation:\n${errors.join('\n')}`,
-      );
+      throw new Error(`All items failed validation:\n${errors.join('\n')}`);
     }
 
     // If there are no valid items after filtering, return empty array
@@ -286,7 +286,11 @@ export class KnowledgeExtractionService {
    */
   async findByOrganization(organizationId: string): Promise<KnowledgeItem[]> {
     // Validate organizationId
-    if (!organizationId || typeof organizationId !== 'string' || organizationId.trim() === '') {
+    if (
+      !organizationId ||
+      typeof organizationId !== 'string' ||
+      organizationId.trim() === ''
+    ) {
       return [];
     }
 
@@ -314,7 +318,11 @@ export class KnowledgeExtractionService {
     source: string,
   ): Promise<KnowledgeItem[]> {
     // Validate inputs
-    if (!organizationId || typeof organizationId !== 'string' || organizationId.trim() === '') {
+    if (
+      !organizationId ||
+      typeof organizationId !== 'string' ||
+      organizationId.trim() === ''
+    ) {
       return [];
     }
 
@@ -353,7 +361,11 @@ export class KnowledgeExtractionService {
     endDate: Date,
   ): Promise<KnowledgeItem[]> {
     // Validate inputs
-    if (!organizationId || typeof organizationId !== 'string' || organizationId.trim() === '') {
+    if (
+      !organizationId ||
+      typeof organizationId !== 'string' ||
+      organizationId.trim() === ''
+    ) {
       return [];
     }
 
@@ -373,17 +385,23 @@ export class KnowledgeExtractionService {
       !(endDate instanceof Date) ||
       isNaN(endDate.getTime())
     ) {
-      throw new Error('Invalid date range: startDate and endDate must be valid Date objects');
+      throw new Error(
+        'Invalid date range: startDate and endDate must be valid Date objects',
+      );
     }
 
     // Ensure startDate is before endDate
     if (startDate > endDate) {
-      throw new Error('Invalid date range: startDate must be before or equal to endDate');
+      throw new Error(
+        'Invalid date range: startDate must be before or equal to endDate',
+      );
     }
 
     return this.knowledgeItemRepository
       .createQueryBuilder('ki')
-      .where('ki.organization_id = :organizationId', { organizationId: trimmedOrgId })
+      .where('ki.organization_id = :organizationId', {
+        organizationId: trimmedOrgId,
+      })
       .andWhere('ki.extracted_at >= :startDate', { startDate })
       .andWhere('ki.extracted_at <= :endDate', { endDate })
       .orderBy('ki.extracted_at', 'DESC')
@@ -399,11 +417,19 @@ export class KnowledgeExtractionService {
     searchTerm: string,
   ): Promise<KnowledgeItem[]> {
     // Validate inputs
-    if (!organizationId || typeof organizationId !== 'string' || organizationId.trim() === '') {
+    if (
+      !organizationId ||
+      typeof organizationId !== 'string' ||
+      organizationId.trim() === ''
+    ) {
       return [];
     }
 
-    if (!searchTerm || typeof searchTerm !== 'string' || searchTerm.trim() === '') {
+    if (
+      !searchTerm ||
+      typeof searchTerm !== 'string' ||
+      searchTerm.trim() === ''
+    ) {
       return [];
     }
 
@@ -427,7 +453,9 @@ export class KnowledgeExtractionService {
 
     return this.knowledgeItemRepository
       .createQueryBuilder('ki')
-      .where('ki.organization_id = :organizationId', { organizationId: trimmedOrgId })
+      .where('ki.organization_id = :organizationId', {
+        organizationId: trimmedOrgId,
+      })
       .andWhere('ki.content ILIKE :searchTerm', {
         searchTerm: `%${limitedSearchTerm}%`,
       })
@@ -472,7 +500,9 @@ export class KnowledgeExtractionService {
 
       const sanitizedContent = this.sanitizeContent(updateDto.content);
       if (sanitizedContent === '') {
-        throw new Error('Content contains only invalid or whitespace characters');
+        throw new Error(
+          'Content contains only invalid or whitespace characters',
+        );
       }
 
       if (sanitizedContent.length > 1000000) {
@@ -489,7 +519,9 @@ export class KnowledgeExtractionService {
 
       const sanitizedSource = updateDto.source.trim();
       if (sanitizedSource.length > 255) {
-        throw new Error('Source exceeds maximum allowed length (255 characters)');
+        throw new Error(
+          'Source exceeds maximum allowed length (255 characters)',
+        );
       }
 
       sanitizedUpdate.source = sanitizedSource;
@@ -512,7 +544,8 @@ export class KnowledgeExtractionService {
       } else {
         try {
           const sanitizedMetadata =
-            typeof updateDto.metadata === 'object' && updateDto.metadata !== null
+            typeof updateDto.metadata === 'object' &&
+            updateDto.metadata !== null
               ? updateDto.metadata
               : null;
 
@@ -567,7 +600,11 @@ export class KnowledgeExtractionService {
    */
   async deleteByOrganization(organizationId: string): Promise<number> {
     // Validate organizationId
-    if (!organizationId || typeof organizationId !== 'string' || organizationId.trim() === '') {
+    if (
+      !organizationId ||
+      typeof organizationId !== 'string' ||
+      organizationId.trim() === ''
+    ) {
       return 0;
     }
 
@@ -591,7 +628,11 @@ export class KnowledgeExtractionService {
    */
   async countByOrganization(organizationId: string): Promise<number> {
     // Validate organizationId
-    if (!organizationId || typeof organizationId !== 'string' || organizationId.trim() === '') {
+    if (
+      !organizationId ||
+      typeof organizationId !== 'string' ||
+      organizationId.trim() === ''
+    ) {
       return 0;
     }
 
@@ -623,7 +664,11 @@ export class KnowledgeExtractionService {
     limit: number;
   }> {
     // Validate organizationId
-    if (!organizationId || typeof organizationId !== 'string' || organizationId.trim() === '') {
+    if (
+      !organizationId ||
+      typeof organizationId !== 'string' ||
+      organizationId.trim() === ''
+    ) {
       return {
         items: [],
         total: 0,
@@ -675,7 +720,11 @@ export class KnowledgeExtractionService {
     limit: number = 10,
   ): Promise<KnowledgeItem[]> {
     // Validate organizationId
-    if (!organizationId || typeof organizationId !== 'string' || organizationId.trim() === '') {
+    if (
+      !organizationId ||
+      typeof organizationId !== 'string' ||
+      organizationId.trim() === ''
+    ) {
       return [];
     }
 
@@ -703,7 +752,11 @@ export class KnowledgeExtractionService {
    */
   async getUniqueSources(organizationId: string): Promise<string[]> {
     // Validate organizationId
-    if (!organizationId || typeof organizationId !== 'string' || organizationId.trim() === '') {
+    if (
+      !organizationId ||
+      typeof organizationId !== 'string' ||
+      organizationId.trim() === ''
+    ) {
       return [];
     }
 
@@ -719,9 +772,13 @@ export class KnowledgeExtractionService {
     const result = await this.knowledgeItemRepository
       .createQueryBuilder('ki')
       .select('DISTINCT ki.source', 'source')
-      .where('ki.organization_id = :organizationId', { organizationId: trimmedOrgId })
+      .where('ki.organization_id = :organizationId', {
+        organizationId: trimmedOrgId,
+      })
       .getRawMany();
 
-    return result.map((r) => r.source).filter((source) => source && source.trim() !== '');
+    return result
+      .map((r) => r.source)
+      .filter((source) => source && source.trim() !== '');
   }
 }
