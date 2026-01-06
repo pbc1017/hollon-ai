@@ -3,6 +3,105 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, QueryDeepPartialEntity } from 'typeorm';
 import { KnowledgeItem } from '../entities/knowledge-item.entity';
 
+/**
+ * Knowledge Extraction Service
+ *
+ * Core service responsible for managing knowledge items within the Hollon-AI system.
+ * This service provides the foundation for extracting, storing, and retrieving structured
+ * knowledge from various sources including conversations, documents, and agent interactions.
+ *
+ * ## Purpose and Scope
+ *
+ * The KnowledgeExtractionService acts as the primary interface for:
+ * - **Storage Management**: CRUD operations for knowledge items with optimized indexing
+ * - **Query Operations**: Flexible retrieval by organization, type, date range, and content
+ * - **Batch Processing**: Efficient bulk insert operations for high-volume extraction
+ * - **Content Search**: PostgreSQL-powered full-text search capabilities
+ *
+ * ## System Architecture Role
+ *
+ * This service operates at the data layer of the knowledge management subsystem:
+ *
+ * ```
+ * ┌─────────────────────────────────────────────────────────────┐
+ * │                    Knowledge Pipeline                        │
+ * ├─────────────────────────────────────────────────────────────┤
+ * │  1. Source Input (Conversations, Documents, Agent Actions)  │
+ * │  2. Extraction Logic (NLP, Pattern Recognition) [PLANNED]   │
+ * │  3. Knowledge Storage (This Service - Current)              │
+ * │  4. Knowledge Graph Integration [PLANNED]                   │
+ * │  5. Vector Search & Embeddings [PLANNED]                    │
+ * │  6. Retrieval & Query (Current + Enhanced Search)           │
+ * └─────────────────────────────────────────────────────────────┘
+ * ```
+ *
+ * ## Current Capabilities
+ *
+ * - **Basic CRUD**: Create, read, update, delete knowledge items
+ * - **Organization Scoping**: All operations scoped to organization for multi-tenancy
+ * - **Type Classification**: Knowledge items categorized by type (e.g., 'conversation', 'document', 'insight')
+ * - **Temporal Queries**: Date range filtering for temporal knowledge analysis
+ * - **Content Search**: ILIKE-based text search (to be enhanced with full-text search)
+ * - **Pagination**: Efficient pagination for large result sets
+ * - **Batch Operations**: Optimized bulk insert for high-volume scenarios
+ *
+ * ## Planned Integration Points
+ *
+ * ### Knowledge Graph Integration
+ * - **Node Creation**: Each knowledge item will create/update graph nodes
+ * - **Relationship Extraction**: Automatic detection of relationships between knowledge items
+ * - **Graph Queries**: Leverage graph traversal for related knowledge discovery
+ * - **Entity Linking**: Link knowledge items to entities in the knowledge graph
+ *
+ * ### Vector Search Integration
+ * - **Embedding Generation**: Automatic embedding creation for knowledge content
+ * - **Semantic Search**: Vector similarity search for conceptually related knowledge
+ * - **Hybrid Search**: Combine traditional full-text and vector search
+ * - **Clustering**: Group similar knowledge items for pattern discovery
+ *
+ * ### NLP Enhancement
+ * - **Entity Recognition**: Extract named entities from knowledge content
+ * - **Sentiment Analysis**: Classify knowledge sentiment for context awareness
+ * - **Summarization**: Generate automatic summaries for long-form knowledge
+ * - **Key Phrase Extraction**: Identify important concepts and topics
+ *
+ * ### Agent Integration
+ * - **Agent Memory**: Store agent interactions as knowledge for learning
+ * - **Context Injection**: Provide relevant knowledge to agent decision-making
+ * - **Knowledge Validation**: Agent feedback loop for knowledge quality
+ * - **Collaborative Learning**: Share knowledge across agent instances
+ *
+ * ## Data Model
+ *
+ * Knowledge items are stored with the following structure:
+ * - `id`: Unique identifier (UUID)
+ * - `organizationId`: Scoping identifier for multi-tenancy
+ * - `type`: Classification type (conversation, document, insight, etc.)
+ * - `content`: Main textual content (indexed for search)
+ * - `metadata`: Flexible JSONB storage for type-specific data
+ * - `extractedAt`: Timestamp of knowledge extraction
+ * - `createdAt/updatedAt`: Standard audit fields
+ *
+ * ## Performance Considerations
+ *
+ * - **Indexes**: Optimized indexes on organizationId, type, and extractedAt
+ * - **Batch Inserts**: Uses TypeORM's insert() for bulk operations
+ * - **Query Optimization**: Strategic use of QueryBuilder for complex queries
+ * - **Connection Pooling**: Leverages TypeORM connection management
+ *
+ * ## Future Enhancement Roadmap
+ *
+ * 1. **Phase 1 (Current)**: Basic storage and retrieval
+ * 2. **Phase 2**: Full-text search with PostgreSQL tsvector
+ * 3. **Phase 3**: Vector embeddings and semantic search
+ * 4. **Phase 4**: Knowledge graph integration
+ * 5. **Phase 5**: Advanced NLP and entity extraction
+ * 6. **Phase 6**: Real-time knowledge streaming and incremental updates
+ *
+ * @see KnowledgeItem - Entity definition and schema
+ * @see VectorSearchService - Planned semantic search integration
+ * @see KnowledgeGraphService - Planned graph integration
+ */
 @Injectable()
 export class KnowledgeExtractionService {
   constructor(
@@ -12,6 +111,30 @@ export class KnowledgeExtractionService {
 
   /**
    * Create a new knowledge item
+   *
+   * Persists a single knowledge item to the database. This method is suitable for
+   * real-time knowledge extraction scenarios where items are created individually
+   * as they are discovered or extracted.
+   *
+   * @param createDto - Partial knowledge item data to create
+   * @param createDto.organizationId - Organization identifier for multi-tenant scoping (required)
+   * @param createDto.type - Classification type (e.g., 'conversation', 'document', 'insight') (required)
+   * @param createDto.content - The main textual content of the knowledge item (required)
+   * @param createDto.metadata - Optional JSONB metadata for type-specific additional data
+   * @param createDto.extractedAt - Timestamp of extraction (defaults to current time if not provided)
+   *
+   * @returns Promise resolving to the created knowledge item with generated ID and timestamps
+   *
+   * @example
+   * ```typescript
+   * const item = await service.create({
+   *   organizationId: 'org-123',
+   *   type: 'conversation',
+   *   content: 'User discussed project requirements',
+   *   metadata: { participantIds: ['user-1', 'user-2'], topic: 'requirements' },
+   *   extractedAt: new Date()
+   * });
+   * ```
    */
   async create(createDto: Partial<KnowledgeItem>): Promise<KnowledgeItem> {
     const knowledgeItem = this.knowledgeItemRepository.create(createDto);
@@ -20,7 +143,39 @@ export class KnowledgeExtractionService {
 
   /**
    * Batch insert knowledge items
-   * Uses TypeORM's insert for optimized bulk operations
+   *
+   * Performs an optimized bulk insert operation for multiple knowledge items.
+   * This method uses TypeORM's insert() for better performance compared to
+   * individual save operations, making it ideal for batch processing scenarios
+   * such as bulk document ingestion or historical data migration.
+   *
+   * @param items - Array of partial knowledge item data to insert
+   *
+   * @returns Promise resolving to array of created knowledge items with generated IDs
+   *          Returns empty array if input array is empty
+   *
+   * @performance
+   * - Uses single INSERT statement with multiple VALUES clauses
+   * - Significantly faster than individual inserts for large batches
+   * - Recommended for batches of 100+ items
+   *
+   * @example
+   * ```typescript
+   * const items = await service.batchInsert([
+   *   {
+   *     organizationId: 'org-123',
+   *     type: 'document',
+   *     content: 'Document 1 content',
+   *     extractedAt: new Date()
+   *   },
+   *   {
+   *     organizationId: 'org-123',
+   *     type: 'document',
+   *     content: 'Document 2 content',
+   *     extractedAt: new Date()
+   *   }
+   * ]);
+   * ```
    */
   async batchInsert(items: Partial<KnowledgeItem>[]): Promise<KnowledgeItem[]> {
     if (items.length === 0) {
@@ -41,6 +196,20 @@ export class KnowledgeExtractionService {
 
   /**
    * Find a knowledge item by ID
+   *
+   * Retrieves a single knowledge item by its unique identifier.
+   *
+   * @param id - UUID of the knowledge item to retrieve
+   *
+   * @returns Promise resolving to the knowledge item if found, null otherwise
+   *
+   * @example
+   * ```typescript
+   * const item = await service.findById('550e8400-e29b-41d4-a716-446655440000');
+   * if (item) {
+   *   console.log(item.content);
+   * }
+   * ```
    */
   async findById(id: string): Promise<KnowledgeItem | null> {
     return this.knowledgeItemRepository.findOne({ where: { id } });
@@ -48,7 +217,22 @@ export class KnowledgeExtractionService {
 
   /**
    * Find all knowledge items for an organization
-   * Uses index on organizationId for optimized query
+   *
+   * Retrieves all knowledge items belonging to a specific organization,
+   * ordered by extraction date (newest first). This method leverages a
+   * database index on organizationId for optimal performance.
+   *
+   * @param organizationId - UUID of the organization
+   *
+   * @returns Promise resolving to array of knowledge items, ordered by extractedAt DESC
+   *
+   * @performance Uses index on organizationId for optimized query
+   *
+   * @example
+   * ```typescript
+   * const orgKnowledge = await service.findByOrganization('org-123');
+   * console.log(`Found ${orgKnowledge.length} knowledge items`);
+   * ```
    */
   async findByOrganization(organizationId: string): Promise<KnowledgeItem[]> {
     return this.knowledgeItemRepository.find({
@@ -59,7 +243,21 @@ export class KnowledgeExtractionService {
 
   /**
    * Find knowledge items by type
-   * Uses index on type for optimized query
+   *
+   * Retrieves all knowledge items of a specific type within an organization.
+   * Useful for filtering knowledge by classification (e.g., conversations vs documents).
+   *
+   * @param organizationId - UUID of the organization
+   * @param type - Knowledge type (e.g., 'conversation', 'document', 'insight', 'task')
+   *
+   * @returns Promise resolving to array of knowledge items, ordered by extractedAt DESC
+   *
+   * @performance Uses composite index on (organizationId, type) for optimized query
+   *
+   * @example
+   * ```typescript
+   * const conversations = await service.findByType('org-123', 'conversation');
+   * ```
    */
   async findByType(
     organizationId: string,
@@ -73,7 +271,27 @@ export class KnowledgeExtractionService {
 
   /**
    * Find knowledge items extracted within a date range
-   * Uses index on extractedAt for optimized query
+   *
+   * Retrieves knowledge items extracted within a specified time window.
+   * Useful for temporal analysis, reporting, and time-based filtering.
+   *
+   * @param organizationId - UUID of the organization
+   * @param startDate - Start of date range (inclusive)
+   * @param endDate - End of date range (inclusive)
+   *
+   * @returns Promise resolving to array of knowledge items within the date range,
+   *          ordered by extractedAt DESC
+   *
+   * @performance Uses index on extractedAt for optimized query
+   *
+   * @example
+   * ```typescript
+   * const lastWeek = await service.findByDateRange(
+   *   'org-123',
+   *   new Date('2024-01-01'),
+   *   new Date('2024-01-07')
+   * );
+   * ```
    */
   async findByDateRange(
     organizationId: string,
@@ -91,7 +309,25 @@ export class KnowledgeExtractionService {
 
   /**
    * Search knowledge items by content
-   * Uses PostgreSQL full-text search for optimized text matching
+   *
+   * Performs case-insensitive text search across knowledge item content.
+   * Currently uses ILIKE for pattern matching; will be enhanced with
+   * PostgreSQL full-text search (tsvector) for better performance.
+   *
+   * @param organizationId - UUID of the organization
+   * @param searchTerm - Text to search for within knowledge content
+   *
+   * @returns Promise resolving to array of matching knowledge items,
+   *          ordered by extractedAt DESC
+   *
+   * @performance
+   * - Current: ILIKE with wildcards (suitable for small to medium datasets)
+   * - Planned: Full-text search with tsvector index for scalability
+   *
+   * @example
+   * ```typescript
+   * const results = await service.searchByContent('org-123', 'machine learning');
+   * ```
    */
   async searchByContent(
     organizationId: string,
@@ -109,6 +345,22 @@ export class KnowledgeExtractionService {
 
   /**
    * Update a knowledge item
+   *
+   * Updates an existing knowledge item with new data. Only provided fields
+   * will be updated; unprovided fields remain unchanged.
+   *
+   * @param id - UUID of the knowledge item to update
+   * @param updateDto - Partial knowledge item data containing fields to update
+   *
+   * @returns Promise resolving to the updated knowledge item, or null if not found
+   *
+   * @example
+   * ```typescript
+   * const updated = await service.update('item-id', {
+   *   content: 'Updated content',
+   *   metadata: { ...existingMetadata, status: 'reviewed' }
+   * });
+   * ```
    */
   async update(
     id: string,
@@ -123,6 +375,20 @@ export class KnowledgeExtractionService {
 
   /**
    * Delete a knowledge item
+   *
+   * Permanently removes a knowledge item from the database.
+   *
+   * @param id - UUID of the knowledge item to delete
+   *
+   * @returns Promise resolving to true if item was deleted, false if not found
+   *
+   * @example
+   * ```typescript
+   * const deleted = await service.delete('item-id');
+   * if (deleted) {
+   *   console.log('Item successfully deleted');
+   * }
+   * ```
    */
   async delete(id: string): Promise<boolean> {
     const result = await this.knowledgeItemRepository.delete(id);
@@ -131,6 +397,19 @@ export class KnowledgeExtractionService {
 
   /**
    * Delete all knowledge items for an organization
+   *
+   * Permanently removes all knowledge items belonging to an organization.
+   * Use with caution - this operation cannot be undone.
+   *
+   * @param organizationId - UUID of the organization
+   *
+   * @returns Promise resolving to the number of items deleted
+   *
+   * @example
+   * ```typescript
+   * const count = await service.deleteByOrganization('org-123');
+   * console.log(`Deleted ${count} knowledge items`);
+   * ```
    */
   async deleteByOrganization(organizationId: string): Promise<number> {
     const result = await this.knowledgeItemRepository.delete({
@@ -141,6 +420,19 @@ export class KnowledgeExtractionService {
 
   /**
    * Count knowledge items for an organization
+   *
+   * Returns the total number of knowledge items for an organization.
+   * Useful for analytics, quotas, and pagination calculations.
+   *
+   * @param organizationId - UUID of the organization
+   *
+   * @returns Promise resolving to the count of knowledge items
+   *
+   * @example
+   * ```typescript
+   * const total = await service.countByOrganization('org-123');
+   * console.log(`Organization has ${total} knowledge items`);
+   * ```
    */
   async countByOrganization(organizationId: string): Promise<number> {
     return this.knowledgeItemRepository.count({
@@ -150,6 +442,26 @@ export class KnowledgeExtractionService {
 
   /**
    * Find knowledge items with pagination
+   *
+   * Retrieves a paginated subset of knowledge items for an organization.
+   * Optimized for displaying large result sets in UI tables or API responses.
+   *
+   * @param organizationId - UUID of the organization
+   * @param page - Page number (1-indexed, defaults to 1)
+   * @param limit - Number of items per page (defaults to 10)
+   *
+   * @returns Promise resolving to pagination result object containing:
+   *          - items: Array of knowledge items for the requested page
+   *          - total: Total count of items across all pages
+   *          - page: Current page number
+   *          - limit: Items per page
+   *
+   * @example
+   * ```typescript
+   * const result = await service.findWithPagination('org-123', 2, 20);
+   * console.log(`Page ${result.page} of ${Math.ceil(result.total / result.limit)}`);
+   * console.log(`Showing ${result.items.length} items`);
+   * ```
    */
   async findWithPagination(
     organizationId: string,
@@ -180,6 +492,21 @@ export class KnowledgeExtractionService {
 
   /**
    * Find the most recent knowledge items
+   *
+   * Retrieves the N most recently extracted knowledge items for an organization.
+   * Useful for dashboards, activity feeds, and "recent activity" displays.
+   *
+   * @param organizationId - UUID of the organization
+   * @param limit - Maximum number of items to return (defaults to 10)
+   *
+   * @returns Promise resolving to array of most recent knowledge items,
+   *          ordered by extractedAt DESC
+   *
+   * @example
+   * ```typescript
+   * const recent = await service.findRecent('org-123', 5);
+   * console.log('5 most recent knowledge items:', recent);
+   * ```
    */
   async findRecent(
     organizationId: string,
@@ -194,6 +521,19 @@ export class KnowledgeExtractionService {
 
   /**
    * Get unique types for an organization
+   *
+   * Retrieves a list of all distinct knowledge types that exist for an organization.
+   * Useful for building filter dropdowns, analytics, and understanding the knowledge taxonomy.
+   *
+   * @param organizationId - UUID of the organization
+   *
+   * @returns Promise resolving to array of unique type strings
+   *
+   * @example
+   * ```typescript
+   * const types = await service.getUniqueTypes('org-123');
+   * // Result: ['conversation', 'document', 'insight', 'task']
+   * ```
    */
   async getUniqueTypes(organizationId: string): Promise<string[]> {
     const result = await this.knowledgeItemRepository
@@ -204,4 +544,344 @@ export class KnowledgeExtractionService {
 
     return result.map((r) => r.type);
   }
+
+  // ============================================================================
+  // PLANNED FUTURE METHODS - Not yet implemented
+  // ============================================================================
+  //
+  // The following method signatures define the planned evolution of this service.
+  // These will be implemented in phases as the knowledge extraction capabilities
+  // are enhanced with NLP, vector search, and knowledge graph integration.
+
+  /**
+   * Extract knowledge from text content using NLP
+   *
+   * [PLANNED - Phase 5] Analyzes text content to automatically extract structured
+   * knowledge including entities, relationships, key phrases, and sentiment.
+   *
+   * @param organizationId - UUID of the organization
+   * @param content - Raw text content to analyze
+   * @param type - Knowledge type to assign to extracted items
+   * @param options - Optional extraction configuration
+   * @param options.extractEntities - Enable named entity recognition (default: true)
+   * @param options.extractRelationships - Enable relationship extraction (default: true)
+   * @param options.extractKeyPhrases - Enable key phrase extraction (default: true)
+   * @param options.analyzeSentiment - Enable sentiment analysis (default: false)
+   * @param options.generateSummary - Generate automatic summary (default: false)
+   *
+   * @returns Promise resolving to array of extracted knowledge items
+   *
+   * @integration
+   * - NLP Service: Leverages NLP engine for entity recognition and analysis
+   * - Knowledge Graph: Automatically creates graph nodes for extracted entities
+   * - Vector Search: Generates embeddings for semantic search
+   *
+   * @example
+   * ```typescript
+   * const extracted = await service.extractFromText(
+   *   'org-123',
+   *   'The machine learning model achieved 95% accuracy on the test dataset.',
+   *   'insight',
+   *   { extractEntities: true, analyzeSentiment: true }
+   * );
+   * // Creates knowledge items for: ML model, accuracy metric, test dataset
+   * ```
+   */
+  // async extractFromText(
+  //   organizationId: string,
+  //   content: string,
+  //   type: string,
+  //   options?: {
+  //     extractEntities?: boolean;
+  //     extractRelationships?: boolean;
+  //     extractKeyPhrases?: boolean;
+  //     analyzeSentiment?: boolean;
+  //     generateSummary?: boolean;
+  //   },
+  // ): Promise<KnowledgeItem[]> {
+  //   throw new Error('Not yet implemented - Planned for Phase 5');
+  // }
+
+  /**
+   * Find semantically similar knowledge items using vector search
+   *
+   * [PLANNED - Phase 3] Performs semantic similarity search using vector embeddings
+   * to find conceptually related knowledge items, even if they don't share exact keywords.
+   *
+   * @param organizationId - UUID of the organization
+   * @param query - Search query text or reference knowledge item ID
+   * @param options - Search configuration options
+   * @param options.limit - Maximum number of results to return (default: 10)
+   * @param options.threshold - Minimum similarity score threshold 0-1 (default: 0.7)
+   * @param options.types - Optional array of knowledge types to filter by
+   * @param options.includeScores - Include similarity scores in results (default: true)
+   *
+   * @returns Promise resolving to array of similar knowledge items with similarity scores
+   *
+   * @integration
+   * - Vector Search Service: Uses pgvector for similarity queries
+   * - Embedding Service: Generates query embeddings on-the-fly
+   *
+   * @example
+   * ```typescript
+   * const similar = await service.findSimilar(
+   *   'org-123',
+   *   'machine learning deployment strategies',
+   *   { limit: 5, threshold: 0.75 }
+   * );
+   * // Returns knowledge items about ML ops, model deployment, etc.
+   * ```
+   */
+  // async findSimilar(
+  //   organizationId: string,
+  //   query: string,
+  //   options?: {
+  //     limit?: number;
+  //     threshold?: number;
+  //     types?: string[];
+  //     includeScores?: boolean;
+  //   },
+  // ): Promise<Array<KnowledgeItem & { similarityScore?: number }>> {
+  //   throw new Error('Not yet implemented - Planned for Phase 3');
+  // }
+
+  /**
+   * Find related knowledge items using knowledge graph traversal
+   *
+   * [PLANNED - Phase 4] Discovers knowledge items connected through the knowledge graph,
+   * following entity relationships, citations, and semantic links.
+   *
+   * @param knowledgeItemId - UUID of the starting knowledge item
+   * @param options - Traversal configuration options
+   * @param options.maxDepth - Maximum relationship depth to traverse (default: 2)
+   * @param options.relationshipTypes - Specific relationship types to follow (optional)
+   * @param options.limit - Maximum number of related items to return (default: 20)
+   * @param options.includeStrength - Include relationship strength scores (default: false)
+   *
+   * @returns Promise resolving to array of related knowledge items with relationship metadata
+   *
+   * @integration
+   * - Knowledge Graph Service: Uses graph traversal algorithms
+   * - Caches frequently accessed relationship paths
+   *
+   * @example
+   * ```typescript
+   * const related = await service.findRelated(
+   *   'knowledge-item-123',
+   *   { maxDepth: 3, relationshipTypes: ['references', 'similar_to'] }
+   * );
+   * // Returns items connected through graph relationships
+   * ```
+   */
+  // async findRelated(
+  //   knowledgeItemId: string,
+  //   options?: {
+  //     maxDepth?: number;
+  //     relationshipTypes?: string[];
+  //     limit?: number;
+  //     includeStrength?: boolean;
+  //   },
+  // ): Promise<
+  //   Array<
+  //     KnowledgeItem & {
+  //       relationshipPath?: string[];
+  //       relationshipStrength?: number;
+  //     }
+  //   >
+  // > {
+  //   throw new Error('Not yet implemented - Planned for Phase 4');
+  // }
+
+  /**
+   * Enrich knowledge item with embeddings and graph relationships
+   *
+   * [PLANNED - Phase 4] Post-processes an existing knowledge item to add vector embeddings
+   * and create knowledge graph relationships. Can be used for retroactive enrichment
+   * of legacy data or re-processing after NLP model updates.
+   *
+   * @param knowledgeItemId - UUID of the knowledge item to enrich
+   * @param options - Enrichment configuration options
+   * @param options.generateEmbedding - Generate vector embedding (default: true)
+   * @param options.createGraphNodes - Create knowledge graph nodes (default: true)
+   * @param options.extractEntities - Re-extract entities with latest NLP (default: false)
+   * @param options.linkRelationships - Automatically link to related items (default: true)
+   *
+   * @returns Promise resolving to the enriched knowledge item
+   *
+   * @integration
+   * - Vector Search Service: Generates and stores embeddings
+   * - Knowledge Graph Service: Creates nodes and edges
+   * - NLP Service: Optional entity re-extraction
+   *
+   * @example
+   * ```typescript
+   * const enriched = await service.enrichKnowledgeItem(
+   *   'knowledge-item-123',
+   *   { generateEmbedding: true, createGraphNodes: true }
+   * );
+   * ```
+   */
+  // async enrichKnowledgeItem(
+  //   knowledgeItemId: string,
+  //   options?: {
+  //     generateEmbedding?: boolean;
+  //     createGraphNodes?: boolean;
+  //     extractEntities?: boolean;
+  //     linkRelationships?: boolean;
+  //   },
+  // ): Promise<KnowledgeItem> {
+  //   throw new Error('Not yet implemented - Planned for Phase 4');
+  // }
+
+  /**
+   * Perform hybrid search combining full-text and vector similarity
+   *
+   * [PLANNED - Phase 3] Executes a hybrid search that combines traditional keyword-based
+   * full-text search with semantic vector similarity, using configurable weights to
+   * balance lexical and semantic matching.
+   *
+   * @param organizationId - UUID of the organization
+   * @param query - Search query text
+   * @param options - Hybrid search configuration
+   * @param options.limit - Maximum number of results (default: 10)
+   * @param options.semanticWeight - Weight for vector similarity 0-1 (default: 0.5)
+   * @param options.lexicalWeight - Weight for full-text search 0-1 (default: 0.5)
+   * @param options.types - Optional knowledge types filter
+   * @param options.dateRange - Optional date range filter
+   *
+   * @returns Promise resolving to ranked search results with combined scores
+   *
+   * @performance
+   * - Uses parallel execution of both search strategies
+   * - Applies reciprocal rank fusion for result merging
+   * - Leverages both text and vector indexes
+   *
+   * @example
+   * ```typescript
+   * const results = await service.hybridSearch(
+   *   'org-123',
+   *   'kubernetes deployment patterns',
+   *   { semanticWeight: 0.6, lexicalWeight: 0.4, limit: 15 }
+   * );
+   * ```
+   */
+  // async hybridSearch(
+  //   organizationId: string,
+  //   query: string,
+  //   options?: {
+  //     limit?: number;
+  //     semanticWeight?: number;
+  //     lexicalWeight?: number;
+  //     types?: string[];
+  //     dateRange?: { start: Date; end: Date };
+  //   },
+  // ): Promise<
+  //   Array<
+  //     KnowledgeItem & {
+  //       lexicalScore: number;
+  //       semanticScore: number;
+  //       combinedScore: number;
+  //     }
+  //   >
+  // > {
+  //   throw new Error('Not yet implemented - Planned for Phase 3');
+  // }
+
+  /**
+   * Cluster knowledge items by semantic similarity
+   *
+   * [PLANNED - Phase 5] Groups knowledge items into clusters based on semantic similarity,
+   * useful for discovering themes, organizing knowledge, and identifying patterns.
+   *
+   * @param organizationId - UUID of the organization
+   * @param options - Clustering configuration
+   * @param options.algorithm - Clustering algorithm ('kmeans' | 'dbscan' | 'hierarchical')
+   * @param options.numClusters - Number of clusters for k-means (required for kmeans)
+   * @param options.minClusterSize - Minimum cluster size for DBSCAN (default: 5)
+   * @param options.types - Optional knowledge types to cluster
+   * @param options.generateLabels - Auto-generate cluster labels (default: true)
+   *
+   * @returns Promise resolving to cluster assignments with labels
+   *
+   * @integration
+   * - Vector Search Service: Uses embeddings for clustering
+   * - NLP Service: Generates cluster labels from content analysis
+   *
+   * @example
+   * ```typescript
+   * const clusters = await service.clusterKnowledge(
+   *   'org-123',
+   *   { algorithm: 'kmeans', numClusters: 5, generateLabels: true }
+   * );
+   * // Returns: [{ label: 'ML Deployment', items: [...] }, ...]
+   * ```
+   */
+  // async clusterKnowledge(
+  //   organizationId: string,
+  //   options?: {
+  //     algorithm?: 'kmeans' | 'dbscan' | 'hierarchical';
+  //     numClusters?: number;
+  //     minClusterSize?: number;
+  //     types?: string[];
+  //     generateLabels?: boolean;
+  //   },
+  // ): Promise<
+  //   Array<{
+  //     clusterId: number;
+  //     label?: string;
+  //     items: KnowledgeItem[];
+  //     centroid?: number[];
+  //   }>
+  // > {
+  //   throw new Error('Not yet implemented - Planned for Phase 5');
+  // }
+
+  /**
+   * Aggregate knowledge insights for an organization
+   *
+   * [PLANNED - Phase 5] Generates aggregate analytics and insights about an organization's
+   * knowledge base, including trends, top topics, sentiment distribution, and growth metrics.
+   *
+   * @param organizationId - UUID of the organization
+   * @param options - Aggregation options
+   * @param options.dateRange - Optional date range for analysis
+   * @param options.includeTopics - Include topic distribution (default: true)
+   * @param options.includeSentiment - Include sentiment analysis (default: true)
+   * @param options.includeGrowth - Include growth metrics (default: true)
+   * @param options.topN - Number of top items to include in rankings (default: 10)
+   *
+   * @returns Promise resolving to comprehensive knowledge analytics
+   *
+   * @example
+   * ```typescript
+   * const insights = await service.aggregateInsights('org-123', {
+   *   dateRange: { start: new Date('2024-01-01'), end: new Date() },
+   *   topN: 5
+   * });
+   * // Returns: { totalItems, topTopics, sentimentDistribution, growthRate, ... }
+   * ```
+   */
+  // async aggregateInsights(
+  //   organizationId: string,
+  //   options?: {
+  //     dateRange?: { start: Date; end: Date };
+  //     includeTopics?: boolean;
+  //     includeSentiment?: boolean;
+  //     includeGrowth?: boolean;
+  //     topN?: number;
+  //   },
+  // ): Promise<{
+  //   totalItems: number;
+  //   typeDistribution: Record<string, number>;
+  //   topTopics?: Array<{ topic: string; count: number; score: number }>;
+  //   sentimentDistribution?: Record<'positive' | 'neutral' | 'negative', number>;
+  //   growthMetrics?: {
+  //     dailyAverage: number;
+  //     weeklyAverage: number;
+  //     monthlyAverage: number;
+  //   };
+  //   lastUpdated: Date;
+  // }> {
+  //   throw new Error('Not yet implemented - Planned for Phase 5');
+  // }
 }
