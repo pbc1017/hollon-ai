@@ -9,12 +9,14 @@ This document provides a comprehensive review of the pgvector implementation in 
 ### Infrastructure Setup
 
 **Docker Configuration** (`docker/docker-compose.yml:1-2`)
+
 - Uses official `pgvector/pgvector:pg16` Docker image
 - Provides PostgreSQL 16 with pgvector extension pre-installed
 - Container name: `hollon-postgres`
 - Includes health checks for database availability
 
 **Database Extension**
+
 - Extension name: `vector`
 - Enabled in initial migration: `1733295000000-InitialSchema.ts:6`
 - SQL: `CREATE EXTENSION IF NOT EXISTS vector`
@@ -26,22 +28,27 @@ This document provides a comprehensive review of the pgvector implementation in 
 **Key Components**:
 
 1. **Extension Initialization** (Line 6)
+
    ```typescript
    await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
    ```
 
 2. **Vector Column in Documents Table** (Line 180)
+
    ```sql
    "embedding" vector(1536)
    ```
+
    - Dimension: 1536 (standard for OpenAI embeddings)
    - Nullable: Yes (implicit)
    - Used for RAG (Retrieval-Augmented Generation)
 
 3. **Migration Rollback** (Line 295)
+
    ```typescript
    await queryRunner.query(`DROP EXTENSION IF EXISTS vector`);
    ```
+
    - Properly handles extension cleanup in down migration
 
 ### Entity Configuration
@@ -56,6 +63,7 @@ embedding: string;
 ```
 
 **Important Note**:
+
 - Entity uses `type: 'text'` as TypeORM doesn't natively support vector type
 - Actual database column type is `vector(1536)` set by migration
 - This is a known workaround for custom PostgreSQL types
@@ -63,11 +71,13 @@ embedding: string;
 ### TypeORM Configuration
 
 **DataSource Configuration** (`apps/server/src/config/typeorm.config.ts`)
+
 - Standard PostgreSQL connection
 - Uses schema-based isolation
 - Includes search_path configuration for pgvector extension access
 
 **Database Configuration** (`apps/server/src/config/database.config.ts`)
+
 - NestJS TypeORM module options
 - Migration-based schema management (`synchronize: false`)
 - Auto-runs migrations in test mode
@@ -81,6 +91,7 @@ embedding: string;
 **Status**: Stub implementation (TODO markers)
 
 **Planned Methods**:
+
 - `searchSimilar()` - Vector similarity search with filtering
 - `generateEmbedding()` - Text to embedding conversion
 - `indexItem()` - Add item to vector index
@@ -88,6 +99,7 @@ embedding: string;
 - `updateIndex()` - Update existing index entry
 
 **Features**:
+
 - Organization-scoped search
 - Project and team filtering
 - Configurable limit and similarity threshold
@@ -99,6 +111,7 @@ embedding: string;
 **Status**: Stub implementation (TODO markers)
 
 **Planned Methods**:
+
 - `searchSimilarVectors()` - Basic vector search
 - Document indexing capabilities
 
@@ -107,6 +120,7 @@ embedding: string;
 **File**: `apps/server/src/modules/knowledge-extraction/entities/knowledge-item.entity.ts`
 
 **Current Status**: No embedding column yet
+
 - Migration exists: `1766556710000-CreateKnowledgeItemsTable.ts`
 - Entity does not include vector embedding field
 - May need future migration to add embedding column
@@ -114,12 +128,14 @@ embedding: string;
 ### Integration Points
 
 **Seed Data** (`apps/server/src/database/seed.ts`)
+
 - References pgvector in role descriptions (Lines 222, 253, 260, 273, 822)
 - Data Engineer role includes pgvector capability
 - AI Specialist role includes vector-search capability
 - Test responsibilities mention Vector search accuracy (85%+ target)
 
 **Current Memory Retrieval** (`apps/server/src/modules/orchestration/services/prompt-composer.service.ts:190`)
+
 - Uses keyword-based ILIKE search
 - Designed to be upgraded to vector search
 - Comment indicates future enhancement path
@@ -133,6 +149,7 @@ embedding: string;
 Create: `docs/setup/pgvector-setup.md`
 
 **Contents**:
+
 - Prerequisites (PostgreSQL version, Docker setup)
 - Docker Compose configuration explanation
 - Extension verification steps
@@ -146,6 +163,7 @@ Create: `docs/setup/pgvector-setup.md`
 Create: `docs/database/pgvector-migration.md`
 
 **Contents**:
+
 - Initial schema migration explanation
 - Vector column creation syntax
 - Dimension sizing considerations (why 1536?)
@@ -161,6 +179,7 @@ Create: `docs/database/pgvector-migration.md`
 Create: `docs/features/vector-search.md`
 
 **Contents**:
+
 - Architecture overview
 - Service layer structure
 - Embedding generation strategies
@@ -177,6 +196,7 @@ Create: `docs/features/vector-search.md`
 Create: `docs/api/vector-search-api.md`
 
 **Contents**:
+
 - Endpoint specifications
 - Request/response schemas
 - Authentication requirements
@@ -191,6 +211,7 @@ Create: `docs/api/vector-search-api.md`
 Update: `docs/database/schema.md` or create new
 
 **Contents**:
+
 - Document entity structure
 - KnowledgeItem entity structure
 - Vector column specifications
@@ -204,6 +225,7 @@ Update: `docs/database/schema.md` or create new
 Create: `docs/development/implementing-vector-search.md`
 
 **Contents**:
+
 - Step-by-step implementation guide
 - Testing strategies
 - Mock data generation
@@ -217,6 +239,7 @@ Create: `docs/development/implementing-vector-search.md`
 Create: `docs/operations/pgvector-maintenance.md`
 
 **Contents**:
+
 - Monitoring vector index size
 - Performance tuning
 - Backup considerations
@@ -302,8 +325,8 @@ const results = await vectorSearchService.searchSimilar(
   {
     limit: 10,
     threshold: 0.7,
-    projectId: 'project-uuid'
-  }
+    projectId: 'project-uuid',
+  },
 );
 ```
 
@@ -430,12 +453,14 @@ LIMIT 10;
 ## Conclusion
 
 The pgvector infrastructure is properly set up with:
+
 - Docker container using pgvector/pgvector:pg16
 - Database extension enabled in migrations
 - Vector column created in documents table
 - Service stubs ready for implementation
 
 Main documentation gaps are:
+
 - Setup and configuration guides
 - Implementation examples
 - API documentation
