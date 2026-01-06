@@ -14,7 +14,7 @@ import { DecompositionStrategy } from '../dto/decomposition-options.dto';
 import { TaskService } from '../../task/task.service';
 import { Hollon } from '../../hollon/entities/hollon.entity';
 import { Team } from '../../team/entities/team.entity';
-import { BrainProviderService } from '../../brain-provider/services/brain-provider.service';
+import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 
 const execAsync = promisify(exec);
 
