@@ -1,9 +1,6 @@
 import { DataSource } from 'typeorm';
 import { initializeTestDatabase, closeTestDatabase } from './test-db-config';
-import {
-  setupTestSchema,
-  teardownTestSchema,
-} from './setup/test-database';
+import { setupTestSchema, teardownTestSchema } from './setup/test-database';
 import {
   verifyMigrationRollback,
   verifyCompleteRollbackCycle,
@@ -76,7 +73,9 @@ describe('Migration Rollback Verification', () => {
           `Errors: ${result.errors.join('; ')}`,
         ].join('\n');
 
-        throw new Error(`Migration rollback verification failed:\n${errorDetails}`);
+        throw new Error(
+          `Migration rollback verification failed:\n${errorDetails}`,
+        );
       }
 
       expect(result.success).toBe(true);
@@ -109,11 +108,14 @@ describe('Migration Rollback Verification', () => {
       // Insert test data into an existing table
       const testOrgId = '00000000-0000-0000-0000-000000000001';
 
-      await dataSource.query(`
+      await dataSource.query(
+        `
         INSERT INTO organizations (id, name, slug, created_at, updated_at)
         VALUES ($1, 'Test Org', 'test-org', NOW(), NOW())
         ON CONFLICT (id) DO NOTHING
-      `, [testOrgId]);
+      `,
+        [testOrgId],
+      );
 
       // Verify data exists
       const beforeRollback = await dataSource.query(
@@ -141,10 +143,9 @@ describe('Migration Rollback Verification', () => {
       }
 
       // Cleanup
-      await dataSource.query(
-        'DELETE FROM organizations WHERE id = $1',
-        [testOrgId],
-      );
+      await dataSource.query('DELETE FROM organizations WHERE id = $1', [
+        testOrgId,
+      ]);
     });
 
     it('should not leave database in inconsistent state after failed rollback', async () => {
@@ -233,7 +234,9 @@ describe('Migration Rollback Verification', () => {
             );
           }
         } catch {
-          console.log('Could not test migration order: no migrations to rollback');
+          console.log(
+            'Could not test migration order: no migrations to rollback',
+          );
         }
       }
     });

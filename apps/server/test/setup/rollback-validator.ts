@@ -401,8 +401,7 @@ export async function verifyCompleteRollbackCycle(
 
     return { success, errors, summary };
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     errors.push(`Unexpected error: ${errorMessage}`);
 
     return {

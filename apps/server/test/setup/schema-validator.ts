@@ -208,9 +208,7 @@ export async function validateEntitySchema(
 
   // Get database columns
   const dbColumns = await getDatabaseColumns(dataSource, schema, tableName);
-  const dbColumnMap = new Map(
-    dbColumns.map((col) => [col.columnName, col]),
-  );
+  const dbColumnMap = new Map(dbColumns.map((col) => [col.columnName, col]));
 
   // Check entity columns
   const entityColumns = entityMetadata.columns;
@@ -371,9 +369,7 @@ export async function validateAllEntities(
 /**
  * Generate validation summary
  */
-export function generateValidationSummary(
-  results: EntityValidationResult[],
-): {
+export function generateValidationSummary(results: EntityValidationResult[]): {
   totalEntities: number;
   validEntities: number;
   invalidEntities: number;

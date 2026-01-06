@@ -134,8 +134,7 @@ describe('Schema Validation', () => {
     });
 
     it('should validate VectorEmbedding entity schema', async () => {
-      const entityMetadata =
-        dataSource.getMetadata(VectorEmbedding);
+      const entityMetadata = dataSource.getMetadata(VectorEmbedding);
 
       const result = await validateEntitySchema(dataSource, entityMetadata);
 
@@ -239,10 +238,16 @@ describe('Schema Validation', () => {
       );
 
       const typeMap = new Map(
-        columnTypes.map((row: { column_name: string; data_type: string; is_nullable: string }) => [
-          row.column_name,
-          { dataType: row.data_type, isNullable: row.is_nullable === 'YES' },
-        ]),
+        columnTypes.map(
+          (row: {
+            column_name: string;
+            data_type: string;
+            is_nullable: string;
+          }) => [
+            row.column_name,
+            { dataType: row.data_type, isNullable: row.is_nullable === 'YES' },
+          ],
+        ),
       );
 
       // Verify key column types
@@ -331,10 +336,19 @@ describe('Schema Validation', () => {
       );
 
       const fkMap = new Map(
-        foreignKeys.map((row: { column_name: string; foreign_table_name: string; delete_rule: string }) => [
-          row.column_name,
-          { foreignTable: row.foreign_table_name, deleteRule: row.delete_rule },
-        ]),
+        foreignKeys.map(
+          (row: {
+            column_name: string;
+            foreign_table_name: string;
+            delete_rule: string;
+          }) => [
+            row.column_name,
+            {
+              foreignTable: row.foreign_table_name,
+              deleteRule: row.delete_rule,
+            },
+          ],
+        ),
       );
 
       // Verify foreign keys exist
