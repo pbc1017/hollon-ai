@@ -68,16 +68,19 @@ services:
 ### Initial Setup
 
 1. **Start PostgreSQL**:
+
    ```bash
    pnpm docker:up
    ```
 
 2. **Create Environment File**:
+
    ```bash
    cp .env.example .env.local
    ```
 
 3. **Configure Database Credentials** in `.env.local`:
+
    ```env
    DB_HOST=localhost
    DB_PORT=5432
@@ -88,6 +91,7 @@ services:
    ```
 
 4. **Verify Configuration**:
+
    ```bash
    pnpm --filter @hollon-ai/server db:verify
    ```
@@ -152,12 +156,13 @@ Located in `apps/server/test/setup/test-database.ts`:
 Returns TypeORM configuration for test environment with automatic schema isolation.
 
 **Usage**:
+
 ```typescript
 import { getTestDatabaseConfig } from '../setup/test-database';
 
 TypeOrmModule.forRootAsync({
   imports: [ConfigModule],
-  useFactory: (configService: ConfigService) => 
+  useFactory: (configService: ConfigService) =>
     getTestDatabaseConfig(configService),
   inject: [ConfigService],
 });
@@ -168,6 +173,7 @@ TypeOrmModule.forRootAsync({
 Creates test schema and runs all migrations.
 
 **Usage**:
+
 ```typescript
 beforeAll(async () => {
   const dataSource = module.get(DataSource);
@@ -180,6 +186,7 @@ beforeAll(async () => {
 Truncates all tables in the test schema (fast cleanup between tests).
 
 **Usage**:
+
 ```typescript
 afterEach(async () => {
   const dataSource = module.get(DataSource);
@@ -192,6 +199,7 @@ afterEach(async () => {
 Completely drops the test schema (full cleanup after tests).
 
 **Usage**:
+
 ```typescript
 afterAll(async () => {
   const dataSource = module.get(DataSource);
@@ -205,6 +213,7 @@ afterAll(async () => {
 Verifies database connection is working.
 
 **Usage**:
+
 ```typescript
 beforeAll(async () => {
   const dataSource = module.get(DataSource);
@@ -265,7 +274,7 @@ describe('Migration Rollback Testing', () => {
     }).compile();
 
     dataSource = module.get(DataSource);
-    
+
     // Setup test schema with migrations
     await setupTestSchema(dataSource);
   });
@@ -398,7 +407,7 @@ Database Configuration Verification
 
 ✓ Schema Verification
   Schema 'hollon' exists
-  
+
 ✓ PostgreSQL Extensions
   All required PostgreSQL extensions are installed
   Details: {
@@ -430,6 +439,7 @@ Your database configuration is ready for use!
 **Problem**: "Database connection failed"
 
 **Solutions**:
+
 1. Ensure PostgreSQL is running: `pnpm docker:up`
 2. Check credentials in `.env.local`
 3. Verify port 5432 is not in use: `lsof -i :5432`
@@ -440,6 +450,7 @@ Your database configuration is ready for use!
 **Problem**: "Schema 'hollon_test_worker_1' does not exist"
 
 **Solution**:
+
 ```bash
 # The schema should be auto-created, but you can create manually:
 docker exec -it hollon-postgres psql -U hollon -d hollon -c "CREATE SCHEMA hollon_test_worker_1; GRANT ALL ON SCHEMA hollon_test_worker_1 TO hollon;"
@@ -450,6 +461,7 @@ docker exec -it hollon-postgres psql -U hollon -d hollon -c "CREATE SCHEMA hollo
 **Problem**: "Migration failed to run"
 
 **Solutions**:
+
 1. Check migration syntax for errors
 2. Verify schema has proper permissions
 3. Check for conflicting table/column names
@@ -474,6 +486,7 @@ SET session_replication_role = DEFAULT;
 **Problem**: Tests hang or don't complete
 
 **Solutions**:
+
 1. Ensure `module.close()` is called in `afterAll`
 2. Check for open database connections
 3. Use `forceExit: true` in Jest config
@@ -484,6 +497,7 @@ SET session_replication_role = DEFAULT;
 **Problem**: "Extension 'vector' does not exist"
 
 **Solution**:
+
 ```bash
 # Recreate container with pgvector image
 docker-compose -f docker/docker-compose.yml down -v
@@ -554,16 +568,16 @@ docker exec -it hollon-postgres psql -U hollon -d hollon
 
 ### Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DB_HOST` | localhost | PostgreSQL host |
-| `DB_PORT` | 5432 | PostgreSQL port |
-| `DB_NAME` | hollon | Database name |
-| `DB_USER` | hollon | Database user |
-| `DB_PASSWORD` | - | Database password |
-| `DB_SCHEMA` | hollon | Default schema name |
-| `NODE_ENV` | development | Environment (test/development/production) |
-| `JEST_WORKER_ID` | 1 | Jest worker ID (auto-set) |
+| Variable         | Default     | Description                               |
+| ---------------- | ----------- | ----------------------------------------- |
+| `DB_HOST`        | localhost   | PostgreSQL host                           |
+| `DB_PORT`        | 5432        | PostgreSQL port                           |
+| `DB_NAME`        | hollon      | Database name                             |
+| `DB_USER`        | hollon      | Database user                             |
+| `DB_PASSWORD`    | -           | Database password                         |
+| `DB_SCHEMA`      | hollon      | Default schema name                       |
+| `NODE_ENV`       | development | Environment (test/development/production) |
+| `JEST_WORKER_ID` | 1           | Jest worker ID (auto-set)                 |
 
 ---
 
