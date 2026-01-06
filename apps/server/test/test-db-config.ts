@@ -54,9 +54,7 @@ export async function initializeTestDatabase(): Promise<DataSource> {
  *
  * @param dataSource - The DataSource to close
  */
-export async function closeTestDatabase(
-  dataSource: DataSource,
-): Promise<void> {
+export async function closeTestDatabase(dataSource: DataSource): Promise<void> {
   try {
     if (dataSource.isInitialized) {
       await dataSource.destroy();

@@ -1,8 +1,5 @@
 import { DataSource } from 'typeorm';
-import {
-  initializeTestDatabase,
-  closeTestDatabase,
-} from './test-db-config';
+import { initializeTestDatabase, closeTestDatabase } from './test-db-config';
 import {
   setupTestSchema,
   cleanDatabase,
