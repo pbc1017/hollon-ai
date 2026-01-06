@@ -29,15 +29,18 @@ This document provides comprehensive research findings on pgvector integration, 
 ### 1.1 Installation and Prerequisites
 
 **PostgreSQL Version Requirements:**
+
 - PostgreSQL 11 or higher required
 - PostgreSQL 16 recommended (used in project via `pgvector/pgvector:pg16`)
 
 **Extension Installation:**
+
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
 **Current Project Implementation:**
+
 - Installed via Docker image: `pgvector/pgvector:pg16`
 - Enabled in initial migration: `1733295000000-InitialSchema.ts:6`
 - Extension created in `public` schema, accessible from all schemas
@@ -45,6 +48,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 ### 1.2 Database Configuration
 
 **Search Path Configuration:**
+
 ```typescript
 extra: {
   options: `-c search_path=${schema},public`,
@@ -54,6 +58,7 @@ extra: {
 This ensures vector types are accessible even when using custom schemas.
 
 **Key Requirements:**
+
 - pgvector extension must be created before any vector columns
 - Use `IF NOT EXISTS` clause for idempotent migrations
 - Extension persists across database restarts
@@ -69,12 +74,13 @@ postgres:
     POSTGRES_USER: hollon
     POSTGRES_PASSWORD: hollon_dev_password
   ports:
-    - "5432:5432"
+    - '5432:5432'
   volumes:
     - postgres-data:/var/lib/postgresql/data
 ```
 
 **Benefits:**
+
 - Pre-installed pgvector extension
 - No manual compilation required
 - Production-ready configuration
@@ -89,12 +95,14 @@ postgres:
 **Status:** TypeORM does not natively support `vector(n)` column types as of TypeORM 0.3.20.
 
 **Key Issues:**
+
 - TypeORM throws `DataTypeNotSupportedError` for vector types
 - Cannot use `synchronize: true` with vector columns
 - Vector columns must be created via raw SQL migrations
 - Custom transformers required for JavaScript/PostgreSQL type conversion
 
 **Sources:**
+
 - [TypeORM Issue #11485](https://github.com/typeorm/typeorm/issues/11485)
 - [TypeORM Issue #10056](https://github.com/typeorm/typeorm/issues/10056)
 
@@ -110,7 +118,7 @@ export class AddVectorColumn1234567890000 implements MigrationInterface {
       ALTER TABLE documents 
       ADD COLUMN embedding vector(1536)
     `);
-    
+
     // Add index (see section 4)
     await queryRunner.query(`
       CREATE INDEX idx_documents_embedding_hnsw 
@@ -144,13 +152,14 @@ export class VectorEmbedding extends BaseEntity {
    */
   @Column({ type: 'text', nullable: false })
   embedding: string;
-  
+
   @Column({ type: 'integer' })
   dimensions: number;
 }
 ```
 
 **Limitations:**
+
 - No type safety for vector operations in TypeScript
 - Manual serialization/deserialization required
 - Cannot leverage TypeORM's column validation
@@ -238,6 +247,7 @@ export class Document extends BaseEntity {
 ```
 
 **Benefits:**
+
 - Type-safe vector operations in TypeScript
 - Automatic dimension validation
 - Transparent serialization/deserialization
@@ -259,22 +269,19 @@ const embedding = [0.1, 0.2, 0.3];
 const sql = pgvector.toSql(embedding); // Returns: '[0.1,0.2,0.3]'
 
 // Use in raw query
-await queryRunner.query(
-  `INSERT INTO documents (embedding) VALUES ($1)`,
-  [sql],
-);
+await queryRunner.query(`INSERT INTO documents (embedding) VALUES ($1)`, [sql]);
 ```
 
 **Source:** [pgvector-node GitHub](https://github.com/pgvector/pgvector-node)
 
 ### 2.5 Column Decorator Pattern Summary
 
-| Pattern | Type Safety | Ease of Use | Performance | Recommended |
-|---------|-------------|-------------|-------------|-------------|
-| `type: 'text'` (current) | ❌ Low | ✅ Simple | ✅ Good | Legacy code only |
-| Custom Transformer | ✅ High | ✅ Simple | ✅ Good | **Recommended** |
-| pgvector package | ⚠️ Medium | ⚠️ Manual | ✅ Good | Advanced usage |
-| Raw queries | ❌ None | ❌ Complex | ✅ Best | Bulk operations |
+| Pattern                  | Type Safety | Ease of Use | Performance | Recommended      |
+| ------------------------ | ----------- | ----------- | ----------- | ---------------- |
+| `type: 'text'` (current) | ❌ Low      | ✅ Simple   | ✅ Good     | Legacy code only |
+| Custom Transformer       | ✅ High     | ✅ Simple   | ✅ Good     | **Recommended**  |
+| pgvector package         | ⚠️ Medium   | ⚠️ Manual   | ✅ Good     | Advanced usage   |
+| Raw queries              | ❌ None     | ❌ Complex  | ✅ Best     | Bulk operations  |
 
 ---
 
@@ -284,15 +291,16 @@ await queryRunner.query(
 
 #### OpenAI Embeddings
 
-| Model | Dimensions | Notes | Performance |
-|-------|-----------|-------|-------------|
-| `text-embedding-3-small` | 1536 (default) | Cost-effective, good quality | Fast |
-| `text-embedding-3-small` | 512 | Reduced via API parameter | Very fast |
-| `text-embedding-3-large` | 3072 (default) | Highest quality | Slower |
-| `text-embedding-3-large` | 1536 | Reduced via API parameter | Balanced |
-| `text-embedding-ada-002` | 1536 | Legacy model | Fast |
+| Model                    | Dimensions     | Notes                        | Performance |
+| ------------------------ | -------------- | ---------------------------- | ----------- |
+| `text-embedding-3-small` | 1536 (default) | Cost-effective, good quality | Fast        |
+| `text-embedding-3-small` | 512            | Reduced via API parameter    | Very fast   |
+| `text-embedding-3-large` | 3072 (default) | Highest quality              | Slower      |
+| `text-embedding-3-large` | 1536           | Reduced via API parameter    | Balanced    |
+| `text-embedding-ada-002` | 1536           | Legacy model                 | Fast        |
 
 **Native Dimension Reduction:**
+
 ```typescript
 const response = await openai.embeddings.create({
   model: 'text-embedding-3-large',
@@ -305,27 +313,28 @@ const response = await openai.embeddings.create({
 
 #### Cohere Embeddings
 
-| Model | Dimensions | Use Case |
-|-------|-----------|----------|
-| `embed-english-v3.0` | 1024 | General purpose |
-| `embed-english-light-v3.0` | 384 | Fast retrieval |
-| `embed-multilingual-v3.0` | 1024 | Multi-language |
+| Model                      | Dimensions | Use Case        |
+| -------------------------- | ---------- | --------------- |
+| `embed-english-v3.0`       | 1024       | General purpose |
+| `embed-english-light-v3.0` | 384        | Fast retrieval  |
+| `embed-multilingual-v3.0`  | 1024       | Multi-language  |
 
 **Source:** [Cohere Embedding Models](https://research.aimultiple.com/embedding-models/)
 
 #### Other Popular Models
 
-| Provider | Model | Dimensions |
-|----------|-------|-----------|
-| sentence-transformers | `all-MiniLM-L6-v2` | 384 |
-| sentence-transformers | `all-mpnet-base-v2` | 768 |
-| Google | `text-embedding-004` | 768 |
+| Provider              | Model                | Dimensions |
+| --------------------- | -------------------- | ---------- |
+| sentence-transformers | `all-MiniLM-L6-v2`   | 384        |
+| sentence-transformers | `all-mpnet-base-v2`  | 768        |
+| Google                | `text-embedding-004` | 768        |
 
 ### 3.2 Dimension Selection Best Practices
 
 #### Performance vs. Quality Trade-offs
 
 **Research Findings (2025):**
+
 - Switching from 1536 to 384 dimensions cuts query latency in half
 - Reduces vector database storage costs by 75%
 - Often no measurable drop in retrieval accuracy for domain-specific data
@@ -335,13 +344,13 @@ const response = await openai.embeddings.create({
 
 #### Recommendations by Use Case
 
-| Use Case | Recommended Dimensions | Rationale |
-|----------|----------------------|-----------|
-| High-precision semantic search | 1536-3072 | Maximum accuracy |
-| General knowledge retrieval | 768-1536 | Balanced performance |
-| High-volume queries | 384-512 | Cost and speed optimization |
-| Real-time applications | 384 | Latency-sensitive |
-| Multi-language support | 1024 | Model compatibility |
+| Use Case                       | Recommended Dimensions | Rationale                   |
+| ------------------------------ | ---------------------- | --------------------------- |
+| High-precision semantic search | 1536-3072              | Maximum accuracy            |
+| General knowledge retrieval    | 768-1536               | Balanced performance        |
+| High-volume queries            | 384-512                | Cost and speed optimization |
+| Real-time applications         | 384                    | Latency-sensitive           |
+| Multi-language support         | 1024                   | Model compatibility         |
 
 #### Testing Approach
 
@@ -393,11 +402,13 @@ CREATE TABLE documents (
 ```
 
 **Pros:**
+
 - Simple to implement
 - Fast queries (no joins)
 - Can use different models simultaneously
 
 **Cons:**
+
 - Storage duplication
 - Maintenance overhead
 - Schema changes required for new dimensions
@@ -417,11 +428,13 @@ CREATE TABLE vector_embeddings (
 ```
 
 **Pros:**
+
 - Flexible dimension support
 - Centralized embedding management
 - Easy to add new models
 
 **Cons:**
+
 - Requires joins for queries
 - More complex indexing strategy
 - Type safety challenges
@@ -430,15 +443,17 @@ CREATE TABLE vector_embeddings (
 
 ```sql
 -- Vector without dimension specification
-ALTER TABLE documents 
+ALTER TABLE documents
 ADD COLUMN embedding vector;
 ```
 
 **Pros:**
+
 - Maximum flexibility
 - No schema changes for new models
 
 **Cons:**
+
 - Less efficient indexing
 - Slower queries
 - No dimension validation at database level
@@ -453,17 +468,17 @@ export class MigrateEmbeddingDimensions implements MigrationInterface {
       ALTER TABLE documents 
       ADD COLUMN embedding_new vector(512)
     `);
-    
+
     // Backfill strategy: null values trigger re-embedding
     // No automatic conversion - requires re-generation
-    
+
     // Create index on new column
     await queryRunner.query(`
       CREATE INDEX idx_documents_embedding_new_hnsw 
       ON documents 
       USING hnsw (embedding_new vector_cosine_ops)
     `);
-    
+
     // After full backfill, drop old column
     // await queryRunner.query(`ALTER TABLE documents DROP COLUMN embedding`);
     // await queryRunner.query(`ALTER TABLE documents RENAME COLUMN embedding_new TO embedding`);
@@ -482,22 +497,26 @@ pgvector supports two main indexing algorithms: **IVFFlat** and **HNSW**.
 #### IVFFlat (Inverted File with Flat compression)
 
 **Algorithm:**
+
 - Clusters vectors into lists during training
 - Searches nearest cluster lists at query time
 - Linear scan within selected clusters
 
 **Syntax:**
+
 ```sql
-CREATE INDEX idx_documents_embedding_ivfflat 
-ON documents 
+CREATE INDEX idx_documents_embedding_ivfflat
+ON documents
 USING ivfflat (embedding vector_cosine_ops)
 WITH (lists = 100);
 ```
 
 **Parameters:**
+
 - `lists`: Number of clusters (√total_rows is good starting point)
 
 **Characteristics:**
+
 - ✅ Fast index build time (12-42x faster than HNSW)
 - ✅ Lower memory usage (2.8x less than HNSW)
 - ✅ Good for static datasets
@@ -510,25 +529,29 @@ WITH (lists = 100);
 **Memory:** ~257MB for recall 0.998
 
 **Sources:**
+
 - [AWS pgvector Indexing Deep Dive](https://aws.amazon.com/blogs/database/optimize-generative-ai-applications-with-pgvector-indexing-a-deep-dive-into-ivfflat-and-hnsw-techniques/)
 - [Medium: HNSW vs IVFFlat](https://medium.com/@bavalpreetsinghh/pgvector-hnsw-vs-ivfflat-a-comprehensive-study-21ce0aaab931)
 
 #### HNSW (Hierarchical Navigable Small World)
 
 **Algorithm:**
+
 - Multi-layer graph structure
 - Hierarchical navigation from coarse to fine
 - Logarithmic search time complexity
 
 **Syntax:**
+
 ```sql
-CREATE INDEX idx_documents_embedding_hnsw 
-ON documents 
+CREATE INDEX idx_documents_embedding_hnsw
+ON documents
 USING hnsw (embedding vector_cosine_ops)
 WITH (m = 16, ef_construction = 64);
 ```
 
 **Parameters:**
+
 - `m` (default 16): Maximum connections per layer
   - Higher = better recall, more memory
   - Range: 4-64, typically 8-32
@@ -537,6 +560,7 @@ WITH (m = 16, ef_construction = 64);
   - Range: 4-1000, typically 64-256
 
 **Characteristics:**
+
 - ✅ Best query performance (~1.5ms vs 2.4ms for IVFFlat)
 - ✅ Logarithmic scalability
 - ✅ No training step required
@@ -548,21 +572,23 @@ WITH (m = 16, ef_construction = 64);
 **Throughput:** 40.5 QPS vs 2.6 QPS for IVFFlat (15.5x better at recall 0.998)
 
 **Sources:**
+
 - [Tembo: Vector Indexes IVFFlat vs HNSW](https://legacy.tembo.io/blog/vector-indexes-in-pgvector/)
 - [Google Cloud: Faster Similarity Search](https://cloud.google.com/blog/products/databases/faster-similarity-search-performance-with-pgvector-indexes)
 
 ### 4.2 Index Selection Guidelines
 
-| Dataset Size | Query Pattern | Recommended Index | Parameters |
-|-------------|---------------|-------------------|------------|
-| < 10K rows | Any | None (exact search) | - |
-| 10K-100K | Static data, batch queries | IVFFlat | lists = 100 |
-| 100K-1M | Static data, moderate updates | IVFFlat | lists = 1000 |
-| 100K-1M | Dynamic data, frequent queries | HNSW | m=16, ef=64 |
-| 1M+ | High-volume queries | HNSW | m=24, ef=128 |
-| 1M+ | Real-time updates | HNSW | m=32, ef=256 |
+| Dataset Size | Query Pattern                  | Recommended Index   | Parameters   |
+| ------------ | ------------------------------ | ------------------- | ------------ |
+| < 10K rows   | Any                            | None (exact search) | -            |
+| 10K-100K     | Static data, batch queries     | IVFFlat             | lists = 100  |
+| 100K-1M      | Static data, moderate updates  | IVFFlat             | lists = 1000 |
+| 100K-1M      | Dynamic data, frequent queries | HNSW                | m=16, ef=64  |
+| 1M+          | High-volume queries            | HNSW                | m=24, ef=128 |
+| 1M+          | Real-time updates              | HNSW                | m=32, ef=256 |
 
-**General Recommendation:** 
+**General Recommendation:**
+
 - **HNSW is recommended for most production use cases** due to performance and robustness against changing data
 - Use IVFFlat only for static datasets with limited resources or when faster build times are critical
 
@@ -572,29 +598,30 @@ WITH (m = 16, ef_construction = 64);
 
 pgvector supports three distance operators:
 
-| Operator | Distance Metric | Index Operator Type | Use Case |
-|----------|----------------|---------------------|----------|
-| `<->` | Euclidean (L2) | `vector_l2_ops` | General similarity, clustering |
-| `<#>` | Negative inner product | `vector_ip_ops` | Normalized vectors, magnitude matters |
-| `<=>` | Cosine distance | `vector_cosine_ops` | Text/document similarity (recommended) |
+| Operator | Distance Metric        | Index Operator Type | Use Case                               |
+| -------- | ---------------------- | ------------------- | -------------------------------------- |
+| `<->`    | Euclidean (L2)         | `vector_l2_ops`     | General similarity, clustering         |
+| `<#>`    | Negative inner product | `vector_ip_ops`     | Normalized vectors, magnitude matters  |
+| `<=>`    | Cosine distance        | `vector_cosine_ops` | Text/document similarity (recommended) |
 
 **Index Creation by Operator:**
 
 ```sql
 -- Cosine similarity (most common for text embeddings)
-CREATE INDEX idx_cosine ON documents 
+CREATE INDEX idx_cosine ON documents
 USING hnsw (embedding vector_cosine_ops);
 
 -- Euclidean distance
-CREATE INDEX idx_l2 ON documents 
+CREATE INDEX idx_l2 ON documents
 USING hnsw (embedding vector_l2_ops);
 
 -- Inner product (for normalized vectors)
-CREATE INDEX idx_ip ON documents 
+CREATE INDEX idx_ip ON documents
 USING hnsw (embedding vector_ip_ops);
 ```
 
 **Sources:**
+
 - [pgvector GitHub](https://github.com/pgvector/pgvector)
 - [Severalnines: Vector Similarity Search](https://severalnines.com/blog/vector-similarity-search-with-postgresqls-pgvector-a-deep-dive/)
 
@@ -607,9 +634,9 @@ USING hnsw (embedding vector_ip_ops);
 SET hnsw.ef_search = 100; -- Default: 40
 
 -- Perform similarity search
-SELECT 
-  id, 
-  title, 
+SELECT
+  id,
+  title,
   embedding <=> '[0.1,0.2,...]'::vector AS distance
 FROM documents
 WHERE organization_id = 'org-uuid'
@@ -618,6 +645,7 @@ LIMIT 10;
 ```
 
 **ef_search Parameter:**
+
 - Default: 40
 - Range: 1-1000
 - Higher values improve recall but increase query time
@@ -638,6 +666,7 @@ LIMIT 10;
 ```
 
 **probes Parameter:**
+
 - Default: 1
 - Range: 1-lists
 - Trade-off between speed and recall
@@ -649,22 +678,22 @@ Combine vector similarity with metadata filtering:
 
 ```sql
 -- Create separate indexes for optimal performance
-CREATE INDEX idx_documents_org_type_tags 
+CREATE INDEX idx_documents_org_type_tags
 ON documents (organization_id, type);
 
-CREATE INDEX idx_documents_embedding_hnsw 
-ON documents 
+CREATE INDEX idx_documents_embedding_hnsw
+ON documents
 USING hnsw (embedding vector_cosine_ops);
 
 -- Hybrid search query
-SELECT 
+SELECT
   d.id,
   d.title,
   d.content,
   d.type,
   d.embedding <=> $1::vector AS distance
 FROM documents d
-WHERE 
+WHERE
   d.organization_id = $2
   AND d.type = ANY($3::document_type_enum[])
   AND d.tags && $4::text[]  -- Array overlap operator
@@ -674,6 +703,7 @@ LIMIT $5;
 ```
 
 **Index Strategy:**
+
 - Separate B-tree index for metadata filtering
 - Vector index for similarity search
 - PostgreSQL optimizer handles execution plan
@@ -690,6 +720,7 @@ REINDEX INDEX idx_documents_embedding_ivfflat;
 ```
 
 **Rebuild Frequency:**
+
 - After 10-20% data change
 - Monthly for active datasets
 - When query performance degrades
@@ -705,12 +736,12 @@ REINDEX INDEX idx_documents_embedding_hnsw;
 
 ### 4.7 Performance Benchmarks
 
-| Metric | IVFFlat (58K rows) | HNSW (58K rows) | Improvement |
-|--------|-------------------|-----------------|-------------|
-| Build time | 15s | 30s (optimized) | 0.5x |
-| Query time | 2.4ms | 1.5ms | 1.6x faster |
-| Throughput (recall 0.998) | 2.6 QPS | 40.5 QPS | 15.5x faster |
-| Memory usage | 257MB | 729MB | 2.8x more |
+| Metric                    | IVFFlat (58K rows) | HNSW (58K rows) | Improvement  |
+| ------------------------- | ------------------ | --------------- | ------------ |
+| Build time                | 15s                | 30s (optimized) | 0.5x         |
+| Query time                | 2.4ms              | 1.5ms           | 1.6x faster  |
+| Throughput (recall 0.998) | 2.6 QPS            | 40.5 QPS        | 15.5x faster |
+| Memory usage              | 257MB              | 729MB           | 2.8x more    |
 
 **Source:** [Medium: Comparing IVFFlat and HNSW](https://medium.com/@emreks/comparing-ivfflat-and-hnsw-with-pgvector-performance-analysis-on-diverse-datasets-e1626505bc9a)
 
@@ -725,17 +756,20 @@ REINDEX INDEX idx_documents_embedding_hnsw;
 **Formula:** √(Σ(ai - bi)²)
 
 **Characteristics:**
+
 - Measures straight-line distance between vectors
 - Sensitive to vector magnitude
 - Range: [0, ∞)
 
 **Use Cases:**
+
 - Finding alternative or most similar items
 - Clustering algorithms
 - Nearest neighbor search where magnitude matters
 - Image similarity (when scale is important)
 
 **Example:**
+
 ```sql
 -- Find documents with smallest L2 distance
 SELECT id, title, embedding <-> '[0.1,0.2,...]'::vector AS l2_distance
@@ -749,11 +783,13 @@ LIMIT 10;
 **Formula:** 1 - (A·B) / (||A|| × ||B||)
 
 **Characteristics:**
+
 - Measures angle between vectors
 - Insensitive to vector magnitude
 - Range: [0, 2] (0 = identical direction, 2 = opposite)
 
 **Use Cases (Recommended):**
+
 - Text and document similarity
 - Semantic search where direction matters more than magnitude
 - Anomaly detection (frequency doesn't matter)
@@ -761,6 +797,7 @@ LIMIT 10;
 - **Most common choice for text embeddings**
 
 **Example:**
+
 ```sql
 -- Find semantically similar documents
 SELECT id, title, 1 - (embedding <=> '[0.1,0.2,...]'::vector) AS similarity
@@ -776,18 +813,21 @@ LIMIT 10;
 **Formula:** -(A·B) (negative because Postgres only supports ASC index scans)
 
 **Characteristics:**
+
 - Dot product of vectors
 - Sensitive to both direction and magnitude
 - Efficient for normalized vectors
 - Range: [-∞, ∞] (higher magnitude = higher product)
 
 **Use Cases:**
+
 - Vectors with unit length (normalized)
 - Finding items similar in topic and magnitude
 - Image identification where magnitude matters
 - Maximum similarity when vectors are normalized
 
 **Example:**
+
 ```sql
 -- Find documents with highest inner product (most similar)
 SELECT id, title, (embedding <#> '[0.1,0.2,...]'::vector) * -1 AS inner_product
@@ -817,11 +857,13 @@ function normalize(vector: number[]): number[] {
 ```
 
 **Many embedding models return normalized vectors by default:**
+
 - OpenAI `text-embedding-ada-002` ✅
 - OpenAI `text-embedding-3-*` ✅
 - Cohere embeddings ✅
 
 **For normalized vectors:**
+
 - Inner product provides best performance
 - Cosine distance is most intuitive for similarity scores
 - L2 distance correlates with cosine distance
@@ -833,6 +875,7 @@ function normalize(vector: number[]): number[] {
 **General guidance:** Use **cosine distance** (`<=>`) for most applications.
 
 **Reasons:**
+
 1. Most intuitive for text/semantic similarity
 2. Industry standard for embedding models
 3. Works well with both normalized and non-normalized vectors
@@ -841,7 +884,7 @@ function normalize(vector: number[]): number[] {
 
 ```sql
 -- Recommended pattern with similarity score
-SELECT 
+SELECT
   id,
   title,
   1 - (embedding <=> $1::vector) AS similarity_score
@@ -866,27 +909,27 @@ LIMIT 20;
 function calculateVectorStorage(dimensions: number): number {
   // Each dimension: 4 bytes (float32)
   const vectorBytes = dimensions * 4;
-  
+
   // Overhead: ~24 bytes per row (UUID, timestamps, etc.)
   const overheadBytes = 24;
-  
+
   return vectorBytes + overheadBytes;
 }
 
 // Examples
 const storage1536 = calculateVectorStorage(1536); // 6,168 bytes (~6KB)
-const storage512 = calculateVectorStorage(512);   // 2,072 bytes (~2KB)
-const storage384 = calculateVectorStorage(384);   // 1,560 bytes (~1.5KB)
+const storage512 = calculateVectorStorage(512); // 2,072 bytes (~2KB)
+const storage384 = calculateVectorStorage(384); // 1,560 bytes (~1.5KB)
 ```
 
 #### Database Size Estimates
 
 | Documents | Dimensions | Storage per Vector | Total Storage | With Index (HNSW) |
-|-----------|-----------|-------------------|---------------|-------------------|
-| 100K | 1536 | 6KB | ~600MB | ~2GB |
-| 1M | 1536 | 6KB | ~6GB | ~20GB |
-| 1M | 512 | 2KB | ~2GB | ~7GB |
-| 1M | 384 | 1.5KB | ~1.5GB | ~5GB |
+| --------- | ---------- | ------------------ | ------------- | ----------------- |
+| 100K      | 1536       | 6KB                | ~600MB        | ~2GB              |
+| 1M        | 1536       | 6KB                | ~6GB          | ~20GB             |
+| 1M        | 512        | 2KB                | ~2GB          | ~7GB              |
+| 1M        | 384        | 1.5KB              | ~1.5GB        | ~5GB              |
 
 **Cost Optimization:**
 Reducing dimensions from 1536 to 384 can save **75% storage costs** with minimal accuracy impact.
@@ -931,6 +974,7 @@ const response = await openai.embeddings.create({
 ```
 
 **Benefits:**
+
 - 2-6x faster queries
 - 3-4x less storage
 - Often no accuracy loss for domain-specific data
@@ -939,8 +983,8 @@ const response = await openai.embeddings.create({
 
 ```sql
 -- HNSW with optimized parameters for production
-CREATE INDEX idx_embeddings_hnsw 
-ON vector_embeddings 
+CREATE INDEX idx_embeddings_hnsw
+ON vector_embeddings
 USING hnsw (embedding vector_cosine_ops)
 WITH (
   m = 24,               -- Higher connectivity for better recall
@@ -968,12 +1012,13 @@ CREATE TABLE vector_embeddings_p1 PARTITION OF vector_embeddings
   FOR VALUES WITH (MODULUS 4, REMAINDER 1);
 
 -- Indexes on each partition
-CREATE INDEX idx_p0_embedding_hnsw 
-ON vector_embeddings_p0 
+CREATE INDEX idx_p0_embedding_hnsw
+ON vector_embeddings_p0
 USING hnsw (embedding vector_cosine_ops);
 ```
 
 **Benefits:**
+
 - Smaller indexes per partition
 - Faster queries within organization
 - Better maintenance (VACUUM, REINDEX)
@@ -988,7 +1033,7 @@ class EmbeddingCache {
 
   async getEmbedding(text: string): Promise<number[]> {
     const cacheKey = this.hashText(text);
-    
+
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey)!;
     }
@@ -1013,7 +1058,7 @@ class EmbeddingCache {
 
 ```sql
 -- Index size
-SELECT 
+SELECT
   schemaname,
   tablename,
   indexname,
@@ -1030,7 +1075,7 @@ ORDER BY embedding <=> '[0.1,0.2,...]'::vector
 LIMIT 10;
 
 -- Index usage statistics
-SELECT 
+SELECT
   schemaname,
   tablename,
   indexname,
@@ -1043,13 +1088,13 @@ WHERE indexname LIKE '%embedding%';
 
 #### Performance Targets
 
-| Metric | Target | Alert Threshold |
-|--------|--------|----------------|
-| Query latency (p50) | < 50ms | > 100ms |
-| Query latency (p95) | < 200ms | > 500ms |
-| Index scan ratio | > 95% | < 90% |
-| Recall@10 | > 90% | < 85% |
-| Storage growth | Linear | Exponential |
+| Metric              | Target  | Alert Threshold |
+| ------------------- | ------- | --------------- |
+| Query latency (p50) | < 50ms  | > 100ms         |
+| Query latency (p95) | < 200ms | > 500ms         |
+| Index scan ratio    | > 95%   | < 90%           |
+| Recall@10           | > 90%   | < 85%           |
+| Storage growth      | Linear  | Exponential     |
 
 ---
 
@@ -1062,6 +1107,7 @@ WHERE indexname LIKE '%embedding%';
 **File:** `apps/server/src/entities/vector-embedding.entity.ts`
 
 **Features:**
+
 - ✅ Comprehensive metadata tracking
 - ✅ Multiple embedding models support (via enum)
 - ✅ Polymorphic source references
@@ -1071,17 +1117,19 @@ WHERE indexname LIKE '%embedding%';
 - ⚠️ Uses `type: 'text'` workaround (no custom transformer)
 
 **Supported Models:**
+
 ```typescript
 export enum EmbeddingModelType {
-  OPENAI_ADA_002 = 'openai_ada_002',     // 1536 dimensions
-  OPENAI_SMALL_3 = 'openai_small_3',     // 1536 dimensions
-  OPENAI_LARGE_3 = 'openai_large_3',     // 3072 dimensions
+  OPENAI_ADA_002 = 'openai_ada_002', // 1536 dimensions
+  OPENAI_SMALL_3 = 'openai_small_3', // 1536 dimensions
+  OPENAI_LARGE_3 = 'openai_large_3', // 3072 dimensions
   COHERE_ENGLISH_V3 = 'cohere_english_v3', // 1024 dimensions
   CUSTOM = 'custom',
 }
 ```
 
 **Schema:**
+
 ```sql
 CREATE TABLE vector_embeddings (
   id UUID PRIMARY KEY,
@@ -1103,12 +1151,14 @@ CREATE TABLE vector_embeddings (
 **File:** `apps/server/src/modules/document/entities/document.entity.ts`
 
 **Vector Column:**
+
 ```typescript
 @Column({ type: 'text', nullable: true })
 embedding: string; // Should be number[] with transformer
 ```
 
 **Migration:**
+
 ```sql
 -- From 1733295000000-InitialSchema.ts:180
 "embedding" vector(1536)
@@ -1117,6 +1167,7 @@ embedding: string; // Should be number[] with transformer
 ### 7.2 Implemented Infrastructure
 
 ✅ **Completed:**
+
 - pgvector extension enabled
 - Docker container with pgvector/pgvector:pg16
 - Initial migration with vector columns
@@ -1125,6 +1176,7 @@ embedding: string; // Should be number[] with transformer
 - Polymorphic embedding storage pattern
 
 ❌ **Not Implemented:**
+
 - Custom VectorTransformer
 - Vector similarity indexes (HNSW or IVFFlat)
 - Vector search services (stub implementations exist)
@@ -1141,6 +1193,7 @@ embedding: string; // Should be number[] with transformer
 **Status:** TODO markers, awaiting implementation
 
 **Planned Methods:**
+
 ```typescript
 async searchSimilar(
   query: string,
@@ -1167,6 +1220,7 @@ async searchSimilar(
 **Why:** Type safety, automatic serialization, dimension validation
 
 **Implementation:**
+
 ```typescript
 // Create: apps/server/src/common/database/transformers/vector.transformer.ts
 export class VectorTransformer implements ValueTransformer {
@@ -1176,6 +1230,7 @@ export class VectorTransformer implements ValueTransformer {
 ```
 
 **Update Entities:**
+
 ```typescript
 // Update vector_embedding.entity.ts
 @Column({
@@ -1201,7 +1256,7 @@ export class AddVectorIndexes implements MigrationInterface {
       USING hnsw ((embedding::vector) vector_cosine_ops)
       WITH (m = 16, ef_construction = 64)
     `);
-    
+
     // Index for documents table
     await queryRunner.query(`
       CREATE INDEX idx_documents_embedding_hnsw 
@@ -1209,7 +1264,7 @@ export class AddVectorIndexes implements MigrationInterface {
       USING hnsw ((embedding::vector(1536)) vector_cosine_ops)
       WITH (m = 16, ef_construction = 64)
     `);
-    
+
     // Supporting indexes for hybrid search
     await queryRunner.query(`
       CREATE INDEX idx_vector_embeddings_org_source 
@@ -1263,10 +1318,7 @@ export class VectorSearchService {
       WHERE organization_id = $2
     `;
 
-    const params: any[] = [
-      `[${queryVector.join(',')}]`,
-      organizationId,
-    ];
+    const params: any[] = [`[${queryVector.join(',')}]`, organizationId];
     let paramIndex = 3;
 
     if (sourceType) {
@@ -1355,6 +1407,7 @@ export class EmbeddingService {
 #### 5. Add KnowledgeItem Vector Column
 
 **Migration:**
+
 ```typescript
 export class AddKnowledgeItemEmbedding implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -1374,6 +1427,7 @@ export class AddKnowledgeItemEmbedding implements MigrationInterface {
 ```
 
 **Update Entity:**
+
 ```typescript
 @Entity('knowledge_items')
 export class KnowledgeItem extends BaseEntity {
@@ -1499,10 +1553,9 @@ export class DimensionOptimizationService {
       let totalRecall = 0;
 
       for (const query of testQueries) {
-        const embedding = await this.embeddingService.generateEmbedding(
-          query,
-          { dimensions: dim },
-        );
+        const embedding = await this.embeddingService.generateEmbedding(query, {
+          dimensions: dim,
+        });
         const searchResults = await this.search(embedding);
         totalRecall += this.calculateRecall(searchResults);
       }
@@ -1537,6 +1590,7 @@ Create comprehensive documentation:
 ### Research Sources
 
 #### pgvector and TypeORM Integration
+
 1. [TypeORM pgvector Support Issue #11485](https://github.com/typeorm/typeorm/issues/11485)
 2. [TypeORM Custom Datatypes Issue #10056](https://github.com/typeorm/typeorm/issues/10056)
 3. [LangChain TypeORM Vector Store](https://js.langchain.com/docs/integrations/vectorstores/typeorm/)
@@ -1544,6 +1598,7 @@ Create comprehensive documentation:
 5. [Medium: Custom Column Datatypes in TypeORM](https://joaowebber.medium.com/how-to-add-support-for-custom-column-datatypes-in-typeorm-64386cfd6026)
 
 #### Indexing Strategies
+
 6. [AWS: Optimize with pgvector Indexing - IVFFlat and HNSW](https://aws.amazon.com/blogs/database/optimize-generative-ai-applications-with-pgvector-indexing-a-deep-dive-into-ivfflat-and-hnsw-techniques/)
 7. [pgvector GitHub Repository](https://github.com/pgvector/pgvector)
 8. [Medium: HNSW vs IVFFlat Comprehensive Study](https://medium.com/@bavalpreetsinghh/pgvector-hnsw-vs-ivfflat-a-comprehensive-study-21ce0aaab931)
@@ -1554,6 +1609,7 @@ Create comprehensive documentation:
 13. [Supabase: IVFFlat Indexes](https://supabase.com/docs/guides/ai/vector-indexes/ivf-indexes)
 
 #### Distance Operators
+
 14. [pgvector GitHub: Vector Operations](https://github.com/pgvector/pgvector)
 15. [Heroku: pgvector on Postgres](https://devcenter.heroku.com/articles/pgvector-heroku-postgres)
 16. [Severalnines: Vector Similarity Search Deep Dive](https://severalnines.com/blog/vector-similarity-search-with-postgresqls-pgvector-a-deep-dive/)
@@ -1562,6 +1618,7 @@ Create comprehensive documentation:
 19. [Apache Cloudberry: pgvector Search](https://cloudberry.apache.org/docs/advanced-analytics/pgvector-search/)
 
 #### Embedding Models and Dimensions
+
 20. [AImultiple: Embedding Models - OpenAI vs Gemini vs Cohere](https://research.aimultiple.com/embedding-models/)
 21. [OpenAI: Embeddings API Guide](https://platform.openai.com/docs/guides/embeddings)
 22. [Document360: Text Embedding Model Analysis](https://document360.com/blog/text-embedding-model-analysis/)
@@ -1572,11 +1629,13 @@ Create comprehensive documentation:
 ### Additional Documentation
 
 #### Internal Project Documentation
+
 - `docs/pgvector-typeorm-integration.md` - Detailed integration patterns
 - `docs/pgvector-implementation-review.md` - Current implementation status
 - `docs/database/schema.md` - Database schema documentation
 
 #### External Resources
+
 - [HNSW Algorithm Paper](https://arxiv.org/abs/1603.09320)
 - [PostgreSQL Documentation](https://www.postgresql.org/docs/)
 - [TypeORM Documentation](https://typeorm.io/)
@@ -1596,12 +1655,12 @@ CREATE EXTENSION IF NOT EXISTS vector;
 ALTER TABLE documents ADD COLUMN embedding vector(1536);
 
 -- Create HNSW index (recommended)
-CREATE INDEX idx_embedding_hnsw ON documents 
+CREATE INDEX idx_embedding_hnsw ON documents
 USING hnsw (embedding vector_cosine_ops)
 WITH (m = 16, ef_construction = 64);
 
 -- Create IVFFlat index
-CREATE INDEX idx_embedding_ivfflat ON documents 
+CREATE INDEX idx_embedding_ivfflat ON documents
 USING ivfflat (embedding vector_cosine_ops)
 WITH (lists = 100);
 
@@ -1626,7 +1685,7 @@ LIMIT 10;
 -- Hybrid search with filters
 SELECT id, embedding <=> '[0.1,0.2,...]'::vector AS distance
 FROM documents
-WHERE 
+WHERE
   organization_id = 'org-uuid'
   AND type = 'knowledge'
   AND tags && ARRAY['ai', 'ml']
@@ -1650,7 +1709,7 @@ export class VectorTransformer implements ValueTransformer {
   to(value: number[] | null): string | null {
     return value ? `[${value.join(',')}]` : null;
   }
-  
+
   from(value: string | null): number[] | null {
     if (!value) return null;
     const match = value.match(/^\[(.+)\]$/);
