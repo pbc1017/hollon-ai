@@ -23,6 +23,7 @@
 | 7eb8bf3 | #14  | Normalize CI state comparison to lowercase (gh CLI returns uppercase SUCCESS/FAILURE)               |
 | TBD     | #22  | Add parent-child unblock logic to PR merge workflow                                                 |
 | TBD     | #23  | Remove --auto flag from gh pr merge (requires branch protection rules)                              |
+| TBD     | #24  | Auto-resolve merge conflicts: check mergeable before CI, rebase + force push (Brain Provider TODO)  |
 
 ---
 

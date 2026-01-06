@@ -809,6 +809,61 @@ export class GoalAutomationListener {
             continue;
           }
 
+          this.logger.log(`Checking PR #${pr.prNumber} (task ${task.id})`);
+
+          // Fix #24 (Option 1): Conflict 해결을 CI 체크 전에 먼저 수행
+          // 1. PR mergeable 상태 먼저 확인
+          try {
+            const mergeableStatus = await this.checkPRMergeable(pr.prUrl);
+
+            if (mergeableStatus === 'CONFLICTING') {
+              this.logger.warn(
+                `PR #${pr.prNumber} has merge conflicts, attempting auto-resolution...`,
+              );
+
+              // 2. 자동 충돌 해결 시도
+              const resolved = await this.autoResolveConflicts(task, pr);
+
+              if (!resolved) {
+                // 충돌 해결 실패 - manager에게 escalate
+                this.logger.error(
+                  `Failed to resolve conflicts for PR #${pr.prNumber}, escalating to manager`,
+                );
+                task.status = TaskStatus.BLOCKED;
+                task.metadata = {
+                  ...(task.metadata || {}),
+                  blockedReason:
+                    'Merge conflicts - automatic resolution failed, requires manual intervention',
+                  escalatedAt: new Date().toISOString(),
+                } as Record<string, unknown>;
+                await this.taskRepo.save(task);
+                continue; // Skip to next task
+              }
+
+              // 충돌 해결 성공 - CI 재실행 대기
+              this.logger.log(
+                `✅ Conflicts resolved for PR #${pr.prNumber}, waiting for CI rerun...`,
+              );
+              continue; // 다음 cron cycle에서 CI 재확인
+            }
+
+            // mergeable 상태가 UNKNOWN or UNSTABLE인 경우 일단 진행
+            if (
+              mergeableStatus !== 'MERGEABLE' &&
+              mergeableStatus !== 'CLEAN'
+            ) {
+              this.logger.warn(
+                `PR #${pr.prNumber} mergeable status: ${mergeableStatus}, proceeding with CI check...`,
+              );
+            }
+          } catch (mergeableError) {
+            this.logger.warn(
+              `Failed to check mergeable status for PR #${pr.prNumber}: ${mergeableError instanceof Error ? mergeableError.message : 'Unknown error'}, proceeding with CI check...`,
+            );
+            // Continue to CI check even if mergeable check fails
+          }
+
+          // 3. Conflict 없음 - CI 상태 확인 진행
           this.logger.log(
             `Checking CI status for PR #${pr.prNumber} (task ${task.id})`,
           );
@@ -1311,6 +1366,185 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
         `Waiting task assignment failed: ${err.message}`,
         err.stack,
       );
+    }
+  }
+
+  /**
+   * Fix #24: PR mergeable 상태 확인
+   * @returns 'MERGEABLE' | 'CONFLICTING' | 'CLEAN' | 'DIRTY' | 'UNSTABLE' | 'UNKNOWN'
+   */
+  private async checkPRMergeable(prUrl: string): Promise<string> {
+    try {
+      const { stdout } = await execAsync(
+        `gh pr view ${prUrl} --json mergeable,mergeStateStatus`,
+      );
+
+      const prStatus = JSON.parse(stdout.trim()) as {
+        mergeable: string;
+        mergeStateStatus: string;
+      };
+
+      // mergeable: MERGEABLE, CONFLICTING, UNKNOWN
+      // mergeStateStatus: CLEAN, DIRTY, UNSTABLE, UNKNOWN, etc.
+      const mergeable = prStatus.mergeable?.toUpperCase() || 'UNKNOWN';
+      const mergeStateStatus =
+        prStatus.mergeStateStatus?.toUpperCase() || 'UNKNOWN';
+
+      this.logger.debug(
+        `PR ${prUrl} mergeable: ${mergeable}, mergeStateStatus: ${mergeStateStatus}`,
+      );
+
+      // DIRTY or CONFLICTING means there are merge conflicts
+      if (mergeable === 'CONFLICTING' || mergeStateStatus === 'DIRTY') {
+        return 'CONFLICTING';
+      }
+
+      // MERGEABLE and CLEAN means no conflicts
+      if (mergeable === 'MERGEABLE' && mergeStateStatus === 'CLEAN') {
+        return 'MERGEABLE';
+      }
+
+      // Return the more specific state
+      return mergeStateStatus !== 'UNKNOWN' ? mergeStateStatus : mergeable;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to check mergeable status for ${prUrl}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Fix #24: 자동으로 merge conflict 해결 시도
+   * @returns true if conflicts were resolved successfully, false otherwise
+   */
+  private async autoResolveConflicts(
+    task: Task,
+    pr: TaskPullRequest,
+  ): Promise<boolean> {
+    try {
+      this.logger.log(
+        `Attempting to resolve conflicts for PR #${pr.prNumber} (task ${task.id})`,
+      );
+
+      // 1. Task의 worktree 경로 확인
+      const worktreePath = task.workingDirectory;
+      if (!worktreePath) {
+        this.logger.error(
+          `Task ${task.id} has no workingDirectory, cannot resolve conflicts`,
+        );
+        return false;
+      }
+
+      // 2. Worktree 경로 존재 확인
+      try {
+        await execAsync(`test -d "${worktreePath}"`);
+      } catch {
+        this.logger.error(`Worktree path ${worktreePath} does not exist`);
+        return false;
+      }
+
+      // 3. Fetch latest main branch
+      this.logger.log(`Fetching latest main branch...`);
+      await execAsync(`git fetch origin main`, { cwd: worktreePath });
+
+      // 4. Rebase on main
+      this.logger.log(`Attempting rebase on origin/main...`);
+      try {
+        await execAsync(`git rebase origin/main`, { cwd: worktreePath });
+        this.logger.log(`✅ Rebase successful without conflicts`);
+
+        // 5. Force push (since rebase rewrites history)
+        this.logger.log(`Force pushing resolved changes...`);
+        await execAsync(`git push --force-with-lease`, { cwd: worktreePath });
+
+        this.logger.log(
+          `✅ Successfully resolved conflicts for PR #${pr.prNumber}`,
+        );
+        return true;
+      } catch (rebaseError) {
+        // Rebase failed - likely due to conflicts
+        this.logger.warn(
+          `Rebase failed, checking for conflicts: ${rebaseError instanceof Error ? rebaseError.message : 'Unknown error'}`,
+        );
+
+        // 6. Check if there are conflicts
+        const { stdout: statusOutput } = await execAsync(`git status`, {
+          cwd: worktreePath,
+        });
+
+        if (
+          !statusOutput.includes('both modified') &&
+          !statusOutput.includes('Unmerged paths')
+        ) {
+          // No conflicts detected, might be another error
+          this.logger.error(
+            `Rebase failed but no conflicts detected: ${statusOutput}`,
+          );
+          await execAsync(`git rebase --abort`, { cwd: worktreePath });
+          return false;
+        }
+
+        // 7. Conflicts detected - call Brain Provider to resolve
+        this.logger.log(
+          `Conflicts detected, calling Brain Provider to resolve...`,
+        );
+
+        const conflictFiles = await this.getConflictingFiles(worktreePath);
+        this.logger.log(`Conflicting files: ${conflictFiles.join(', ')}`);
+
+        // 8. For now, abort and escalate to manager
+        // TODO: Implement Brain Provider conflict resolution
+        this.logger.warn(
+          `Brain Provider conflict resolution not yet implemented - aborting rebase`,
+        );
+        await execAsync(`git rebase --abort`, { cwd: worktreePath });
+        return false;
+
+        // Future implementation:
+        // const resolved = await this.resolveCon flictsWithBrain(task, conflictFiles);
+        // if (resolved) {
+        //   await execAsync(`git rebase --continue`, { cwd: worktreePath });
+        //   await execAsync(`git push --force-with-lease`, { cwd: worktreePath });
+        //   return true;
+        // }
+        // return false;
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to resolve conflicts for PR #${pr.prNumber}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+
+      // Cleanup: abort any ongoing rebase
+      try {
+        if (task.workingDirectory) {
+          await execAsync(`git rebase --abort`, {
+            cwd: task.workingDirectory,
+          });
+        }
+      } catch {
+        // Ignore cleanup errors
+      }
+
+      return false;
+    }
+  }
+
+  /**
+   * Fix #24: Get list of files with conflicts
+   */
+  private async getConflictingFiles(worktreePath: string): Promise<string[]> {
+    try {
+      const { stdout } = await execAsync(
+        `git diff --name-only --diff-filter=U`,
+        { cwd: worktreePath },
+      );
+      return stdout
+        .trim()
+        .split('\n')
+        .filter((file) => file.length > 0);
+    } catch {
+      return [];
     }
   }
 }
