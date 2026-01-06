@@ -546,6 +546,243 @@ export class KnowledgeExtractionService {
   }
 
   // ============================================================================
+  // DOCUMENT PROCESSING METHODS - Stub implementations
+  // ============================================================================
+
+  /**
+   * Parse a document and extract structured information
+   *
+   * [STUB] Parses various document formats (PDF, DOCX, TXT, etc.) and extracts
+   * structured information including metadata, content structure, and formatting.
+   *
+   * @param documentBuffer - Binary buffer containing the document data
+   * @param options - Document parsing configuration options
+   * @param options.mimeType - MIME type of the document (e.g., 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+   * @param options.extractMetadata - Extract document metadata (author, creation date, etc.) (default: true)
+   * @param options.preserveFormatting - Preserve document formatting information (default: false)
+   * @param options.extractImages - Extract embedded images (default: false)
+   * @param options.extractTables - Extract table structures (default: false)
+   *
+   * @returns Promise resolving to parsed document structure with content and metadata
+   *
+   * @throws {Error} Not yet implemented
+   *
+   * @todo Implement PDF parsing using pdf-parse or pdfjs-dist
+   * @todo Implement DOCX parsing using mammoth or docx
+   * @todo Implement plain text parsing with encoding detection
+   * @todo Add support for HTML document parsing
+   * @todo Implement image extraction from documents
+   * @todo Add table structure recognition and extraction
+   * @todo Implement error handling for corrupted documents
+   * @todo Add document size validation and limits
+   *
+   * @example
+   * ```typescript
+   * const parsed = await service.parseDocument(
+   *   documentBuffer,
+   *   {
+   *     mimeType: 'application/pdf',
+   *     extractMetadata: true,
+   *     extractTables: true
+   *   }
+   * );
+   * console.log(`Extracted ${parsed.pageCount} pages`);
+   * ```
+   */
+  async parseDocument(
+    documentBuffer: Buffer,
+    options: {
+      mimeType: string;
+      extractMetadata?: boolean;
+      preserveFormatting?: boolean;
+      extractImages?: boolean;
+      extractTables?: boolean;
+    },
+  ): Promise<{
+    content: string;
+    metadata: {
+      title?: string;
+      author?: string;
+      creationDate?: Date;
+      pageCount?: number;
+      [key: string]: unknown;
+    };
+    structure?: {
+      headings?: Array<{ level: number; text: string; page?: number }>;
+      tables?: Array<{ page?: number; rows: string[][]; headers?: string[] }>;
+      images?: Array<{ page?: number; data: Buffer; mimeType: string }>;
+    };
+  }> {
+    // TODO: Validate input parameters
+    if (!documentBuffer || documentBuffer.length === 0) {
+      throw new Error('Document buffer cannot be empty');
+    }
+
+    if (!options.mimeType) {
+      throw new Error('MIME type is required for document parsing');
+    }
+
+    // TODO: Implement document parsing logic based on MIME type
+    // TODO: Add support for different document formats
+    // TODO: Extract metadata, content, and structure
+    // TODO: Handle parsing errors gracefully
+    throw new Error(
+      'parseDocument not yet implemented - Placeholder for document parsing functionality',
+    );
+  }
+
+  /**
+   * Extract plain text content from various document formats
+   *
+   * [STUB] Extracts clean, plain text from documents while handling encoding,
+   * removing formatting artifacts, and normalizing whitespace.
+   *
+   * @param documentBuffer - Binary buffer containing the document data
+   * @param options - Text extraction configuration options
+   * @param options.mimeType - MIME type of the document
+   * @param options.encoding - Character encoding for text documents (default: 'utf-8')
+   * @param options.removeLineBreaks - Remove unnecessary line breaks (default: false)
+   * @param options.normalizeWhitespace - Normalize multiple spaces to single space (default: true)
+   * @param options.preserveParagraphs - Preserve paragraph structure (default: true)
+   * @param options.maxLength - Maximum length of extracted text in characters (optional)
+   *
+   * @returns Promise resolving to extracted plain text content
+   *
+   * @throws {Error} Not yet implemented
+   *
+   * @todo Implement text extraction for PDF documents
+   * @todo Implement text extraction for DOCX documents
+   * @todo Add encoding detection for plain text files
+   * @todo Implement OCR integration for image-based PDFs
+   * @todo Add language detection for extracted text
+   * @todo Implement smart paragraph detection
+   * @todo Add filtering for headers, footers, and page numbers
+   * @todo Implement text length truncation with smart boundary detection
+   *
+   * @example
+   * ```typescript
+   * const text = await service.extractText(
+   *   documentBuffer,
+   *   {
+   *     mimeType: 'application/pdf',
+   *     normalizeWhitespace: true,
+   *     preserveParagraphs: true,
+   *     maxLength: 50000
+   *   }
+   * );
+   * console.log(`Extracted ${text.length} characters`);
+   * ```
+   */
+  async extractText(
+    documentBuffer: Buffer,
+    options: {
+      mimeType: string;
+      encoding?: string;
+      removeLineBreaks?: boolean;
+      normalizeWhitespace?: boolean;
+      preserveParagraphs?: boolean;
+      maxLength?: number;
+    },
+  ): Promise<string> {
+    // TODO: Validate input parameters
+    if (!documentBuffer || documentBuffer.length === 0) {
+      throw new Error('Document buffer cannot be empty');
+    }
+
+    if (!options.mimeType) {
+      throw new Error('MIME type is required for text extraction');
+    }
+
+    // TODO: Implement text extraction based on document type
+    // TODO: Handle different encodings for text files
+    // TODO: Clean and normalize extracted text
+    // TODO: Apply text length limits if specified
+    // TODO: Handle extraction errors gracefully
+    throw new Error(
+      'extractText not yet implemented - Placeholder for text extraction functionality',
+    );
+  }
+
+  /**
+   * Preprocess extracted content for knowledge extraction
+   *
+   * [STUB] Preprocesses raw text content by cleaning, normalizing, segmenting,
+   * and preparing it for downstream NLP and knowledge extraction tasks.
+   *
+   * @param content - Raw text content to preprocess
+   * @param options - Preprocessing configuration options
+   * @param options.removeHtml - Strip HTML tags if present (default: true)
+   * @param options.removeUrls - Remove URLs from text (default: false)
+   * @param options.removeEmails - Remove email addresses (default: false)
+   * @param options.lowercaseText - Convert text to lowercase (default: false)
+   * @param options.removeStopwords - Remove common stopwords (default: false)
+   * @param options.stemming - Apply stemming to words (default: false)
+   * @param options.segmentSentences - Split text into sentences (default: false)
+   * @param options.segmentParagraphs - Split text into paragraphs (default: false)
+   * @param options.minWordLength - Minimum word length to keep (default: 1)
+   * @param options.maxWordLength - Maximum word length to keep (default: 100)
+   *
+   * @returns Promise resolving to preprocessed content (string or structured segments)
+   *
+   * @throws {Error} Not yet implemented
+   *
+   * @todo Implement HTML tag removal and entity decoding
+   * @todo Add URL and email pattern matching and removal
+   * @todo Implement stopword removal with configurable language support
+   * @todo Add stemming/lemmatization using NLP libraries
+   * @todo Implement sentence segmentation using NLP tokenization
+   * @todo Add paragraph detection and segmentation
+   * @todo Implement text normalization (Unicode, diacritics)
+   * @todo Add spell checking and correction (optional)
+   * @todo Implement language-specific preprocessing rules
+   *
+   * @example
+   * ```typescript
+   * const preprocessed = await service.preprocessContent(
+   *   rawText,
+   *   {
+   *     removeHtml: true,
+   *     removeUrls: true,
+   *     normalizeWhitespace: true,
+   *     segmentSentences: true
+   *   }
+   * );
+   * ```
+   */
+  async preprocessContent(
+    content: string,
+    _options?: {
+      removeHtml?: boolean;
+      removeUrls?: boolean;
+      removeEmails?: boolean;
+      lowercaseText?: boolean;
+      removeStopwords?: boolean;
+      stemming?: boolean;
+      segmentSentences?: boolean;
+      segmentParagraphs?: boolean;
+      minWordLength?: number;
+      maxWordLength?: number;
+    },
+  ): Promise<string | { sentences?: string[]; paragraphs?: string[] }> {
+    // TODO: Validate input parameters
+    if (!content || content.trim().length === 0) {
+      throw new Error('Content cannot be empty');
+    }
+
+    // TODO: Apply HTML removal if enabled
+    // TODO: Remove URLs and emails based on options
+    // TODO: Apply text normalization
+    // TODO: Implement stopword removal
+    // TODO: Apply stemming/lemmatization
+    // TODO: Segment into sentences or paragraphs if requested
+    // TODO: Filter words by length constraints
+    // TODO: Return preprocessed content in appropriate format
+    throw new Error(
+      'preprocessContent not yet implemented - Placeholder for content preprocessing functionality',
+    );
+  }
+
+  // ============================================================================
   // PLANNED FUTURE METHODS - Not yet implemented
   // ============================================================================
   //
