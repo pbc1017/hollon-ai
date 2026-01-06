@@ -126,9 +126,9 @@ The test database connects to PostgreSQL with the following configuration:
 {
   type: 'postgres',
   host: 'localhost',
-  port: 5434,  // Test database port (dev uses 5432)
+  port: 5432,  // Standard PostgreSQL port
   username: 'hollon',
-  password: 'hollon_dev_password',
+  password: 'hollon_test_password',
   database: 'hollon',
   schema: 'hollon_test_worker_N',  // N = Jest worker ID
   synchronize: false,  // Use migrations only
@@ -142,7 +142,7 @@ The test database connects to PostgreSQL with the following configuration:
 ```
 
 **Key Points**:
-- **Port 5434** is used for test database (vs 5432 for development)
+- **Port 5432** is used for test database (same as development in CI)
 - **Schema isolation** via `hollon_test_worker_N` allows parallel test execution
 - **search_path** includes `hollon` schema to access pgvector extension
 - **Migrations** are run automatically during test setup

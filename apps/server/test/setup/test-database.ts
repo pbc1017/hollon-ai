@@ -15,9 +15,9 @@ export function getTestDatabaseConfig(configService: ConfigService) {
   return {
     type: 'postgres' as const,
     host: configService.get('DB_HOST', 'localhost'),
-    port: configService.get('DB_PORT', 5434),
+    port: configService.get('DB_PORT', 5432),
     username: configService.get('DB_USER', 'hollon'),
-    password: configService.get('DB_PASSWORD', 'hollon_dev_password'),
+    password: configService.get('DB_PASSWORD', 'hollon_test_password'),
     database: configService.get('DB_NAME', 'hollon'),
     schema: schemaName,
     entities: [__dirname + '/../../src/**/*.entity{.ts,.js}'],
