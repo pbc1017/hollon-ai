@@ -43,7 +43,7 @@ Hollon-AI는 여러 AI 에이전트가 조직 구조 안에서 자율적으로 �
 - Node.js >= 20.0.0
 - pnpm >= 9.0.0
 - Docker & Docker Compose
-- PostgreSQL 16
+- PostgreSQL 16 (pgvector extension included in Docker setup)
 - Claude Code CLI (선택사항, Brain Provider용)
 
 ### 설치
@@ -103,7 +103,8 @@ pnpm test:integration
 | -------------- | -------------------------------- |
 | **NestJS**     | 서버 프레임워크                  |
 | **TypeORM**    | ORM 및 데이터베이스 마이그레이션 |
-| **PostgreSQL** | 메인 데이터베이스                |
+| **PostgreSQL** | 메인 데이터베이스 (pgvector extension 포함) |
+| **pgvector**   | 벡터 유사도 검색 및 임베딩 저장  |
 | **Redis**      | 캐싱 및 실시간 이벤트            |
 
 ### AI Integration
