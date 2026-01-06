@@ -503,10 +503,25 @@ export class TaskExecutionService {
         `Task execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
 
-      // Phase 3.12: Task worktree 정리 (에러 발생 시)
-      await this.cleanupTaskWorktree(worktreePath, task.id).catch(() => {
-        // Already logged in cleanupTaskWorktree
+      // Fix #27: Only cleanup worktree if PR was NOT created
+      // If PR exists, worktree should be kept for conflict resolution and CI retries
+      const hasPR = await this.prRepo.findOne({
+        where: { taskId: task.id },
       });
+
+      if (!hasPR) {
+        this.logger.log(
+          `No PR created for task ${task.id}, cleaning up worktree`,
+        );
+        // Phase 3.12: Task worktree 정리 (에러 발생 시, PR 없을 때만)
+        await this.cleanupTaskWorktree(worktreePath, task.id).catch(() => {
+          // Already logged in cleanupTaskWorktree
+        });
+      } else {
+        this.logger.log(
+          `PR exists for task ${task.id}, keeping worktree for future retries`,
+        );
+      }
 
       throw error;
     }
