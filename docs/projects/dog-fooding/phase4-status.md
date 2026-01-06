@@ -429,3 +429,122 @@ WHERE status IN ('ready', 'pending') AND blocked_until IS NOT NULL;
 ---
 
 **Last Updated**: 2026-01-06T12:18:00+09:00
+
+---
+
+### Issue #26: Epic Completion and Branch Cleanup Missing in autoMergePullRequest
+
+**발견 시간**: 2026-01-07 00:30 KST
+
+**증상**:
+
+1. 6개 Team Epic이 수동으로 COMPLETED 처리됨 (자동 완료 안 됨)
+2. 136개 Git 브랜치가 누적 (워크트리는 제거되었으나 브랜치는 남음)
+3. 8개 BLOCKED 태스크가 COMPLETED 의존성을 가지고 있음에도 unblock 안 됨
+
+**근본 원인**:
+
+1. **autoMergePullRequest에 checkAndCompleteParentEpic 누락**
+   - mergePullRequest (line 289)에는 있었으나
+   - autoMergePullRequest (line 1338-1345)에는 없었음
+   - Epic 완료가 자동 머지 시에만 작동 안 함
+
+2. **cleanupTaskWorktree가 브랜치 삭제 안 함**
+   - 워크트리만 `git worktree remove --force`
+   - 브랜치는 남아있음
+   - 주기적 정리 메커니즘 없음
+
+**영향받는 코드**:
+
+```typescript
+// autoMergePullRequest (line 1334)
+if (completedTask) {
+  await this.checkAndTriggerParentTask(completedTask);
+}
+// ❌ checkAndCompleteParentEpic 호출 없음!
+
+// cleanupTaskWorktree (line 1540-1557)
+await execAsync(`git worktree remove ${worktreePath} --force`);
+// ❌ 브랜치 삭제 없음!
+```
+
+**해결 (Fix #26)**:
+
+```typescript
+// 1. autoMergePullRequest에 Epic 완료 체크 추가 (line 1337-1339)
+if (completedTask) {
+  await this.checkAndTriggerParentTask(completedTask);
+}
+
+// Fix #26: Check if parent Epic should be completed
+if (completedTask) {
+  await this.checkAndCompleteParentEpic(completedTask);
+}
+
+// 2. cleanupTaskWorktree에 브랜치 삭제 추가 (line 1540-1571)
+// Get branch name before removing worktree
+let branchName: string | null = null;
+try {
+  const { stdout } = await execAsync(
+    `git -C "${worktreePath}" rev-parse --abbrev-ref HEAD`,
+  );
+  branchName = stdout.trim();
+} catch {}
+
+// Remove worktree
+await execAsync(`git worktree remove "${worktreePath}" --force`);
+
+// Delete the branch
+if (branchName && branchName !== 'main' && branchName !== 'HEAD') {
+  await execAsync(`git branch -D "${branchName}"`);
+}
+```
+
+**수동 정리 실행**:
+
+```bash
+# 1. 모든 워크트리 제거
+git worktree list | grep ".git-worktrees" | awk '{print $1}' | \
+  xargs -I {} git worktree remove --force {}
+git worktree prune
+
+# 2. 모든 로컬 브랜치 삭제 (feature/, wt-hollon- 패턴)
+git branch | grep -E "(feature/|wt-hollon-)" | xargs -n 1 git branch -D
+
+# 3. Completed 의존성 수동 unblock
+WITH tasks_to_unblock AS (
+  SELECT DISTINCT t.id
+  FROM tasks t
+  JOIN task_dependencies td ON t.id = td.task_id
+  JOIN tasks dt ON td.depends_on_id = dt.id
+  WHERE t.status = 'blocked' AND dt.status = 'completed'
+)
+UPDATE tasks
+SET status = 'ready',
+    metadata = metadata - 'blockedReason' - 'escalatedAt'
+FROM tasks_to_unblock
+WHERE tasks.id = tasks_to_unblock.id;
+-- Result: 8 tasks unblocked
+```
+
+**결과**:
+
+| Metric           | Before | After |
+| ---------------- | ------ | ----- |
+| BLOCKED 태스크   | 260    | 251   |
+| READY 태스크     | 172    | 181   |
+| COMPLETED 태스크 | 71     | 74    |
+| 로컬 Git 브랜치  | 137    | 0     |
+| 활성 워크트리    | 52     | 1     |
+
+**예상 효과**:
+
+- 향후 PR 머지 시 Epic 자동 완료 작동
+- 브랜치 누적 방지
+- unblockDependentTasks 로직이 정상 작동하면 자동 unblock
+
+**상태**: ✅ 수정 완료 (dd49e38), 수동 정리 완료
+
+---
+
+**Last Updated**: 2026-01-07T00:35:00+09:00
