@@ -58,15 +58,15 @@ export class KnowledgeExtractionService {
   }
 
   /**
-   * Find knowledge items by source
-   * Uses index on source for optimized query
+   * Find knowledge items by type
+   * Uses index on type for optimized query
    */
-  async findBySource(
+  async findByType(
     organizationId: string,
-    source: string,
+    type: string,
   ): Promise<KnowledgeItem[]> {
     return this.knowledgeItemRepository.find({
-      where: { organizationId, source },
+      where: { organizationId, type },
       order: { extractedAt: 'DESC' },
     });
   }
@@ -193,15 +193,15 @@ export class KnowledgeExtractionService {
   }
 
   /**
-   * Get unique sources for an organization
+   * Get unique types for an organization
    */
-  async getUniqueSources(organizationId: string): Promise<string[]> {
+  async getUniqueTypes(organizationId: string): Promise<string[]> {
     const result = await this.knowledgeItemRepository
       .createQueryBuilder('ki')
-      .select('DISTINCT ki.source', 'source')
+      .select('DISTINCT ki.type', 'type')
       .where('ki.organization_id = :organizationId', { organizationId })
       .getRawMany();
 
-    return result.map((r) => r.source);
+    return result.map((r) => r.type);
   }
 }
