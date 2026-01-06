@@ -30,7 +30,8 @@
     "dogfood:trigger": "dotenv -e ../../.env.local -e ../../.env -- ts-node src/scripts/trigger-devbot-execution.ts",
     "dogfood:concurrent": "dotenv -e ../../.env.local -e ../../.env -- ts-node src/scripts/trigger-concurrent-execution.ts",
     "task": "dotenv -e ../../.env.local -e ../../.env -- ts-node src/scripts/task-cli.ts",
-    "task:load": "dotenv -e ../../.env.local -e ../../.env -- ts-node src/scripts/load-backlog.ts"
+    "task:load": "dotenv -e ../../.env.local -e ../../.env -- ts-node src/scripts/load-backlog.ts",
+    "db:verify": "dotenv -e ../../.env.local -e ../../.env -- ts-node --project ./tsconfig.json -r tsconfig-paths/register src/scripts/verify-database-config.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
