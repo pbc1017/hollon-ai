@@ -9,11 +9,11 @@ import {
 
 export class CreateKnowledgeExtractionDto {
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'Content is required and cannot be empty' })
   content: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'Source is required and cannot be empty' })
   source: string;
 
   @IsDateString()
@@ -23,6 +23,6 @@ export class CreateKnowledgeExtractionDto {
   @IsObject()
   metadata?: Record<string, unknown>;
 
-  @IsUUID()
+  @IsUUID('4', { message: 'Organization ID must be a valid UUID' })
   organizationId: string;
 }
