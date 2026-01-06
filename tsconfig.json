@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@hollon-ai/shared": ["packages/shared/src"],
+      "@hollon-ai/shared/*": ["packages/shared/src/*"]
+    }
+  },
+  "references": [{ "path": "apps/server" }, { "path": "packages/shared" }]
+}

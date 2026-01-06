@@ -1,0 +1,323 @@
+# Phase 2 백로그 - 협업 시스템 완성
+# 참고: docs/phase2-plan.md, docs/ssot.md
+#
+# 사용법:
+#   npm run task:load -- tasks/phase2-backlog.yaml --dry-run  # 미리보기
+#   npm run task:load -- tasks/phase2-backlog.yaml            # 실제 로드
+
+project: 'Phase 2 Completion (Dogfooding)'
+
+tasks:
+  # ============================================
+  # Week 7: 메시징 시스템
+  # ============================================
+
+  - title: 'Message 엔티티 정의'
+    description: |
+      Message, Conversation, ConversationHistory 엔티티 구현.
+      phase2-plan.md Week 7 Day 3-4 참조.
+      - from_type/to_type (holon, user)
+      - message_type enum 정의
+      - requires_response 필드 포함
+    priority: P2
+    type: implementation
+    affectedFiles:
+      - 'src/modules/message/entities/message.entity.ts'
+      - 'src/modules/message/entities/conversation.entity.ts'
+    tags: [messaging, entity, week7]
+    acceptanceCriteria:
+      - 'Message 엔티티에 모든 필수 필드 포함'
+      - 'TypeORM relations 정의'
+      - '마이그레이션 생성 및 적용'
+
+  - title: 'MessageService CRUD 구현'
+    description: |
+      MessageService 기본 CRUD 및 인박스 조회 구현.
+      - send(): 메시지 발송
+      - getInbox(): 홀론 인박스 조회
+      - markAsRead(): 읽음 처리
+      - getConversationHistory(): 대화 기록 조회
+    priority: P2
+    type: implementation
+    status: completed
+    affectedFiles:
+      - 'src/modules/message/message.service.ts'
+      - 'src/modules/message/dto/send-message.dto.ts'
+    tags: [messaging, service, week7]
+    acceptanceCriteria:
+      - '모든 CRUD 메서드 동작'
+      - 'DTO 유효성 검사'
+      - 'Unit 테스트 작성'
+
+  - title: 'MessageController REST API 구현'
+    description: |
+      메시지 REST API 엔드포인트 구현.
+      - POST /messages - 메시지 발송
+      - GET /messages/inbox - 인박스 조회
+      - PATCH /messages/:id/read - 읽음 처리
+    priority: P2
+    type: implementation
+    status: completed
+    affectedFiles:
+      - 'src/modules/message/message.controller.ts'
+    tags: [messaging, api, week7]
+
+  # ============================================
+  # Week 8: WebSocket Gateway
+  # ============================================
+
+  - title: 'RealtimeGateway WebSocket 구현'
+    description: |
+      NestJS WebSocket Gateway 구현.
+      - PostgreSQL LISTEN → WebSocket 브릿지
+      - 룸 기반 구독 (organization, team, hollon별)
+      - 클라이언트 연결/해제 관리
+    priority: P2
+    type: implementation
+    status: completed
+    affectedFiles:
+      - 'src/modules/realtime/realtime.gateway.ts'
+      - 'src/modules/realtime/realtime.module.ts'
+    tags: [websocket, realtime, week8]
+    acceptanceCriteria:
+      - 'WebSocket 연결 동작'
+      - 'LISTEN 이벤트가 WebSocket으로 전달'
+      - '룸 join/leave 동작'
+
+  - title: 'ChannelModule 그룹 채널 구현'
+    description: |
+      팀/프로젝트 채널 기능 구현.
+      - Channel 엔티티 (public, private, direct)
+      - ChannelMembership 엔티티
+      - ChannelMessage 엔티티 (스레드 지원)
+    priority: P3
+    type: implementation
+    affectedFiles:
+      - 'src/modules/channel/entities/channel.entity.ts'
+      - 'src/modules/channel/channel.service.ts'
+    tags: [channel, messaging, week8]
+
+  # ============================================
+  # Week 9: 스케줄링 및 스탠드업
+  # ============================================
+
+  - title: 'StandupService 완성'
+    description: |
+      일일 스탠드업 자동화 완성.
+      - collectStandupStatus(): 각 홀론 상태 수집
+      - generateStandupSummary(): 요약 생성
+      - 채널에 요약 공유
+    priority: P2
+    type: implementation
+    status: completed
+    affectedFiles:
+      - 'src/modules/meeting/services/standup.service.ts'
+    tags: [meeting, standup, week9]
+    acceptanceCriteria:
+      - '스탠드업 데이터 수집 동작'
+      - '요약 Document 생성'
+      - 'Cron 스케줄 설정'
+
+  - title: 'MeetingSchedulerService 구현'
+    description: |
+      회의 스케줄링 서비스 구현.
+      - getUpcomingMeetings(): 예정 회의 조회
+      - scheduleAdHocMeeting(): 임시 회의 예약
+      - sendReminders(): 회의 리마인더
+    priority: P3
+    type: implementation
+    affectedFiles:
+      - 'src/modules/meeting/services/meeting-scheduler.service.ts'
+    tags: [meeting, scheduler, week9]
+
+  # ============================================
+  # Week 10: 스프린트 계획 및 회고
+  # ============================================
+
+  - title: 'SprintPlanningService 구현'
+    description: |
+      스프린트 계획 서비스 구현.
+      - analyzeLastSprint(): 지난 스프린트 분석
+      - selectTasksForSprint(): 태스크 선정
+      - proposeAssignments(): 할당 제안
+    priority: P3
+    type: implementation
+    affectedFiles:
+      - 'src/modules/meeting/services/sprint-planning.service.ts'
+    tags: [meeting, sprint, week10]
+
+  - title: 'RetrospectiveService 구현'
+    description: |
+      스프린트 회고 서비스 구현.
+      - collectCycleMetrics(): 사이클 메트릭 수집
+      - collectHollonFeedback(): 홀론 피드백 수집
+      - analyzeImprovements(): 개선점 도출
+    priority: P3
+    type: implementation
+    affectedFiles:
+      - 'src/modules/meeting/services/retrospective.service.ts'
+    tags: [meeting, retrospective, week10]
+
+  # ============================================
+  # Week 11: 협업 패턴
+  # ============================================
+
+  - title: 'CollaborationSession 엔티티 구현'
+    description: |
+      협업 세션 엔티티 정의.
+      - type: pair_programming, code_review, knowledge_sharing
+      - status: pending, active, completed
+    priority: P2
+    type: implementation
+    affectedFiles:
+      - 'src/modules/collaboration/entities/collaboration-session.entity.ts'
+    tags: [collaboration, entity, week11]
+
+  - title: 'CodeReviewService 구현'
+    description: |
+      코드 리뷰 서비스 구현.
+      - createPullRequest(): PR 생성 및 Task 연결
+      - requestReview(): 리뷰 요청 및 리뷰어 자동 할당
+      - submitReview(): 리뷰 제출
+      - mergePullRequest(): PR 머지
+    priority: P2
+    type: implementation
+    status: completed
+    affectedFiles:
+      - 'src/modules/collaboration/services/code-review.service.ts'
+      - 'src/modules/collaboration/entities/task-pull-request.entity.ts'
+    tags: [collaboration, code-review, week11]
+    acceptanceCriteria:
+      - 'PR 생성 및 Task 연결'
+      - '리뷰어 자동 할당 로직'
+      - 'PR 상태 전이 관리'
+
+  - title: '임시 홀론 생성 권한 검증 구현'
+    description: |
+      ssot.md 6.2 기반 임시 홀론 생성 검증.
+      - createTemporary(): 임시 홀론 자율 생성
+      - createPermanent(): 영구 홀론 인간 승인 필요
+    priority: P2
+    type: implementation
+    status: completed
+    affectedFiles:
+      - 'src/modules/hollon/hollon.service.ts'
+    tags: [hollon, permissions, week11]
+
+  # ============================================
+  # Week 12: 팀 간 협업 및 긴급 대응
+  # ============================================
+
+  - title: 'CrossTeamContract 엔티티 구현'
+    description: |
+      팀 간 계약 엔티티 정의.
+      - requesterTeamId, targetTeamId
+      - deliverables, requestedDeadline
+      - status: pending, negotiating, accepted, delivered
+    priority: P2
+    type: implementation
+    status: completed
+    affectedFiles:
+      - 'src/modules/cross-team-collaboration/entities/cross-team-contract.entity.ts'
+    tags: [cross-team, entity, week12]
+
+  - title: 'CrossTeamCollaborationService 완성'
+    description: |
+      팀 간 협업 서비스 완성.
+      - requestDependency(): 의존성 요청
+      - negotiateContract(): 계약 협상
+      - confirmDelivery(): 이행 확인
+    priority: P2
+    type: implementation
+    status: completed
+    affectedFiles:
+      - 'src/modules/cross-team-collaboration/services/cross-team-collaboration.service.ts'
+    tags: [cross-team, service, week12]
+
+  - title: 'IncidentResponseService 구현'
+    description: |
+      긴급 대응 서비스 구현.
+      - handleIncident(): 인시던트 처리
+      - classifySeverity(): P1-P4 심각도 분류
+      - pauseNonEssentialTasks(): 비필수 태스크 중지
+      - generatePostmortem(): 포스트모템 생성
+    priority: P2
+    type: implementation
+    status: completed
+    affectedFiles:
+      - 'src/modules/incident/incident-response.service.ts'
+      - 'src/modules/incident/entities/incident.entity.ts'
+    tags: [incident, emergency, week12]
+    acceptanceCriteria:
+      - '심각도별 대응 로직'
+      - 'P1/P2는 인간 알림'
+      - '포스트모템 자동 생성'
+
+  - title: 'ConflictResolutionService 구현'
+    description: |
+      충돌 해결 서비스 구현.
+      - detectConflicts(): 충돌 감지
+      - resolveFileConflict(): 파일 충돌 해결
+      - resolveResourceConflict(): 리소스 충돌 해결
+    priority: P3
+    type: implementation
+    affectedFiles:
+      - 'src/modules/collaboration/services/conflict-resolution.service.ts'
+    tags: [collaboration, conflict, week12]
+
+  # ============================================
+  # 추가 구현 항목
+  # ============================================
+
+  - title: 'TechDebtReviewService 구현'
+    description: |
+      기술 부채 주간 리뷰 서비스.
+      - findTopPriority(): 우선순위 높은 부채 조회
+      - updateInterest(): 이자 누적 업데이트
+      - scheduleDebtResolution(): 해결 스케줄링
+    priority: P3
+    type: implementation
+    affectedFiles:
+      - 'src/modules/tech-debt/tech-debt-review.service.ts'
+    tags: [tech-debt, review]
+
+  - title: 'HollonPerformanceService 구현'
+    description: |
+      홀론 성과 평가 서비스.
+      - evaluateCyclePerformance(): 사이클 성과 집계
+      - calculateProductivity(): 생산성 점수 (40%)
+      - calculateQuality(): 품질 점수 (35%)
+      - calculateCollaboration(): 협업 점수 (25%)
+    priority: P4
+    type: implementation
+    affectedFiles:
+      - 'src/modules/hollon/services/hollon-performance.service.ts'
+    tags: [hollon, performance, metrics]
+
+  # ============================================
+  # 테스트
+  # ============================================
+
+  - title: 'MessageService Unit Test 작성'
+    description: 'MessageService의 단위 테스트 작성'
+    priority: P3
+    type: review
+    affectedFiles:
+      - 'src/modules/message/message.service.spec.ts'
+    tags: [test, messaging]
+
+  - title: 'CollaborationService Integration Test 작성'
+    description: '협업 서비스의 통합 테스트 작성'
+    priority: P3
+    type: review
+    affectedFiles:
+      - 'test/integration/collaboration.integration-spec.ts'
+    tags: [test, collaboration]
+
+  - title: 'WebSocket E2E Test 작성'
+    description: 'WebSocket 실시간 통신 E2E 테스트'
+    priority: P3
+    type: review
+    affectedFiles:
+      - 'test/e2e/websocket.e2e-spec.ts'
+    tags: [test, websocket]
