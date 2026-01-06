@@ -82,9 +82,7 @@ async function main() {
 
     if (functions.length === 0) {
       console.log('   ⚠️  WARNING: No vector operator classes found');
-      console.log(
-        '   (This may be normal depending on pgvector version)',
-      );
+      console.log('   (This may be normal depending on pgvector version)');
     } else {
       console.log(`   ✅ PASS: Found ${functions.length} vector functions`);
       functions.forEach((fn: any) => {
@@ -118,17 +116,24 @@ async function main() {
   // Check 5: Verify vector columns in knowledge_items table (if it exists)
   console.log('\n5. Checking knowledge_items table for vector columns...');
   try {
-    const columns = await dataSource.query(`
+    const columns = await dataSource.query(
+      `
       SELECT column_name, data_type, udt_name
       FROM information_schema.columns
       WHERE table_schema = $1
         AND table_name = 'knowledge_items'
         AND udt_name = 'vector'
-    `, [schema]);
+    `,
+      [schema],
+    );
 
     if (columns.length === 0) {
-      console.log('   ℹ️  INFO: No vector columns found in knowledge_items table');
-      console.log('   (This is expected if vector columns haven\'t been added yet)');
+      console.log(
+        '   ℹ️  INFO: No vector columns found in knowledge_items table',
+      );
+      console.log(
+        "   (This is expected if vector columns haven't been added yet)",
+      );
     } else {
       console.log(`   ✅ PASS: Found ${columns.length} vector column(s)`);
       columns.forEach((col: any) => {

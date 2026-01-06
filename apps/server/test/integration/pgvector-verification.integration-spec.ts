@@ -338,7 +338,9 @@ describe('pgvector Extension Verification (integration)', () => {
         `   - Version: ${extensions.length > 0 ? extensions[0].extversion : 'N/A'}`,
       );
       console.log('\n✅ Data Type Availability:');
-      console.log(`   - vector type: ${types.length > 0 ? 'Available' : 'Not Available'}`);
+      console.log(
+        `   - vector type: ${types.length > 0 ? 'Available' : 'Not Available'}`,
+      );
       console.log('\n✅ Operations Tested:');
       console.log('   - Vector creation: Passed');
       console.log('   - L2 distance calculation: Passed');
