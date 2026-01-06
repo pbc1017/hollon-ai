@@ -8,8 +8,9 @@ BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
 
 # Check if we're in a worktree
-if [ -f "$GIT_DIR" ]; then
-  # This is a worktree (git dir is a file pointing to the actual git dir)
+# In a worktree, .git is a file (not a directory) that points to the actual git dir
+if [ -f ".git" ]; then
+  # This is a worktree (.git is a file pointing to the actual git dir)
   IN_WORKTREE=true
 else
   IN_WORKTREE=false
