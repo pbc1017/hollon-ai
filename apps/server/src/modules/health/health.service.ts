@@ -47,6 +47,12 @@ export class HealthService {
     private readonly dataSource: DataSource,
   ) {}
 
+  /**
+   * Performs a basic health check of the application
+   * Returns current system status including memory usage and database connectivity
+   *
+   * @returns Health check result with status, version, uptime, and memory metrics
+   */
   check(): HealthCheckResult {
     const memory = this.getMemoryUsage();
 
@@ -64,6 +70,12 @@ export class HealthService {
     };
   }
 
+  /**
+   * Performs a comprehensive readiness check of the application
+   * Includes database connectivity, hollon statistics, task statistics, and memory usage
+   *
+   * @returns Promise resolving to detailed health check result with all system metrics
+   */
   async readinessCheck(): Promise<HealthCheckResult> {
     const [dbCheck, hollonStats, taskStats] = await Promise.all([
       this.checkDatabase(),
@@ -88,6 +100,12 @@ export class HealthService {
     };
   }
 
+  /**
+   * Checks database connectivity and measures query latency
+   * Executes a simple SELECT query to verify database availability
+   *
+   * @returns Promise resolving to database status with latency or error information
+   */
   private async checkDatabase(): Promise<{
     status: 'up' | 'down';
     latency?: number;
@@ -110,6 +128,12 @@ export class HealthService {
     }
   }
 
+  /**
+   * Retrieves statistics about hollons in the system
+   * Aggregates hollon counts by status and calculates active hollon count
+   *
+   * @returns Promise resolving to hollon statistics including total, active, and counts by status
+   */
   private async getHollonStats(): Promise<{
     total: number;
     active: number;
@@ -150,6 +174,12 @@ export class HealthService {
     }
   }
 
+  /**
+   * Retrieves statistics about tasks in the system
+   * Aggregates task counts by status and calculates in-progress task count
+   *
+   * @returns Promise resolving to task statistics including total, in-progress, and counts by status
+   */
   private async getTaskStats(): Promise<{
     total: number;
     inProgress: number;
@@ -190,6 +220,12 @@ export class HealthService {
     }
   }
 
+  /**
+   * Retrieves current memory usage statistics for the Node.js process
+   * Includes heap usage, external memory, and RSS (Resident Set Size)
+   *
+   * @returns Memory usage object with values in bytes and formatted MB strings
+   */
   private getMemoryUsage(): MemoryUsage {
     const memoryUsage = process.memoryUsage();
 

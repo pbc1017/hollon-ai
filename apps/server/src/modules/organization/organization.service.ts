@@ -14,17 +14,37 @@ export class OrganizationService {
     private readonly organizationRepo: Repository<Organization>,
   ) {}
 
+  /**
+   * Creates a new organization in the system
+   *
+   * @param dto - Organization creation data including name and settings
+   * @returns Promise resolving to the newly created Organization entity
+   */
   async create(dto: CreateOrganizationDto): Promise<Organization> {
     const organization = this.organizationRepo.create(dto);
     return this.organizationRepo.save(organization);
   }
 
+  /**
+   * Retrieves all organizations in the system
+   * Results are ordered by creation date (newest first)
+   *
+   * @returns Promise resolving to an array of all Organization entities
+   */
   async findAll(): Promise<Organization[]> {
     return this.organizationRepo.find({
       order: { createdAt: 'DESC' },
     });
   }
 
+  /**
+   * Retrieves a single organization by ID with related entities
+   * Includes teams, hollons, and projects relationships
+   *
+   * @param id - The unique identifier of the organization
+   * @returns Promise resolving to the Organization entity with relations
+   * @throws NotFoundException if the organization is not found
+   */
   async findOne(id: string): Promise<Organization> {
     const organization = await this.organizationRepo.findOne({
       where: { id },
@@ -38,12 +58,27 @@ export class OrganizationService {
     return organization;
   }
 
+  /**
+   * Updates an existing organization with new data
+   *
+   * @param id - The unique identifier of the organization to update
+   * @param dto - Updated organization data
+   * @returns Promise resolving to the updated Organization entity
+   * @throws NotFoundException if the organization is not found
+   */
   async update(id: string, dto: UpdateOrganizationDto): Promise<Organization> {
     const organization = await this.findOne(id);
     Object.assign(organization, dto);
     return this.organizationRepo.save(organization);
   }
 
+  /**
+   * Removes an organization from the system
+   *
+   * @param id - The unique identifier of the organization to remove
+   * @returns Promise that resolves when the organization is successfully removed
+   * @throws NotFoundException if the organization is not found
+   */
   async remove(id: string): Promise<void> {
     const organization = await this.findOne(id);
     await this.organizationRepo.remove(organization);
@@ -53,7 +88,13 @@ export class OrganizationService {
    * Phase 3.7: Emergency Stop - Kill switch for autonomous execution
    *
    * Sets autonomousExecutionEnabled = false to stop HollonExecutionService
-   * from automatically executing tasks
+   * from automatically executing tasks. Records the reason and timestamp
+   * of the emergency stop in organization settings.
+   *
+   * @param id - The unique identifier of the organization
+   * @param reason - Optional reason for the emergency stop
+   * @returns Promise resolving to a success message and the updated Organization entity
+   * @throws NotFoundException if the organization is not found
    */
   async emergencyStop(
     id: string,
@@ -82,7 +123,13 @@ export class OrganizationService {
   /**
    * Phase 3.7: Resume Execution - Resume autonomous execution after emergency stop
    *
-   * Sets autonomousExecutionEnabled = true to resume HollonExecutionService
+   * Sets autonomousExecutionEnabled = true to resume HollonExecutionService.
+   * Clears emergency stop reason and timestamp, and records the resume timestamp
+   * in organization settings.
+   *
+   * @param id - The unique identifier of the organization
+   * @returns Promise resolving to a success message and the updated Organization entity
+   * @throws NotFoundException if the organization is not found
    */
   async resumeExecution(
     id: string,
