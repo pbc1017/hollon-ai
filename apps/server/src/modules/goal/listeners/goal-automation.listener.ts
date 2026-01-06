@@ -14,6 +14,7 @@ import { DecompositionStrategy } from '../dto/decomposition-options.dto';
 import { TaskService } from '../../task/task.service';
 import { Hollon } from '../../hollon/entities/hollon.entity';
 import { Team } from '../../team/entities/team.entity';
+import { BrainProviderService } from '../../brain-provider/services/brain-provider.service';
 
 const execAsync = promisify(exec);
 
@@ -52,6 +53,7 @@ export class GoalAutomationListener {
     private readonly taskExecutionService: TaskExecutionService,
     private readonly hollonOrchestratorService: HollonOrchestratorService,
     private readonly taskService: TaskService,
+    private readonly brainProvider: BrainProviderService,
   ) {}
 
   /**
@@ -1515,22 +1517,33 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
         const conflictFiles = await this.getConflictingFiles(worktreePath);
         this.logger.log(`Conflicting files: ${conflictFiles.join(', ')}`);
 
-        // 8. For now, abort and escalate to manager
-        // TODO: Implement Brain Provider conflict resolution
-        this.logger.warn(
-          `Brain Provider conflict resolution not yet implemented - aborting rebase`,
+        // 8. Fix #27: Attempt Brain Provider conflict resolution
+        const resolved = await this.resolveConflictsWithBrain(
+          task,
+          conflictFiles,
+          worktreePath,
         );
-        await execAsync(`git rebase --abort`, { cwd: worktreePath });
-        return false;
 
-        // Future implementation:
-        // const resolved = await this.resolveCon flictsWithBrain(task, conflictFiles);
-        // if (resolved) {
-        //   await execAsync(`git rebase --continue`, { cwd: worktreePath });
-        //   await execAsync(`git push --force-with-lease`, { cwd: worktreePath });
-        //   return true;
-        // }
-        // return false;
+        if (!resolved) {
+          this.logger.error(
+            `Brain Provider failed to resolve conflicts - aborting rebase`,
+          );
+          await execAsync(`git rebase --abort`, { cwd: worktreePath });
+          return false;
+        }
+
+        // 9. Conflicts resolved - continue rebase
+        this.logger.log(`Continuing rebase after conflict resolution...`);
+        await execAsync(`git rebase --continue`, { cwd: worktreePath });
+
+        // 10. Force push resolved changes
+        this.logger.log(`Force pushing resolved changes...`);
+        await execAsync(`git push --force-with-lease`, { cwd: worktreePath });
+
+        this.logger.log(
+          `✅ Successfully resolved conflicts and updated PR #${pr.prNumber}`,
+        );
+        return true;
       }
     } catch (error) {
       this.logger.error(
@@ -1568,5 +1581,146 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Fix #27: Resolve merge conflicts using Brain Provider
+   * Similar to CI retry logic - Brain analyzes conflicts and provides resolution
+   */
+  private async resolveConflictsWithBrain(
+    task: Task,
+    conflictFiles: string[],
+    worktreePath: string,
+  ): Promise<boolean> {
+    try {
+      this.logger.log(
+        `Requesting Brain Provider to resolve conflicts in ${conflictFiles.length} file(s)`,
+      );
+
+      // Read conflict markers from each file
+      const conflictContents: Array<{ file: string; content: string }> = [];
+      for (const file of conflictFiles) {
+        try {
+          const { stdout } = await execAsync(`cat "${file}"`, {
+            cwd: worktreePath,
+          });
+          conflictContents.push({ file, content: stdout });
+        } catch (error) {
+          this.logger.warn(
+            `Failed to read conflict file ${file}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
+        }
+      }
+
+      if (conflictContents.length === 0) {
+        this.logger.error('No conflict files could be read');
+        return false;
+      }
+
+      // Build prompt for Brain Provider
+      const prompt = this.buildConflictResolutionPrompt(task, conflictContents);
+
+      // Execute Brain Provider with conflict resolution task
+      const result = await this.brainProvider.executeWithTracking(
+        {
+          prompt,
+          context: {
+            workingDirectory: worktreePath,
+            taskId: task.id,
+          },
+          options: {
+            // Allow Brain to edit files to resolve conflicts
+            timeoutMs: 300000, // 5 minutes for conflict resolution
+          },
+        },
+        {
+          organizationId: task.organizationId,
+          taskId: task.id,
+        },
+      );
+
+      if (!result.success) {
+        this.logger.error(
+          `Brain Provider failed to resolve conflicts: ${result.output}`,
+        );
+        return false;
+      }
+
+      this.logger.log(`Brain Provider resolved conflicts successfully`);
+
+      // Stage all resolved files
+      this.logger.log(`Staging resolved files...`);
+      for (const { file } of conflictContents) {
+        await execAsync(`git add "${file}"`, { cwd: worktreePath });
+      }
+
+      this.logger.log(
+        `All conflict files staged and ready for rebase continue`,
+      );
+      return true;
+    } catch (error) {
+      this.logger.error(
+        `Failed to resolve conflicts with Brain Provider: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Fix #27: Build prompt for conflict resolution
+   */
+  private buildConflictResolutionPrompt(
+    task: Task,
+    conflictContents: Array<{ file: string; content: string }>,
+  ): string {
+    const conflictSections = conflictContents
+      .map(
+        ({ file, content }) => `
+## File: ${file}
+
+\`\`\`
+${content}
+\`\`\`
+`,
+      )
+      .join('\n');
+
+    return `
+# Merge Conflict Resolution Task
+
+You need to resolve merge conflicts in the following files for task: **${task.title}**
+
+## Task Description
+${task.description || 'No description available'}
+
+## Conflicted Files
+
+${conflictSections}
+
+## Instructions
+
+**Your task is to resolve ALL merge conflicts in the files above.**
+
+1. **Analyze each conflict**:
+   - <<<<<<< HEAD marks the current branch changes
+   - ======= separates the two versions
+   - >>>>>>> marks the incoming changes from main branch
+
+2. **Resolve conflicts intelligently**:
+   - Keep changes that align with the task requirements
+   - Preserve important functionality from both sides when possible
+   - Remove conflict markers (<<<<<<< HEAD, =======, >>>>>>>)
+   - Ensure the code is syntactically correct after resolution
+
+3. **Edit each file** to remove conflict markers and merge the changes properly
+
+4. **Important**:
+   - DO NOT leave any conflict markers in the files
+   - Ensure the resolved code compiles and makes sense
+   - Preserve both sides' changes when they don't conflict logically
+   - If in doubt, prefer keeping newer changes from main branch
+
+**Start resolving the conflicts now. Edit each file to resolve all conflicts.**
+`.trim();
   }
 }

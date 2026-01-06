@@ -25,6 +25,7 @@
 | N/A     | #23  | Remove --auto flag from gh pr merge (requires branch protection rules)                              |
 | 0a3c12d | #24  | Auto-resolve merge conflicts: check mergeable before CI, rebase + force push                        |
 | 199536e | #25  | Auto-complete Team Epic when all children complete (during PR merge, not cron)                      |
+| TBD     | #27  | Brain Provider merge conflict auto-resolution + pre-commit worktree validation                      |
 
 ---
 
@@ -547,4 +548,224 @@ WHERE tasks.id = tasks_to_unblock.id;
 
 ---
 
-**Last Updated**: 2026-01-07T00:35:00+09:00
+### Issue #27: Main Branch Pollution and Missing Merge Conflict Resolution
+
+**발견 시간**: 2026-01-07 00:50 KST
+
+**증상**:
+
+1. Main 브랜치에 `INTERFACE_DOCUMENTATION.md` 같은 파일이 오염됨 (워크트리에서 작업했어야 하는 파일)
+2. Brain Provider를 통한 merge conflict 자동 해결이 TODO 상태로 미구현 (line 1518-1524)
+3. 워크트리에서 생성된 feature 브랜치에 main 디렉토리에서 commit 가능
+
+**근본 원인**:
+
+1. **Main 브랜치 오염**:
+   - Task `6b6ba359`의 `INTERFACE_DOCUMENTATION.md` 파일이 main 디렉토리에 먼저 생성됨 (`2026-01-07 00:51:10`)
+   - 워크트리에는 1분 26초 후에 생성됨 (`2026-01-07 00:52:36`)
+   - Claude Code가 워크트리가 아닌 main 디렉토리에서 파일 생성
+   - Pre-commit hook이 워크트리 검증 안 함
+
+2. **Merge Conflict 미해결**:
+   - `autoResolveConflicts` 메소드에서 Brain Provider 호출 부분이 TODO로 남음
+   - 충돌 발생 시 수동 개입 필요
+   - CI retry 로직과 유사한 패턴으로 구현 가능
+
+**영향받는 코드**:
+
+```typescript
+// goal-automation.listener.ts:1518-1524 (Before Fix #27)
+// TODO: Use Brain Provider to resolve conflicts
+// 1. Read conflict files
+// 2. Build prompt with task context + conflict markers
+// 3. Call Brain Provider to edit files
+// 4. Stage resolved files
+// 5. Continue rebase
+```
+
+**해결 (Fix #27)**:
+
+#### Part 1: Brain Provider Merge Conflict Resolution
+
+**1. resolveConflictsWithBrain 메소드 구현** (lines 1586-1668):
+
+```typescript
+private async resolveConflictsWithBrain(
+  task: Task,
+  conflictFiles: string[],
+  worktreePath: string,
+): Promise<boolean> {
+  // Read all conflict files
+  const conflictContents: Array<{ file: string; content: string }> = [];
+  for (const file of conflictFiles) {
+    const { stdout } = await execAsync(`cat "${file}"`, { cwd: worktreePath });
+    conflictContents.push({ file, content: stdout });
+  }
+
+  // Build prompt with task context and conflict markers
+  const prompt = this.buildConflictResolutionPrompt(task, conflictContents);
+
+  // Execute Brain Provider with 5-minute timeout
+  const result = await this.brainProvider.executeWithTracking(
+    {
+      prompt,
+      context: { workingDirectory: worktreePath, taskId: task.id },
+      options: { timeoutMs: 300000 },
+    },
+    { organizationId: task.organizationId, taskId: task.id },
+  );
+
+  if (!result.success) return false;
+
+  // Stage all resolved files
+  for (const { file } of conflictContents) {
+    await execAsync(`git add "${file}"`, { cwd: worktreePath });
+  }
+
+  return true;
+}
+```
+
+**2. buildConflictResolutionPrompt 메소드 구현** (lines 1670-1726):
+
+```typescript
+private buildConflictResolutionPrompt(
+  task: Task,
+  conflictContents: Array<{ file: string; content: string }>,
+): string {
+  return `
+# Merge Conflict Resolution Task
+
+You need to resolve merge conflicts in the following files for task: **${task.title}**
+
+## Instructions
+
+1. **Analyze each conflict**:
+   - <<<<<<< HEAD marks the current branch changes
+   - ======= separates the two versions
+   - >>>>>>> marks the incoming changes from main branch
+
+2. **Resolve conflicts intelligently**:
+   - Keep changes that align with the task requirements
+   - Preserve important functionality from both sides when possible
+   - Remove conflict markers
+   - Ensure the code is syntactically correct
+
+3. **Edit each file** to remove conflict markers and merge the changes properly
+`.trim();
+}
+```
+
+**3. autoResolveConflicts에 통합** (lines 1520-1546):
+
+```typescript
+// 8. Fix #27: Attempt Brain Provider conflict resolution
+const resolved = await this.resolveConflictsWithBrain(
+  task,
+  conflictFiles,
+  worktreePath,
+);
+
+if (!resolved) {
+  this.logger.error(
+    `Brain Provider failed to resolve conflicts - aborting rebase`,
+  );
+  await execAsync(`git rebase --abort`, { cwd: worktreePath });
+  return false;
+}
+
+// 9. Conflicts resolved - continue rebase
+this.logger.log(`Continuing rebase after conflict resolution...`);
+await execAsync(`git rebase --continue`, { cwd: worktreePath });
+
+// 10. Force push resolved changes
+this.logger.log(`Force pushing resolved changes...`);
+await execAsync(`git push --force-with-lease`, { cwd: worktreePath });
+
+this.logger.log(
+  `✅ Successfully resolved conflicts and updated PR #${pr.prNumber}`,
+);
+return true;
+```
+
+#### Part 2: Pre-commit Hook for Worktree Validation
+
+**파일**: `.husky/pre-commit`
+
+```bash
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Fix #27: Worktree path validation
+# Prevent commits on feature branches from main directory (only allow from worktrees)
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
+
+# Check if we're in a worktree
+if [ -f "$GIT_DIR" ]; then
+  # This is a worktree (git dir is a file pointing to the actual git dir)
+  IN_WORKTREE=true
+else
+  IN_WORKTREE=false
+fi
+
+# Check if this is a hollon-generated feature branch
+if echo "$BRANCH" | grep -qE "^feature/(MLEngineer|Frontend|Backend|AILead|QALead|TechLead|CTO)-"; then
+  if [ "$IN_WORKTREE" = false ]; then
+    echo "❌ ERROR: Cannot commit to hollon-generated feature branch ($BRANCH) from main directory!"
+    echo ""
+    echo "This branch was created by a hollon in a worktree."
+    echo "Commits should only be made from the worktree to prevent main branch pollution."
+    echo ""
+    echo "Current directory: $(pwd)"
+    echo "Git dir: $GIT_DIR"
+    echo ""
+    echo "If you need to work on this task, please use the worktree or switch to main branch."
+    exit 1
+  fi
+fi
+
+# Warn if committing to main from non-worktree (but don't block - user might be doing manual work)
+if [ "$BRANCH" = "main" ] && [ "$IN_WORKTREE" = false ]; then
+  echo "⚠️  WARNING: Committing to main branch from main directory"
+  echo "   This is allowed, but make sure you're not accidentally polluting main with worktree changes."
+  echo ""
+fi
+
+npx lint-staged
+```
+
+**워크트리 감지 로직**:
+
+- 워크트리에서는 `.git`이 파일 (실제 git dir을 가리키는 포인터)
+- Main repo에서는 `.git`이 디렉토리
+- Feature 브랜치 패턴: `^feature/(MLEngineer|Frontend|Backend|AILead|QALead|TechLead|CTO)-`
+
+**즉시 조치**:
+
+```bash
+# 오염된 파일 제거
+rm /Users/perry/Documents/Development/hollon-ai/apps/server/src/modules/knowledge-graph/INTERFACE_DOCUMENTATION.md
+
+# Pre-commit hook 실행 권한 부여
+chmod +x .husky/pre-commit
+```
+
+**예상 효과**:
+
+1. **Merge Conflict 자동 해결**:
+   - PR rebase 중 충돌 발생 시 Brain Provider가 자동으로 해결
+   - 수동 개입 없이 충돌 해결 → rebase continue → force push
+   - CI retry 로직과 동일한 패턴 적용
+
+2. **Main 브랜치 오염 방지**:
+   - Feature 브랜치에 main 디렉토리에서 commit 시도하면 차단
+   - Main 브랜치는 경고만 표시 (수동 작업 허용)
+   - 워크트리 격리 강화
+
+**상태**: ✅ 구현 완료, 커밋 대기 중
+
+---
+
+**Last Updated**: 2026-01-07T01:00:00+09:00

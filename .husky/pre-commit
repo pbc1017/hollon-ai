@@ -1,1 +1,41 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Fix #27: Worktree path validation
+# Prevent commits on feature branches from main directory (only allow from worktrees)
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
+
+# Check if we're in a worktree
+if [ -f "$GIT_DIR" ]; then
+  # This is a worktree (git dir is a file pointing to the actual git dir)
+  IN_WORKTREE=true
+else
+  IN_WORKTREE=false
+fi
+
+# Check if this is a hollon-generated feature branch
+if echo "$BRANCH" | grep -qE "^feature/(MLEngineer|Frontend|Backend|AILead|QALead|TechLead|CTO)-"; then
+  if [ "$IN_WORKTREE" = false ]; then
+    echo "❌ ERROR: Cannot commit to hollon-generated feature branch ($BRANCH) from main directory!"
+    echo ""
+    echo "This branch was created by a hollon in a worktree."
+    echo "Commits should only be made from the worktree to prevent main branch pollution."
+    echo ""
+    echo "Current directory: $(pwd)"
+    echo "Git dir: $GIT_DIR"
+    echo ""
+    echo "If you need to work on this task, please use the worktree or switch to main branch."
+    exit 1
+  fi
+fi
+
+# Warn if committing to main from non-worktree (but don't block - user might be doing manual work)
+if [ "$BRANCH" = "main" ] && [ "$IN_WORKTREE" = false ]; then
+  echo "⚠️  WARNING: Committing to main branch from main directory"
+  echo "   This is allowed, but make sure you're not accidentally polluting main with worktree changes."
+  echo ""
+fi
+
 npx lint-staged
