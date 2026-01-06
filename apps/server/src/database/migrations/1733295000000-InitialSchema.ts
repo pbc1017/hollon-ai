@@ -2,7 +2,20 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class InitialSchema1733295000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Enable pgvector extension for vector similarity search
+    /**
+     * Enable pgvector extension for vector similarity search
+     *
+     * pgvector provides vector data types and similarity search operators for PostgreSQL.
+     * This enables semantic search, knowledge retrieval, and AI-powered features.
+     *
+     * Features:
+     * - Vector data types: vector(n), halfvec(n), bit(n), sparsevec(n)
+     * - Distance operators: <=> (cosine), <-> (L2), <#> (inner product)
+     * - Index types: HNSW (fast queries), IVFFlat (fast builds)
+     *
+     * Version: 0.8.1+ recommended for iterative index scans and improved filtering
+     * Documentation: https://github.com/pgvector/pgvector
+     */
     await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
 
     // Organizations table
@@ -163,7 +176,24 @@ export class InitialSchema1733295000000 implements MigrationInterface {
       `CREATE INDEX "IDX_tasks_assigned_hollon" ON "tasks" ("assigned_hollon_id")`,
     );
 
-    // Documents table (Memory/Knowledge Base)
+    /**
+     * Documents table (Memory/Knowledge Base)
+     *
+     * Stores organizational documents, memories, decisions, and outputs with support
+     * for vector embeddings to enable semantic search and knowledge retrieval.
+     *
+     * Key Features:
+     * - Vector embeddings: 1536-dimensional vectors for semantic search
+     * - Compatible with OpenAI text-embedding-ada-002 and text-embedding-3-small
+     * - JSONB metadata: Flexible storage for custom properties
+     * - Multiple document types: memory, decision, output, context
+     *
+     * Vector Column:
+     * - Type: vector(1536)
+     * - Storage: ~6 KB per embedding (4 bytes per dimension)
+     * - Nullable: Yes (allows documents without embeddings)
+     * - Index: Should be added separately via HNSW or IVFFlat when data volume grows
+     */
     await queryRunner.query(`
       CREATE TYPE "document_type_enum" AS ENUM ('memory', 'decision', 'output', 'context');
 
@@ -177,7 +207,7 @@ export class InitialSchema1733295000000 implements MigrationInterface {
         "content" text NOT NULL,
         "type" document_type_enum NOT NULL DEFAULT 'memory',
         "keywords" jsonb DEFAULT '[]',
-        "embedding" vector(1536),
+        "embedding" vector(1536),  -- Vector embedding for semantic search
         "metadata" jsonb DEFAULT '{}',
         "created_at" timestamp NOT NULL DEFAULT now(),
         "updated_at" timestamp NOT NULL DEFAULT now(),
@@ -265,6 +295,19 @@ export class InitialSchema1733295000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    /**
+     * Rollback Migration
+     *
+     * WARNING: This will drop all tables and the pgvector extension.
+     * All data will be lost, including vector embeddings.
+     *
+     * Rollback order:
+     * 1. Drop tables in reverse dependency order
+     * 2. Drop enum types
+     * 3. Drop pgvector extension
+     *
+     * Best Practice: Create a backup before running rollback in production
+     */
     // Drop tables in reverse order
     await queryRunner.query(`DROP TABLE IF EXISTS "approval_requests"`);
     await queryRunner.query(`DROP TYPE IF EXISTS "approval_type_enum"`);
@@ -291,7 +334,12 @@ export class InitialSchema1733295000000 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE IF EXISTS "brain_provider_configs"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "organizations"`);
 
-    // Drop pgvector extension
+    /**
+     * Drop pgvector extension
+     *
+     * Note: Extension can remain installed if other databases use it.
+     * The extension is schema-scoped and won't affect other databases.
+     */
     await queryRunner.query(`DROP EXTENSION IF EXISTS vector`);
   }
 }
