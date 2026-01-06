@@ -286,6 +286,9 @@ export class CodeReviewService implements ICodeReviewService {
 
     // Phase 3: Check if this is a subtask and trigger parent task if all subtasks are complete
     await this.checkAndTriggerParentTask(pr.task);
+
+    // 🎯 NEW: Check if parent Epic should be marked as completed
+    await this.checkAndCompleteParentEpic(pr.task);
   }
 
   /**
@@ -498,6 +501,104 @@ export class CodeReviewService implements ICodeReviewService {
           error.stack,
         );
       });
+  }
+
+  /**
+   * Phase 4: Check if parent Epic should be marked as completed
+   *
+   * When a task is marked as COMPLETED:
+   * 1. Check if this task has a parent Epic (depth=0, Team Epic)
+   * 2. Query all children of that Epic
+   * 3. If all children are COMPLETED, automatically mark Epic as COMPLETED
+   * 4. This unblocks the entire dependency tree waiting on that Epic
+   */
+  private async checkAndCompleteParentEpic(completedTask: Task): Promise<void> {
+    // Check if this task has a parent
+    if (!completedTask.parentTaskId) {
+      this.logger.log(
+        `Task ${completedTask.id.slice(0, 8)} has no parent, no Epic to complete`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `Task ${completedTask.id.slice(0, 8)} completed, checking if parent Epic should be completed...`,
+    );
+
+    // Get parent task
+    const parentTask = await this.taskRepo.findOne({
+      where: { id: completedTask.parentTaskId },
+    });
+
+    if (!parentTask) {
+      this.logger.error(
+        `Parent task ${completedTask.parentTaskId} not found for task ${completedTask.id}`,
+      );
+      return;
+    }
+
+    // Check if parent is a Team Epic (depth=0)
+    if (parentTask.depth !== 0) {
+      this.logger.log(
+        `Parent task ${parentTask.id.slice(0, 8)} is not a Team Epic (depth=${parentTask.depth}), skipping`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `Parent task ${parentTask.id.slice(0, 8)} is a Team Epic (depth=0), checking all children...`,
+    );
+
+    // Check if all children are completed
+    const allChildren = await this.taskRepo.find({
+      where: { parentTaskId: parentTask.id },
+    });
+
+    if (allChildren.length === 0) {
+      this.logger.warn(
+        `Team Epic ${parentTask.id.slice(0, 8)} has no children, cannot determine completion`,
+      );
+      return;
+    }
+
+    const allChildrenCompleted = allChildren.every(
+      (child) => child.status === TaskStatus.COMPLETED,
+    );
+
+    if (!allChildrenCompleted) {
+      const remainingCount = allChildren.filter(
+        (child) => child.status !== TaskStatus.COMPLETED,
+      ).length;
+      this.logger.log(
+        `Not all children completed yet. ${remainingCount} remaining out of ${allChildren.length}`,
+      );
+      return;
+    }
+
+    // All children are completed! Mark Epic as COMPLETED
+    this.logger.log(
+      `🎉 All ${allChildren.length} children completed! Marking Team Epic ${parentTask.id.slice(0, 8)} as COMPLETED...`,
+    );
+
+    parentTask.status = TaskStatus.COMPLETED;
+    parentTask.completedAt = new Date();
+
+    // Clear any blocked reason since we're completing it
+    if (parentTask.metadata) {
+      const metadata = parentTask.metadata as Record<string, any>;
+      delete metadata.blockedReason;
+      delete metadata.escalatedAt;
+      parentTask.metadata = metadata;
+    }
+
+    await this.taskRepo.save(parentTask);
+
+    this.logger.log(
+      `✅ Team Epic ${parentTask.id.slice(0, 8)}: ${parentTask.title} marked as COMPLETED`,
+    );
+
+    // Unblock any tasks that depend on this Epic
+    await this.unblockDependentTasks(parentTask);
   }
 
   /**
