@@ -1062,6 +1062,19 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
               );
 
               task.status = TaskStatus.READY_FOR_REVIEW;
+
+              // Fix #24: Set reviewer_hollon_id to assignedHollon's manager
+              if (task.assignedHollon?.managerId) {
+                task.reviewerHollonId = task.assignedHollon.managerId;
+                this.logger.debug(
+                  `Set reviewer_hollon_id to ${task.assignedHollon.managerId} (manager of ${task.assignedHollon.name})`,
+                );
+              } else {
+                this.logger.warn(
+                  `Task ${task.id} has no manager assigned to hollon ${task.assignedHollon?.name}, reviewer_hollon_id remains null`,
+                );
+              }
+
               await this.taskRepo.save(task);
 
               this.logger.log(
@@ -1077,6 +1090,15 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
                 `No CI checks configured for PR #${pr.prNumber}, moving to READY_FOR_REVIEW`,
               );
               task.status = TaskStatus.READY_FOR_REVIEW;
+
+              // Fix #24: Set reviewer_hollon_id to assignedHollon's manager
+              if (task.assignedHollon?.managerId) {
+                task.reviewerHollonId = task.assignedHollon.managerId;
+                this.logger.debug(
+                  `Set reviewer_hollon_id to ${task.assignedHollon.managerId} (manager of ${task.assignedHollon.name})`,
+                );
+              }
+
               await this.taskRepo.save(task);
             } else {
               this.logger.error(

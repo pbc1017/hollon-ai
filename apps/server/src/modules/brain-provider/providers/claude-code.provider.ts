@@ -91,7 +91,8 @@ export class ClaudeCodeProvider implements IBrainProvider {
       'claude',
     );
     const timeoutMs =
-      request.options?.timeoutMs || config.timeoutSeconds * 1000;
+      request.options?.timeoutMs ||
+      this.configLib.get<number>('brain.timeoutMs', 600000);
 
     // Build command arguments with model
     const args = [
