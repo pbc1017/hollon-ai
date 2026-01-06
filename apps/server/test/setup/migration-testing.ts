@@ -17,13 +17,13 @@ export async function getPendingMigrations(
 ): Promise<string[]> {
   const pendingMigrations = await dataSource.showMigrations();
   const migrations = await dataSource.migrations;
-  
+
   if (!pendingMigrations) {
     return [];
   }
 
   // Get all migration names
-  return migrations.map(m => m.name);
+  return migrations.map((m) => m.name);
 }
 
 /**
@@ -49,9 +49,7 @@ export async function getExecutedMigrations(
  * Run all pending migrations
  * Returns the number of migrations executed
  */
-export async function runMigrations(
-  dataSource: DataSource,
-): Promise<number> {
+export async function runMigrations(dataSource: DataSource): Promise<number> {
   try {
     const migrations = await dataSource.runMigrations({ transaction: 'all' });
     console.log(`✓ Ran ${migrations.length} migration(s)`);
@@ -107,7 +105,7 @@ export async function verifyMigrationState(
   const hasPending = await dataSource.showMigrations();
   const executed = await getExecutedMigrations(dataSource);
   const total = dataSource.migrations.length;
-  
+
   return {
     allExecuted: !hasPending,
     pending: hasPending ? total - executed.length : 0,
@@ -125,32 +123,32 @@ export async function testMigrationCycle(
   try {
     // Get initial state
     const initialExecuted = await getExecutedMigrations(dataSource);
-    
+
     // Run one migration
     const migrations = await dataSource.runMigrations({ transaction: 'all' });
     if (migrations.length === 0) {
       console.log('⚠ No pending migrations to test');
       return true;
     }
-    
+
     console.log(`✓ Migration up successful: ${migrations[0].name}`);
-    
+
     // Verify it was executed
     const afterUpExecuted = await getExecutedMigrations(dataSource);
     if (afterUpExecuted.length !== initialExecuted.length + 1) {
       throw new Error('Migration was not recorded in migrations table');
     }
-    
+
     // Revert the migration
     await dataSource.undoLastMigration({ transaction: 'all' });
     console.log(`✓ Migration down successful: ${migrations[0].name}`);
-    
+
     // Verify it was reverted
     const afterDownExecuted = await getExecutedMigrations(dataSource);
     if (afterDownExecuted.length !== initialExecuted.length) {
       throw new Error('Migration revert was not recorded in migrations table');
     }
-    
+
     return true;
   } catch (error) {
     console.error('✗ Migration cycle test failed:', error);
@@ -162,17 +160,15 @@ export async function testMigrationCycle(
  * Reset migrations to a clean state
  * Reverts all migrations - useful for testing from scratch
  */
-export async function resetMigrations(
-  dataSource: DataSource,
-): Promise<void> {
+export async function resetMigrations(dataSource: DataSource): Promise<void> {
   try {
     const executed = await getExecutedMigrations(dataSource);
-    
+
     // Revert all migrations
     for (let i = 0; i < executed.length; i++) {
       await dataSource.undoLastMigration({ transaction: 'all' });
     }
-    
+
     console.log(`✓ Reset complete: reverted ${executed.length} migration(s)`);
   } catch (error) {
     console.error('✗ Failed to reset migrations:', error);
@@ -189,26 +185,29 @@ export async function verifySchemaStructure(
   expectedTables: string[],
 ): Promise<{ valid: boolean; missing: string[]; extra: string[] }> {
   const schema = (dataSource.options as { schema?: string }).schema || 'public';
-  
+
   try {
     // Get all tables in the schema
-    const result = await dataSource.query(`
+    const result = await dataSource.query(
+      `
       SELECT tablename
       FROM pg_tables
       WHERE schemaname = $1
       ORDER BY tablename
-    `, [schema]);
-    
+    `,
+      [schema],
+    );
+
     const actualTables = result
       .map((row: { tablename: string }) => row.tablename)
       .filter((name: string) => name !== 'migrations'); // Exclude TypeORM migrations table
-    
+
     const expectedSet = new Set(expectedTables);
     const actualSet = new Set(actualTables);
-    
-    const missing = expectedTables.filter(table => !actualSet.has(table));
-    const extra = actualTables.filter(table => !expectedSet.has(table));
-    
+
+    const missing = expectedTables.filter((table) => !actualSet.has(table));
+    const extra = actualTables.filter((table) => !expectedSet.has(table));
+
     return {
       valid: missing.length === 0 && extra.length === 0,
       missing,

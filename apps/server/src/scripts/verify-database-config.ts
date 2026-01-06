@@ -29,7 +29,7 @@ interface VerificationResult {
  */
 function verifyEnvironmentVariables(): VerificationResult {
   const required = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'];
-  const missing = required.filter(key => !process.env[key]);
+  const missing = required.filter((key) => !process.env[key]);
 
   if (missing.length > 0) {
     return {
@@ -60,7 +60,7 @@ async function verifyConnection(dataSource: DataSource): VerificationResult {
   try {
     await dataSource.initialize();
     await dataSource.query('SELECT 1 as connected');
-    
+
     return {
       success: true,
       message: 'Database connection successful',
@@ -76,7 +76,9 @@ async function verifyConnection(dataSource: DataSource): VerificationResult {
     return {
       success: false,
       message: 'Database connection failed',
-      details: { error: error instanceof Error ? error.message : String(error) },
+      details: {
+        error: error instanceof Error ? error.message : String(error),
+      },
     };
   }
 }
@@ -84,7 +86,9 @@ async function verifyConnection(dataSource: DataSource): VerificationResult {
 /**
  * Verify schema exists
  */
-async function verifySchema(dataSource: DataSource): Promise<VerificationResult> {
+async function verifySchema(
+  dataSource: DataSource,
+): Promise<VerificationResult> {
   try {
     const result = await dataSource.query(
       `SELECT schema_name FROM information_schema.schemata WHERE schema_name = $1`,
@@ -108,7 +112,9 @@ async function verifySchema(dataSource: DataSource): Promise<VerificationResult>
     return {
       success: false,
       message: 'Failed to verify schema',
-      details: { error: error instanceof Error ? error.message : String(error) },
+      details: {
+        error: error instanceof Error ? error.message : String(error),
+      },
     };
   }
 }
@@ -116,7 +122,9 @@ async function verifySchema(dataSource: DataSource): Promise<VerificationResult>
 /**
  * Verify database extensions
  */
-async function verifyExtensions(dataSource: DataSource): Promise<VerificationResult> {
+async function verifyExtensions(
+  dataSource: DataSource,
+): Promise<VerificationResult> {
   try {
     const result = await dataSource.query(`
       SELECT extname
@@ -127,7 +135,7 @@ async function verifyExtensions(dataSource: DataSource): Promise<VerificationRes
 
     const installed = result.map((row: { extname: string }) => row.extname);
     const required = ['uuid-ossp', 'vector', 'pg_trgm'];
-    const missing = required.filter(ext => !installed.includes(ext));
+    const missing = required.filter((ext) => !installed.includes(ext));
 
     if (missing.length > 0) {
       return {
@@ -146,7 +154,9 @@ async function verifyExtensions(dataSource: DataSource): Promise<VerificationRes
     return {
       success: false,
       message: 'Failed to verify extensions',
-      details: { error: error instanceof Error ? error.message : String(error) },
+      details: {
+        error: error instanceof Error ? error.message : String(error),
+      },
     };
   }
 }
@@ -154,10 +164,12 @@ async function verifyExtensions(dataSource: DataSource): Promise<VerificationRes
 /**
  * Verify migrations status
  */
-async function verifyMigrations(dataSource: DataSource): Promise<VerificationResult> {
+async function verifyMigrations(
+  dataSource: DataSource,
+): Promise<VerificationResult> {
   try {
     const hasPending = await dataSource.showMigrations();
-    
+
     // Get executed migrations
     let executedCount = 0;
     try {
@@ -189,7 +201,9 @@ async function verifyMigrations(dataSource: DataSource): Promise<VerificationRes
     return {
       success: false,
       message: 'Failed to verify migrations',
-      details: { error: error instanceof Error ? error.message : String(error) },
+      details: {
+        error: error instanceof Error ? error.message : String(error),
+      },
     };
   }
 }
@@ -197,7 +211,9 @@ async function verifyMigrations(dataSource: DataSource): Promise<VerificationRes
 /**
  * Get table count in schema
  */
-async function getTableCount(dataSource: DataSource): Promise<VerificationResult> {
+async function getTableCount(
+  dataSource: DataSource,
+): Promise<VerificationResult> {
   try {
     const result = await dataSource.query(
       `SELECT COUNT(*) as count 
@@ -217,7 +233,9 @@ async function getTableCount(dataSource: DataSource): Promise<VerificationResult
     return {
       success: false,
       message: 'Failed to get table count',
-      details: { error: error instanceof Error ? error.message : String(error) },
+      details: {
+        error: error instanceof Error ? error.message : String(error),
+      },
     };
   }
 }
@@ -229,10 +247,10 @@ function printResult(title: string, result: VerificationResult): void {
   const icon = result.success ? '✓' : '✗';
   const color = result.success ? '\x1b[32m' : '\x1b[31m';
   const reset = '\x1b[0m';
-  
+
   console.log(`\n${color}${icon} ${title}${reset}`);
   console.log(`  ${result.message}`);
-  
+
   if (result.details) {
     console.log('  Details:', JSON.stringify(result.details, null, 2));
   }
@@ -255,7 +273,9 @@ async function verifyDatabaseConfiguration(): Promise<void> {
 
   if (!envResult.success) {
     console.log('\n✗ Cannot proceed without required environment variables');
-    console.log('Please create a .env or .env.local file with the required variables.');
+    console.log(
+      'Please create a .env or .env.local file with the required variables.',
+    );
     console.log('See .env.example for reference.');
     process.exit(1);
   }
@@ -285,7 +305,9 @@ async function verifyDatabaseConfiguration(): Promise<void> {
 
     if (!connectionResult.success) {
       console.log('\n✗ Cannot proceed without database connection');
-      console.log('Please ensure PostgreSQL is running and credentials are correct.');
+      console.log(
+        'Please ensure PostgreSQL is running and credentials are correct.',
+      );
       console.log('Run: pnpm docker:up');
       process.exit(1);
     }
@@ -309,7 +331,6 @@ async function verifyDatabaseConfiguration(): Promise<void> {
     const tablesResult = await getTableCount(dataSource);
     results.push({ title: 'Database Tables', result: tablesResult });
     printResult('Database Tables', tablesResult);
-
   } catch (error) {
     console.error('\n✗ Unexpected error during verification:', error);
     process.exit(1);
@@ -321,15 +342,19 @@ async function verifyDatabaseConfiguration(): Promise<void> {
 
   // Summary
   console.log('\n' + '='.repeat(60));
-  const successCount = results.filter(r => r.result.success).length;
+  const successCount = results.filter((r) => r.result.success).length;
   const totalCount = results.length;
-  
+
   if (successCount === totalCount) {
-    console.log(`\x1b[32m✓ All checks passed (${successCount}/${totalCount})\x1b[0m`);
+    console.log(
+      `\x1b[32m✓ All checks passed (${successCount}/${totalCount})\x1b[0m`,
+    );
     console.log('\nYour database configuration is ready for use!');
     process.exit(0);
   } else {
-    console.log(`\x1b[31m✗ ${totalCount - successCount} check(s) failed\x1b[0m`);
+    console.log(
+      `\x1b[31m✗ ${totalCount - successCount} check(s) failed\x1b[0m`,
+    );
     console.log(`\x1b[32m✓ ${successCount} check(s) passed\x1b[0m`);
     console.log('\nPlease address the failures above before proceeding.');
     process.exit(1);
@@ -337,7 +362,7 @@ async function verifyDatabaseConfiguration(): Promise<void> {
 }
 
 // Run verification
-verifyDatabaseConfiguration().catch(error => {
+verifyDatabaseConfiguration().catch((error) => {
   console.error('Fatal error:', error);
   process.exit(1);
 });
