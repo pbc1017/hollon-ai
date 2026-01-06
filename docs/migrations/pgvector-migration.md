@@ -52,6 +52,7 @@ The pgvector setup is implemented across the following migrations:
 **Purpose**: Enables the pgvector extension and creates the initial schema including the documents table with vector embedding support.
 
 **Changes**:
+
 - Enables `pgvector` extension
 - Creates `documents` table with `embedding vector(1536)` column
 - Sets up indexes for efficient document retrieval
@@ -68,6 +69,7 @@ The pgvector setup is implemented across the following migrations:
 **Purpose**: Creates the knowledge_items table for storing extracted knowledge that can be enhanced with embeddings in future iterations.
 
 **Changes**:
+
 - Creates `knowledge_items` table
 - Prepares schema for future vector embedding integration
 - Sets up indexes for performance
@@ -83,6 +85,7 @@ The pgvector setup is implemented across the following migrations:
 **Purpose**: Initializes the PostgreSQL database with required extensions when the Docker container is first created.
 
 **Changes**:
+
 - Enables `uuid-ossp` extension for UUID generation
 - Enables `vector` extension (pgvector) in the public schema
 - Enables `pg_trgm` extension for text search
@@ -101,6 +104,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
 **Impact**:
+
 - Adds vector data types to PostgreSQL
 - Enables vector operators (<->, <=>, <#>, <+>)
 - Provides vector indexing capabilities (IVFFlat, HNSW)
@@ -137,11 +141,11 @@ CREATE TABLE "documents" (
 
 ### Vector Type Characteristics
 
-| Property | Value | Notes |
-|----------|-------|-------|
-| Dimensions | 1536 | OpenAI standard embedding size |
-| Storage Size | ~6 KB per vector | 4 bytes per dimension |
-| Max Dimensions | 2,000 | pgvector limitation for vector type |
+| Property        | Value                           | Notes                                                           |
+| --------------- | ------------------------------- | --------------------------------------------------------------- |
+| Dimensions      | 1536                            | OpenAI standard embedding size                                  |
+| Storage Size    | ~6 KB per vector                | 4 bytes per dimension                                           |
+| Max Dimensions  | 2,000                           | pgvector limitation for vector type                             |
 | Supported Types | vector, halfvec, bit, sparsevec | See [pgvector-best-practices.md](../pgvector-best-practices.md) |
 
 ### Indexes
@@ -204,6 +208,7 @@ CREATE INDEX "IDX_documents_task"
    ```
 
    Expected output:
+
    ```
      oid  | extname | extowner | extnamespace | extrelocatable | extversion | extconfig | extcondition
    -------+---------+----------+--------------+----------------+------------+-----------+--------------
@@ -261,6 +266,7 @@ CREATE INDEX "IDX_documents_task"
    - Enable via Azure Portal or Azure CLI
 
    **Self-hosted PostgreSQL**:
+
    ```bash
    # Ubuntu/Debian
    sudo apt-get install postgresql-<version>-pgvector
@@ -497,7 +503,9 @@ export class DocumentService {
   ): Promise<Document> {
     // Validate embedding dimensions
     if (embedding.length !== 1536) {
-      throw new Error(`Invalid embedding dimensions: expected 1536, got ${embedding.length}`);
+      throw new Error(
+        `Invalid embedding dimensions: expected 1536, got ${embedding.length}`,
+      );
     }
 
     // Convert embedding array to pgvector format
@@ -617,12 +625,12 @@ async hybridSearch(
 
 pgvector provides multiple distance operators for different use cases:
 
-| Operator | Distance Type | SQL Example | Use Case |
-|----------|---------------|-------------|----------|
-| `<=>` | Cosine distance | `embedding <=> '[...]'` | Text embeddings (recommended) |
-| `<->` | L2 (Euclidean) | `embedding <-> '[...]'` | General similarity |
-| `<#>` | Inner product | `embedding <#> '[...]'` | Normalized vectors |
-| `<+>` | L1 (Manhattan) | `embedding <+> '[...]'` | Specialized use cases |
+| Operator | Distance Type   | SQL Example             | Use Case                      |
+| -------- | --------------- | ----------------------- | ----------------------------- |
+| `<=>`    | Cosine distance | `embedding <=> '[...]'` | Text embeddings (recommended) |
+| `<->`    | L2 (Euclidean)  | `embedding <-> '[...]'` | General similarity            |
+| `<#>`    | Inner product   | `embedding <#> '[...]'` | Normalized vectors            |
+| `<+>`    | L1 (Manhattan)  | `embedding <+> '[...]'` | Specialized use cases         |
 
 **Recommendation**: Use cosine distance (`<=>`) for text embeddings as it's invariant to vector magnitude.
 
@@ -718,10 +726,12 @@ export class AddDocumentsVectorIndex1234567890000 implements MigrationInterface 
 ```
 
 **Parameters**:
+
 - `m = 16`: Maximum connections per layer (higher = better recall, more memory)
 - `ef_construction = 64`: Build quality (higher = better index, slower build)
 
 **Performance**:
+
 - Build time: Slower (hours for 1M+ vectors)
 - Query speed: 15.5x faster than IVFFlat
 - Recall quality: Better and more stable
@@ -739,9 +749,11 @@ WITH (lists = 100);
 ```
 
 **Parameters**:
+
 - `lists`: Number of clusters (recommended: rows / 1000 for < 1M rows)
 
 **Performance**:
+
 - Build time: 32x faster than HNSW
 - Query speed: Slower than HNSW
 - Best for: Static datasets with infrequent updates
@@ -823,11 +835,13 @@ SELECT
 #### 1. Extension Not Found
 
 **Error**:
+
 ```
 ERROR: extension "vector" is not available
 ```
 
 **Solution**:
+
 - Verify pgvector is installed on PostgreSQL server
 - Check PostgreSQL version (11+ required)
 - Install pgvector extension (see [Setup Instructions](#setup-instructions))
@@ -835,11 +849,13 @@ ERROR: extension "vector" is not available
 #### 2. Dimension Mismatch
 
 **Error**:
+
 ```
 ERROR: expected 1536 dimensions, not 1024
 ```
 
 **Solution**:
+
 - Ensure embedding arrays have exactly 1536 elements
 - Verify embedding model output dimensions
 - Consider creating separate columns for different dimensions
@@ -847,11 +863,13 @@ ERROR: expected 1536 dimensions, not 1024
 #### 3. Invalid Vector Format
 
 **Error**:
+
 ```
 ERROR: invalid input syntax for type vector
 ```
 
 **Solution**:
+
 - Check vector format: `[1,2,3,...]` (no spaces)
 - Validate numeric values (no NaN or Infinity)
 - Use proper type casting: `'[...]'::vector`
@@ -861,6 +879,7 @@ ERROR: invalid input syntax for type vector
 **Symptom**: Vector searches take > 1 second
 
 **Solutions**:
+
 1. Create vector index (HNSW or IVFFlat)
 2. Add filters to reduce search space
 3. Increase `hnsw.ef_search` for better recall
@@ -870,11 +889,13 @@ ERROR: invalid input syntax for type vector
 #### 5. Index Build Fails
 
 **Error**:
+
 ```
 ERROR: out of memory
 ```
 
 **Solution**:
+
 - Increase `maintenance_work_mem` to 2GB or higher
 - Build index during low-traffic periods
 - Use `CREATE INDEX CONCURRENTLY` for production
@@ -885,6 +906,7 @@ ERROR: out of memory
 **Symptom**: pgvector extension not available in Docker
 
 **Solutions**:
+
 1. Verify using correct image: `pgvector/pgvector:pg16`
 2. Check init scripts are running: `docker logs hollon-ai-postgres`
 3. Rebuild container: `docker-compose up -d --force-recreate postgres`
@@ -950,21 +972,21 @@ If issues persist:
 
 #### Vector Types and Dimensions
 
-| Type | Max Dimensions | Storage/Dim | Use Case |
-|------|----------------|-------------|----------|
-| vector | 2,000 | 4 bytes | Standard embeddings |
-| halfvec | 4,000 | 2 bytes | Large embeddings, cost optimization |
-| sparsevec | 1,000 nonzero | Variable | Sparse embeddings (BM25) |
-| bit | 64,000 | 1/8 byte | Binary quantization |
+| Type      | Max Dimensions | Storage/Dim | Use Case                            |
+| --------- | -------------- | ----------- | ----------------------------------- |
+| vector    | 2,000          | 4 bytes     | Standard embeddings                 |
+| halfvec   | 4,000          | 2 bytes     | Large embeddings, cost optimization |
+| sparsevec | 1,000 nonzero  | Variable    | Sparse embeddings (BM25)            |
+| bit       | 64,000         | 1/8 byte    | Binary quantization                 |
 
 #### Common Models and Dimensions
 
-| Model | Dimensions | Type |
-|-------|------------|------|
-| OpenAI ada-002 | 1536 | vector |
-| OpenAI text-embedding-3-small | 1536 | vector |
-| OpenAI text-embedding-3-large | 3072 | vector/halfvec |
-| Cohere embed-english-v3.0 | 1024 | vector |
+| Model                         | Dimensions | Type           |
+| ----------------------------- | ---------- | -------------- |
+| OpenAI ada-002                | 1536       | vector         |
+| OpenAI text-embedding-3-small | 1536       | vector         |
+| OpenAI text-embedding-3-large | 3072       | vector/halfvec |
+| Cohere embed-english-v3.0     | 1024       | vector         |
 
 #### Distance Metrics Cheat Sheet
 
