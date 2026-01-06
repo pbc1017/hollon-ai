@@ -64,21 +64,23 @@ pgvector provides open-source vector similarity search for PostgreSQL with:
 
 ### Vector Type Comparison
 
-| Type       | Bytes/Dim | Max Dimensions | Use Case                                   | Storage Savings |
-| ---------- | --------- | -------------- | ------------------------------------------ | --------------- |
-| `vector`   | 4         | 2,000          | Standard embeddings, best accuracy         | Baseline        |
-| `halfvec`  | 2         | 4,000          | Large embeddings, cost optimization        | 50%             |
-| `sparsevec`| Variable  | 1,000 nonzero  | Text search (BM25), BGE-M3 embeddings      | 90%+ (typical)  |
-| `bit`      | 1/8       | 64,000         | Binary quantization, extreme compression   | 96.9%           |
+| Type        | Bytes/Dim | Max Dimensions | Use Case                                 | Storage Savings |
+| ----------- | --------- | -------------- | ---------------------------------------- | --------------- |
+| `vector`    | 4         | 2,000          | Standard embeddings, best accuracy       | Baseline        |
+| `halfvec`   | 2         | 4,000          | Large embeddings, cost optimization      | 50%             |
+| `sparsevec` | Variable  | 1,000 nonzero  | Text search (BM25), BGE-M3 embeddings    | 90%+ (typical)  |
+| `bit`       | 1/8       | 64,000         | Binary quantization, extreme compression | 96.9%           |
 
 ### When to Use Each Type
 
 **`vector` (Default)**
+
 - Standard use case for OpenAI, Cohere, or custom embeddings
 - Best accuracy and recall
 - Use when storage cost is not a primary concern
 
 **`halfvec` (Recommended for Large-Scale)**
+
 - **50% storage reduction** with minimal accuracy loss
 - Enables 4,000 dimensions (vs 2,000 for vector)
 - Faster index builds and prewarming
@@ -86,6 +88,7 @@ pgvector provides open-source vector similarity search for PostgreSQL with:
 - Example: `CREATE TABLE items (embedding halfvec(1536));`
 
 **`sparsevec` (Specialized)**
+
 - For sparse embeddings where most values are zero
 - Common in text search algorithms (BM25)
 - BGE-M3 model embeddings
@@ -93,6 +96,7 @@ pgvector provides open-source vector similarity search for PostgreSQL with:
 - Example: `CREATE TABLE items (embedding sparsevec(1000));`
 
 **`bit` (Binary Quantization)**
+
 - Extreme compression: 96.9% storage reduction
 - 67x faster HNSW index builds
 - **Significant recall degradation** - requires re-ranking
@@ -102,6 +106,7 @@ pgvector provides open-source vector similarity search for PostgreSQL with:
 ### Quantization Strategies
 
 **Scalar Quantization (halfvec)**
+
 ```sql
 -- Direct halfvec storage
 CREATE TABLE documents (
@@ -110,11 +115,12 @@ CREATE TABLE documents (
 );
 
 -- Or quantize existing vectors
-CREATE INDEX ON documents 
+CREATE INDEX ON documents
 USING hnsw ((embedding::halfvec(1536)) halfvec_cosine_ops);
 ```
 
 **Binary Quantization with Re-ranking**
+
 ```sql
 -- Store both binary and full vectors
 CREATE TABLE documents (
@@ -143,14 +149,15 @@ LIMIT 10;
 
 Based on benchmarks (1M vectors, 1536 dimensions):
 
-| Metric         | vector | halfvec | bit (binary) |
-| -------------- | ------ | ------- | ------------ |
-| Storage        | 6 KB   | 3 KB    | 192 bytes    |
-| Index Build    | 4065s  | ~2000s  | 60s          |
-| Recall @ 0.95  | 0.95   | 0.94    | 0.65         |
-| Recall @ 0.95 (with re-rank) | 0.95 | 0.94 | 0.92 |
+| Metric                       | vector | halfvec | bit (binary) |
+| ---------------------------- | ------ | ------- | ------------ |
+| Storage                      | 6 KB   | 3 KB    | 192 bytes    |
+| Index Build                  | 4065s  | ~2000s  | 60s          |
+| Recall @ 0.95                | 0.95   | 0.94    | 0.65         |
+| Recall @ 0.95 (with re-rank) | 0.95   | 0.94    | 0.92         |
 
 **Recommendation for Hollon-AI**:
+
 - **Current phase**: Use `vector(1536)` for simplicity and accuracy
 - **Production optimization**: Migrate to `halfvec(1536)` for 50% cost savings
 - **Future consideration**: Binary quantization for extremely large datasets (10M+ vectors)
@@ -835,6 +842,7 @@ const results = await dataSource.query(
 pgvector 0.8.0 introduced iterative index scans to solve the "overfiltering" problem where filtered searches would return fewer results than requested.
 
 **How It Works**:
+
 - Scans the vector index and applies filters
 - If not enough results meet the criteria, continues scanning automatically
 - Keeps scanning until reaching either the required number of matches or a configurable limit
@@ -900,6 +908,7 @@ const resultsWithDistanceFilter = await dataSource.query(
 ```
 
 **Limitations**:
+
 - Subquery-based filters may not work with iterative scans
 - The WHERE condition must be applied by the planner to the filter of the index scan
 - For complex queries, check EXPLAIN ANALYZE to verify iterative scan is being used
@@ -1222,12 +1231,12 @@ ORDER BY similarity;
 
 Based on research with 1M vectors, 1536 dimensions (pgvector 0.8.x):
 
-| Operation            | IVFFlat  | HNSW     | HNSW (halfvec) | HNSW (binary) |
-| -------------------- | -------- | -------- | -------------- | ------------- |
-| Index build          | 128s     | 4065s    | ~2000s         | 60s           |
-| Query @ 0.9 recall   | ~100 QPS | ~500 QPS | ~550 QPS       | ~1000 QPS     |
-| Query @ 0.998 recall | 2.6 QPS  | 40.5 QPS | 42 QPS         | N/A           |
-| Memory usage         | 257 MB   | 729 MB   | 365 MB         | 23 MB         |
+| Operation            | IVFFlat  | HNSW     | HNSW (halfvec) | HNSW (binary)         |
+| -------------------- | -------- | -------- | -------------- | --------------------- |
+| Index build          | 128s     | 4065s    | ~2000s         | 60s                   |
+| Query @ 0.9 recall   | ~100 QPS | ~500 QPS | ~550 QPS       | ~1000 QPS             |
+| Query @ 0.998 recall | 2.6 QPS  | 40.5 QPS | 42 QPS         | N/A                   |
+| Memory usage         | 257 MB   | 729 MB   | 365 MB         | 23 MB                 |
 | Recall quality       | 0.90     | 0.95     | 0.94           | 0.65 (0.92 w/ rerank) |
 
 **Note**: With pgvector 0.7.0+ on AWS Aurora, HNSW index builds can be up to 30x faster, and with compression techniques, up to 67x faster.
