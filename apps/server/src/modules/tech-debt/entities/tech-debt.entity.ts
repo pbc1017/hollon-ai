@@ -36,37 +36,37 @@ export enum TechDebtCategory {
 @Index(['taskId'])
 export class TechDebt extends BaseEntity {
   @Column({ length: 255 })
-  title: string;
+  title!: string;
 
   @Column({ type: 'text' })
-  description: string;
+  description!: string;
 
   @Column({
     type: 'enum',
     enum: TechDebtCategory,
     default: TechDebtCategory.CODE_QUALITY,
   })
-  category: TechDebtCategory;
+  category!: TechDebtCategory;
 
   @Column({
     type: 'enum',
     enum: TechDebtSeverity,
     default: TechDebtSeverity.MEDIUM,
   })
-  severity: TechDebtSeverity;
+  severity!: TechDebtSeverity;
 
   @Column({
     type: 'enum',
     enum: TechDebtStatus,
     default: TechDebtStatus.IDENTIFIED,
   })
-  status: TechDebtStatus;
+  status!: TechDebtStatus;
 
   @Column({ name: 'project_id' })
-  projectId: string;
+  projectId!: string;
 
   @Column({ name: 'task_id', type: 'uuid', nullable: true })
-  taskId: string | null;
+  taskId!: string | null;
 
   @Column({
     name: 'affected_files',
@@ -74,33 +74,33 @@ export class TechDebt extends BaseEntity {
     array: true,
     default: '{}',
   })
-  affectedFiles: string[];
+  affectedFiles!: string[];
 
   @Column({
     name: 'estimated_effort_hours',
     type: 'integer',
     nullable: true,
   })
-  estimatedEffortHours: number | null;
+  estimatedEffortHours!: number | null;
 
   @Column({ name: 'detected_by', type: 'varchar', length: 100, nullable: true })
-  detectedBy: string | null;
+  detectedBy!: string | null;
 
   @Column({ type: 'jsonb', nullable: true })
   metadata?: Record<string, unknown>;
 
   @Column({ name: 'resolved_at', type: 'timestamp', nullable: true })
-  resolvedAt: Date | null;
+  resolvedAt!: Date | null;
 
   @Column({ name: 'resolution_notes', type: 'text', nullable: true })
-  resolutionNotes: string | null;
+  resolutionNotes!: string | null;
 
   // Relations
   @ManyToOne(() => Project, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'project_id' })
-  project: Project;
+  project!: Project;
 
   @ManyToOne(() => Task, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'task_id' })
-  task: Task | null;
+  task!: Task | null;
 }

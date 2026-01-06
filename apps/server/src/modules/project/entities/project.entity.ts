@@ -24,57 +24,57 @@ export enum ProjectStatus {
 @Index(['organizationId', 'status'])
 export class Project extends BaseEntity {
   @Column({ length: 255 })
-  name: string;
+  name!: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description!: string;
 
   @Column({
     type: 'enum',
     enum: ProjectStatus,
     default: ProjectStatus.ACTIVE,
   })
-  status: ProjectStatus;
+  status!: ProjectStatus;
 
   @Column({ name: 'organization_id' })
-  organizationId: string;
+  organizationId!: string;
 
   @Column({ name: 'repository_url', length: 500, nullable: true })
-  repositoryUrl: string;
+  repositoryUrl!: string;
 
   @Column({ name: 'working_directory', length: 500, nullable: true })
-  workingDirectory: string;
+  workingDirectory!: string;
 
   @Column({ type: 'jsonb', nullable: true, default: {}, name: 'metadata' })
-  metadata: Record<string, unknown>;
+  metadata!: Record<string, unknown>;
 
   @Column({ name: 'goal_id', nullable: true })
-  goalId: string;
+  goalId!: string;
 
   // ✅ Phase 3.5: 팀 할당
   @Column({ name: 'assigned_team_id', type: 'uuid', nullable: true })
-  assignedTeamId: string | null;
+  assignedTeamId!: string | null;
 
   // Relations
   @ManyToOne(() => Organization, (org) => org.projects, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organization_id' })
-  organization: Organization;
+  organization!: Organization;
 
   @OneToMany(() => Task, (task) => task.project)
-  tasks: Task[];
+  tasks!: Task[];
 
   @OneToMany(() => Document, (doc) => doc.project)
-  documents: Document[];
+  documents!: Document[];
 
   @ManyToOne(() => Goal, (goal) => goal.projects, {
     onDelete: 'SET NULL',
     nullable: true,
   })
   @JoinColumn({ name: 'goal_id' })
-  goal: Goal;
+  goal!: Goal;
 
   // ✅ Phase 3.5: 할당된 팀
   @ManyToOne(() => Team, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'assigned_team_id' })
-  assignedTeam: Team | null;
+  assignedTeam!: Team | null;
 }

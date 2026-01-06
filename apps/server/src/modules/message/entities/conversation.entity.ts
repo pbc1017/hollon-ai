@@ -22,20 +22,20 @@ export class Conversation extends BaseEntity {
     enum: ParticipantType,
     name: 'participant1_type',
   })
-  participant1Type: ParticipantType;
+  participant1Type!: ParticipantType;
 
   @Column({ type: 'uuid', name: 'participant1_id' })
-  participant1Id: string;
+  participant1Id!: string;
 
   @Column({
     type: 'enum',
     enum: ParticipantType,
     name: 'participant2_type',
   })
-  participant2Type: ParticipantType;
+  participant2Type!: ParticipantType;
 
   @Column({ type: 'uuid', name: 'participant2_id' })
-  participant2Id: string;
+  participant2Id!: string;
 
   @Column({
     type: 'enum',
@@ -43,24 +43,24 @@ export class Conversation extends BaseEntity {
     name: 'context',
     default: ConversationContext.GENERAL,
   })
-  context: ConversationContext;
+  context!: ConversationContext;
 
   @Column({ name: 'context_id', type: 'uuid', nullable: true })
-  contextId: string | null;
+  contextId!: string | null;
 
   @Column({ name: 'last_message_id', type: 'uuid', nullable: true })
-  lastMessageId: string | null;
+  lastMessageId!: string | null;
 
   @ManyToOne(() => Message, { nullable: true })
   @JoinColumn({ name: 'last_message_id' })
   lastMessage?: Message;
 
   @Column({ type: 'timestamp', name: 'last_message_at', nullable: true })
-  lastMessageAt: Date | null;
+  lastMessageAt!: Date | null;
 
   @Column({ name: 'unread_count', default: 0 })
-  unreadCount: number;
+  unreadCount!: number;
 
   @OneToMany(() => Message, (message) => message.conversation)
-  messages: Message[];
+  messages!: Message[];
 }

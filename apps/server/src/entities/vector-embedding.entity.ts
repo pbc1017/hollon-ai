@@ -69,7 +69,7 @@ export class VectorEmbedding extends BaseEntity {
    * Format in database: [0.1, 0.2, 0.3, ...]
    */
   @Column({ type: 'text', nullable: false })
-  embedding: string;
+  embedding!: string;
 
   /**
    * Type of source entity that generated this embedding
@@ -80,14 +80,14 @@ export class VectorEmbedding extends BaseEntity {
     type: 'enum',
     enum: EmbeddingSourceType,
   })
-  sourceType: EmbeddingSourceType;
+  sourceType!: EmbeddingSourceType;
 
   /**
    * ID of the source entity (polymorphic reference)
    * References different tables based on sourceType
    */
   @Column({ name: 'source_id', type: 'uuid' })
-  sourceId: string;
+  sourceId!: string;
 
   /**
    * Embedding model used to generate this vector
@@ -99,7 +99,7 @@ export class VectorEmbedding extends BaseEntity {
     enum: EmbeddingModelType,
     default: EmbeddingModelType.OPENAI_ADA_002,
   })
-  modelType: EmbeddingModelType;
+  modelType!: EmbeddingModelType;
 
   /**
    * Number of dimensions in the vector
@@ -107,7 +107,7 @@ export class VectorEmbedding extends BaseEntity {
    * Common values: 1536 (OpenAI), 3072 (OpenAI large), 1024 (Cohere)
    */
   @Column({ type: 'integer' })
-  dimensions: number;
+  dimensions!: number;
 
   /**
    * Original text content that was embedded
@@ -115,7 +115,7 @@ export class VectorEmbedding extends BaseEntity {
    * Nullable for cases where content is stored elsewhere
    */
   @Column({ type: 'text', nullable: true })
-  content: string | null;
+  content!: string | null;
 
   /**
    * Flexible metadata for embedding-specific information
@@ -130,7 +130,7 @@ export class VectorEmbedding extends BaseEntity {
    * @property quality - Quality score or confidence metric
    */
   @Column({ type: 'jsonb', nullable: true })
-  metadata: {
+  metadata!: {
     embeddingModelVersion?: string;
     processingTimestamp?: string;
     chunkIndex?: number;
@@ -147,35 +147,35 @@ export class VectorEmbedding extends BaseEntity {
    * Useful for hybrid search combining vector similarity with tag matching
    */
   @Column({ type: 'text', array: true, nullable: true })
-  tags: string[] | null;
+  tags!: string[] | null;
 
   /**
    * Organization ID for multi-tenant isolation
    * All vector searches should be scoped to organization
    */
   @Column({ name: 'organization_id', type: 'uuid' })
-  organizationId: string;
+  organizationId!: string;
 
   /**
    * Optional project association
    * Enables project-scoped vector searches
    */
   @Column({ name: 'project_id', type: 'uuid', nullable: true })
-  projectId: string | null;
+  projectId!: string | null;
 
   /**
    * Optional team association
    * Enables team-scoped vector searches
    */
   @Column({ name: 'team_id', type: 'uuid', nullable: true })
-  teamId: string | null;
+  teamId!: string | null;
 
   /**
    * Optional hollon (AI agent) association
    * Tracks which agent generated or is responsible for this embedding
    */
   @Column({ name: 'hollon_id', type: 'uuid', nullable: true })
-  hollonId: string | null;
+  hollonId!: string | null;
 
   // Relations
 
@@ -185,7 +185,7 @@ export class VectorEmbedding extends BaseEntity {
    */
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organization_id' })
-  organization: Organization;
+  organization!: Organization;
 
   /**
    * Project relation
@@ -193,7 +193,7 @@ export class VectorEmbedding extends BaseEntity {
    */
   @ManyToOne(() => Project, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'project_id' })
-  project: Project | null;
+  project!: Project | null;
 
   /**
    * Team relation
@@ -201,7 +201,7 @@ export class VectorEmbedding extends BaseEntity {
    */
   @ManyToOne(() => Team, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'team_id' })
-  team: Team | null;
+  team!: Team | null;
 
   /**
    * Hollon relation
@@ -209,5 +209,5 @@ export class VectorEmbedding extends BaseEntity {
    */
   @ManyToOne(() => Hollon, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'hollon_id' })
-  hollon: Hollon | null;
+  hollon!: Hollon | null;
 }

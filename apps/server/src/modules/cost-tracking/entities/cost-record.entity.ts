@@ -16,32 +16,32 @@ export enum CostRecordType {
 @Index(['taskId'])
 export class CostRecord extends BaseEntity {
   @Column({ name: 'organization_id' })
-  organizationId: string;
+  organizationId!: string;
 
   @Column({ name: 'hollon_id', type: 'uuid', nullable: true })
-  hollonId: string;
+  hollonId!: string;
 
   @Column({ name: 'task_id', type: 'uuid', nullable: true })
-  taskId: string;
+  taskId!: string;
 
   @Column({
     type: 'enum',
     enum: CostRecordType,
     default: CostRecordType.BRAIN_EXECUTION,
   })
-  type: CostRecordType;
+  type!: CostRecordType;
 
   @Column({ name: 'provider_id', length: 50 })
-  providerId: string; // 'claude_code', 'anthropic_api', etc.
+  providerId!: string; // 'claude_code', 'anthropic_api', etc.
 
   @Column({ name: 'model_used', length: 100, nullable: true })
-  modelUsed: string;
+  modelUsed!: string;
 
   @Column({ name: 'input_tokens', default: 0 })
-  inputTokens: number;
+  inputTokens!: number;
 
   @Column({ name: 'output_tokens', default: 0 })
-  outputTokens: number;
+  outputTokens!: number;
 
   @Column({
     name: 'cost_cents',
@@ -53,24 +53,24 @@ export class CostRecord extends BaseEntity {
       from: (value: string) => parseFloat(value),
     },
   })
-  costCents: number;
+  costCents!: number;
 
   @Column({ name: 'execution_time_ms', nullable: true })
-  executionTimeMs: number;
+  executionTimeMs!: number;
 
   @Column({ type: 'text', nullable: true })
-  metadata: string; // JSON stringified metadata
+  metadata!: string; // JSON stringified metadata
 
   // Relations
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organization_id' })
-  organization: Organization;
+  organization!: Organization;
 
   @ManyToOne(() => Hollon, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'hollon_id' })
-  hollon: Hollon;
+  hollon!: Hollon;
 
   @ManyToOne(() => Task, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'task_id' })
-  task: Task;
+  task!: Task;
 }

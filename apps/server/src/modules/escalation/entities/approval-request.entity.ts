@@ -24,66 +24,66 @@ export enum ApprovalType {
 @Index(['taskId'])
 export class ApprovalRequest extends BaseEntity {
   @Column({ name: 'organization_id' })
-  organizationId: string;
+  organizationId!: string;
 
   @Column({ name: 'hollon_id', type: 'uuid', nullable: true })
-  hollonId: string;
+  hollonId!: string;
 
   @Column({ name: 'task_id', type: 'uuid', nullable: true })
-  taskId: string;
+  taskId!: string;
 
   @Column({
     type: 'enum',
     enum: ApprovalType,
     default: ApprovalType.OTHER,
   })
-  type: ApprovalType;
+  type!: ApprovalType;
 
   @Column({
     type: 'enum',
     enum: ApprovalStatus,
     default: ApprovalStatus.PENDING,
   })
-  status: ApprovalStatus;
+  status!: ApprovalStatus;
 
   @Column({ length: 500 })
-  title: string;
+  title!: string;
 
   @Column({ type: 'text' })
-  description: string;
+  description!: string;
 
   @Column({ type: 'jsonb', nullable: true })
-  context: Record<string, unknown>;
+  context!: Record<string, unknown>;
 
   @Column({ name: 'requested_by_hollon_id', type: 'uuid', nullable: true })
-  requestedByHollonId: string;
+  requestedByHollonId!: string;
 
   @Column({ name: 'reviewed_by_user_id', type: 'uuid', nullable: true })
-  reviewedByUserId: string; // Future: link to User entity
+  reviewedByUserId!: string; // Future: link to User entity
 
   @Column({ name: 'reviewed_at', type: 'timestamp', nullable: true })
-  reviewedAt: Date;
+  reviewedAt!: Date;
 
   @Column({ name: 'review_comment', type: 'text', nullable: true })
-  reviewComment: string;
+  reviewComment!: string;
 
   @Column({ name: 'escalation_level', default: 5 })
-  escalationLevel: number; // 1-5
+  escalationLevel!: number; // 1-5
 
   // Relations
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organization_id' })
-  organization: Organization;
+  organization!: Organization;
 
   @ManyToOne(() => Hollon, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'hollon_id' })
-  hollon: Hollon;
+  hollon!: Hollon;
 
   @ManyToOne(() => Task, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'task_id' })
-  task: Task;
+  task!: Task;
 
   @ManyToOne(() => Hollon, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'requested_by_hollon_id' })
-  requestedByHollon: Hollon;
+  requestedByHollon!: Hollon;
 }

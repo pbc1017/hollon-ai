@@ -19,18 +19,18 @@ export enum KnowledgeType {
 @Index(['type', 'source'])
 export class Knowledge extends BaseEntity {
   @Column({ type: 'text' })
-  content: string;
+  content!: string;
 
   @Column({
     type: 'enum',
     enum: KnowledgeType,
     default: KnowledgeType.GENERAL,
   })
-  type: KnowledgeType;
+  type!: KnowledgeType;
 
   @Column({ type: 'varchar', length: 255 })
-  source: string;
+  source!: string;
 
   @Column({ type: 'jsonb', nullable: true })
-  metadata: Record<string, unknown> | null;
+  metadata!: Record<string, unknown> | null;
 }

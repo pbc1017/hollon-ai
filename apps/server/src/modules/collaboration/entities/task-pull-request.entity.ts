@@ -28,44 +28,44 @@ export enum ReviewerType {
 @Index(['reviewerHollonId'])
 export class TaskPullRequest extends BaseEntity {
   @Column({ name: 'task_id' })
-  taskId: string;
+  taskId!: string;
 
   @ManyToOne(() => Task, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'task_id' })
-  task: Task;
+  task!: Task;
 
   @Column({ type: 'integer', name: 'pr_number' })
-  prNumber: number;
+  prNumber!: number;
 
   @Column({ length: 500, name: 'pr_url' })
-  prUrl: string;
+  prUrl!: string;
 
   @Column({ length: 255 })
-  repository: string;
+  repository!: string;
 
   @Column({ name: 'branch_name', type: 'varchar', length: 255, nullable: true })
-  branchName: string | null;
+  branchName!: string | null;
 
   @Column({
     type: 'enum',
     enum: PullRequestStatus,
     default: PullRequestStatus.DRAFT,
   })
-  status: PullRequestStatus;
+  status!: PullRequestStatus;
 
   @Column({ name: 'author_hollon_id', type: 'uuid', nullable: true })
-  authorHollonId: string | null;
+  authorHollonId!: string | null;
 
   @ManyToOne(() => Hollon, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'author_hollon_id' })
-  authorHollon: Hollon | null;
+  authorHollon!: Hollon | null;
 
   @Column({ name: 'reviewer_hollon_id', type: 'uuid', nullable: true })
-  reviewerHollonId: string | null;
+  reviewerHollonId!: string | null;
 
   @ManyToOne(() => Hollon, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'reviewer_hollon_id' })
-  reviewerHollon: Hollon | null;
+  reviewerHollon!: Hollon | null;
 
   @Column({
     type: 'enum',
@@ -73,14 +73,14 @@ export class TaskPullRequest extends BaseEntity {
     name: 'reviewer_type',
     nullable: true,
   })
-  reviewerType: ReviewerType | null;
+  reviewerType!: ReviewerType | null;
 
   @Column({ type: 'text', name: 'review_comments', nullable: true })
-  reviewComments: string | null;
+  reviewComments!: string | null;
 
   @Column({ type: 'timestamp', name: 'approved_at', nullable: true })
-  approvedAt: Date | null;
+  approvedAt!: Date | null;
 
   @Column({ type: 'timestamp', name: 'merged_at', nullable: true })
-  mergedAt: Date | null;
+  mergedAt!: Date | null;
 }

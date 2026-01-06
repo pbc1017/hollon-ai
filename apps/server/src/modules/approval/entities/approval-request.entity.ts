@@ -22,36 +22,36 @@ export class ApprovalRequest extends BaseEntity {
     enum: ApprovalRequestType,
     name: 'request_type',
   })
-  requestType: ApprovalRequestType;
+  requestType!: ApprovalRequestType;
 
   @Column({ type: 'text' })
-  description: string;
+  description!: string;
 
   @Column({ type: 'jsonb', default: {} })
-  metadata: Record<string, any>;
+  metadata!: Record<string, any>;
 
   @Column({ name: 'requested_by', type: 'uuid', nullable: true })
-  requestedBy: string | null;
+  requestedBy!: string | null;
 
   @Column({
     type: 'enum',
     enum: ApprovalStatus,
     default: ApprovalStatus.PENDING,
   })
-  status: ApprovalStatus;
+  status!: ApprovalStatus;
 
   @Column({ name: 'approved_by', type: 'uuid', nullable: true })
-  approvedBy: string | null;
+  approvedBy!: string | null;
 
   @Column({ name: 'approved_at', type: 'timestamp', nullable: true })
-  approvedAt: Date | null;
+  approvedAt!: Date | null;
 
   @Column({ name: 'rejected_by', type: 'uuid', nullable: true })
-  rejectedBy: string | null;
+  rejectedBy!: string | null;
 
   @Column({ name: 'rejected_at', type: 'timestamp', nullable: true })
-  rejectedAt: Date | null;
+  rejectedAt!: Date | null;
 
   @Column({ name: 'rejection_reason', type: 'text', nullable: true })
-  rejectionReason: string | null;
+  rejectionReason!: string | null;
 }

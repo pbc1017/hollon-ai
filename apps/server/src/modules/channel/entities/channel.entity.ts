@@ -21,27 +21,27 @@ export enum ChannelType {
 @Entity('channels')
 export class Channel {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ type: 'uuid', name: 'organization_id' })
-  organizationId: string;
+  organizationId!: string;
 
   @ManyToOne(() => Organization)
   @JoinColumn({ name: 'organization_id' })
-  organization: Organization;
+  organization!: Organization;
 
   @Column({ name: 'team_id', type: 'uuid', nullable: true })
-  teamId: string | null;
+  teamId!: string | null;
 
   @ManyToOne(() => Team, { nullable: true })
   @JoinColumn({ name: 'team_id' })
   team?: Team;
 
   @Column({ length: 255 })
-  name: string;
+  name!: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string | null;
+  description!: string | null;
 
   @Column({
     type: 'enum',
@@ -49,27 +49,27 @@ export class Channel {
     name: 'channel_type',
     default: ChannelType.PUBLIC,
   })
-  channelType: ChannelType;
+  channelType!: ChannelType;
 
   @Column({
     type: 'enum',
     enum: ParticipantType,
     name: 'created_by_type',
   })
-  createdByType: ParticipantType;
+  createdByType!: ParticipantType;
 
   @Column({ name: 'created_by_id', type: 'uuid', nullable: true })
-  createdById: string | null;
+  createdById!: string | null;
 
   @Column({ name: 'is_group', type: 'boolean', default: false })
-  isGroup: boolean;
+  isGroup!: boolean;
 
   @Column({ name: 'max_members', type: 'integer', nullable: true })
-  maxMembers: number | null;
+  maxMembers!: number | null;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 }

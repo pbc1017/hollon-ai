@@ -22,48 +22,48 @@ export enum CycleStatus {
 @Check(`"status" IN ('upcoming', 'active', 'completed')`)
 export class Cycle extends BaseEntity {
   @Column({ name: 'project_id' })
-  projectId: string;
+  projectId!: string;
 
   @ManyToOne(() => Project, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'project_id' })
-  project: Project;
+  project!: Project;
 
   @Column({ length: 255, nullable: true })
-  name: string;
+  name!: string;
 
   @Column({ type: 'integer' })
-  number: number;
+  number!: number;
 
   @Column({ type: 'date', name: 'start_date' })
-  startDate: Date;
+  startDate!: Date;
 
   @Column({ type: 'date', name: 'end_date' })
-  endDate: Date;
+  endDate!: Date;
 
   @Column({ type: 'text', nullable: true })
-  goal: string;
+  goal!: string;
 
   @Column({ type: 'integer', name: 'budget_cents', nullable: true })
-  budgetCents: number;
+  budgetCents!: number;
 
   @Column({
     type: 'integer',
     name: 'actual_cost_cents',
     default: 0,
   })
-  actualCostCents: number;
+  actualCostCents!: number;
 
   @Column({
     type: 'enum',
     enum: CycleStatus,
     default: CycleStatus.UPCOMING,
   })
-  status: CycleStatus;
+  status!: CycleStatus;
 
   @Column({ type: 'timestamp', name: 'completed_at', nullable: true })
-  completedAt: Date;
+  completedAt!: Date;
 
   // Relations
   @OneToMany(() => Task, (task) => task.cycle)
-  tasks: Task[];
+  tasks!: Task[];
 }

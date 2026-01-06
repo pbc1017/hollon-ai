@@ -16,31 +16,31 @@ import { Organization } from '../../organization/entities/organization.entity';
 })
 export class Role extends BaseEntity {
   @Column({ length: 100 })
-  name: string;
+  name!: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description!: string;
 
   @Column({ type: 'jsonb', default: [] })
-  capabilities: string[];
+  capabilities!: string[];
 
   @Column({ name: 'system_prompt', type: 'text', nullable: true })
-  systemPrompt: string;
+  systemPrompt!: string;
 
   @Column({
     name: 'available_for_temporary_hollon',
     type: 'boolean',
     default: false,
   })
-  availableForTemporaryHollon: boolean;
+  availableForTemporaryHollon!: boolean;
 
   @Column({ name: 'organization_id' })
-  organizationId: string;
+  organizationId!: string;
 
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'organization_id' })
-  organization: Organization;
+  organization!: Organization;
 
   @OneToMany(() => Hollon, (hollon) => hollon.role)
-  hollons: Hollon[];
+  hollons!: Hollon[];
 }

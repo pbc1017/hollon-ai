@@ -5,16 +5,16 @@ import { BaseEntity } from '../../../common/entities/base.entity';
 @Index(['organizationId', 'providerId'])
 export class BrainProviderConfig extends BaseEntity {
   @Column({ name: 'organization_id' })
-  organizationId: string;
+  organizationId!: string;
 
   @Column({ name: 'provider_id', length: 50 })
-  providerId: string; // 'claude_code', 'anthropic_api', etc.
+  providerId!: string; // 'claude_code', 'anthropic_api', etc.
 
   @Column({ name: 'display_name', length: 255 })
-  displayName: string;
+  displayName!: string;
 
   @Column({ type: 'jsonb' })
-  config: {
+  config!: {
     apiKey?: string;
     model?: string;
     maxTokens?: number;
@@ -28,7 +28,7 @@ export class BrainProviderConfig extends BaseEntity {
     precision: 10,
     scale: 6,
   })
-  costPerInputTokenCents: number;
+  costPerInputTokenCents!: number;
 
   @Column({
     name: 'cost_per_output_token_cents',
@@ -36,14 +36,14 @@ export class BrainProviderConfig extends BaseEntity {
     precision: 10,
     scale: 6,
   })
-  costPerOutputTokenCents: number;
+  costPerOutputTokenCents!: number;
 
   @Column({ default: true })
-  enabled: boolean;
+  enabled!: boolean;
 
   @Column({ name: 'timeout_seconds', default: 300 })
-  timeoutSeconds: number;
+  timeoutSeconds!: number;
 
   @Column({ name: 'max_retries', default: 3 })
-  maxRetries: number;
+  maxRetries!: number;
 }

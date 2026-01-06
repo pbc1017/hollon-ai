@@ -13,41 +13,41 @@ import { ParticipantType } from '../../message/entities/message.entity';
 @Entity('channel_messages')
 export class ChannelMessage {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ type: 'uuid', name: 'channel_id' })
-  channelId: string;
+  channelId!: string;
 
   @ManyToOne(() => Channel)
   @JoinColumn({ name: 'channel_id' })
-  channel: Channel;
+  channel!: Channel;
 
   @Column({
     type: 'enum',
     enum: ParticipantType,
     name: 'sender_type',
   })
-  senderType: ParticipantType;
+  senderType!: ParticipantType;
 
   @Column({ name: 'sender_id', type: 'uuid', nullable: true })
-  senderId: string | null;
+  senderId!: string | null;
 
   @Column('text')
-  content: string;
+  content!: string;
 
   @Column({ type: 'jsonb', default: {} })
-  metadata: Record<string, any>;
+  metadata!: Record<string, any>;
 
   @Column({ name: 'thread_parent_id', type: 'uuid', nullable: true })
-  threadParentId: string | null;
+  threadParentId!: string | null;
 
   @ManyToOne(() => ChannelMessage, { nullable: true })
   @JoinColumn({ name: 'thread_parent_id' })
   threadParent?: ChannelMessage;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 }

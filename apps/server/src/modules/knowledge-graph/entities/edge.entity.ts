@@ -26,39 +26,39 @@ export enum EdgeType {
 @Index(['createdAt'])
 export class Edge extends BaseEntity {
   @Column({ name: 'source_node_id', type: 'uuid' })
-  sourceNodeId: string;
+  sourceNodeId!: string;
 
   @Column({ name: 'target_node_id', type: 'uuid' })
-  targetNodeId: string;
+  targetNodeId!: string;
 
   @Column({
     type: 'enum',
     enum: EdgeType,
     default: EdgeType.RELATED_TO,
   })
-  type: EdgeType;
+  type!: EdgeType;
 
   @Column({ name: 'organization_id', type: 'uuid' })
-  organizationId: string;
+  organizationId!: string;
 
   // Optional weight for weighted graphs
   @Column({ type: 'float', default: 1.0 })
-  weight: number;
+  weight!: number;
 
   // Flexible JSON properties for storing additional relationship data
   @Column({ type: 'jsonb', default: {} })
-  properties: Record<string, any>;
+  properties!: Record<string, any>;
 
   // For soft delete pattern
   @Column({ name: 'is_active', default: true })
-  isActive: boolean;
+  isActive!: boolean;
 
   // Relations
   @ManyToOne(() => Node, (node) => node.outgoingEdges, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'source_node_id' })
-  sourceNode: Node;
+  sourceNode!: Node;
 
   @ManyToOne(() => Node, (node) => node.incomingEdges, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'target_node_id' })
-  targetNode: Node;
+  targetNode!: Node;
 }

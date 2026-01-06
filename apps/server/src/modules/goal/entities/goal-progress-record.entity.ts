@@ -8,7 +8,7 @@ import { Hollon } from '../../hollon/entities/hollon.entity';
 @Index(['recordedAt'])
 export class GoalProgressRecord extends BaseEntity {
   @Column({ name: 'goal_id' })
-  goalId: string;
+  goalId!: string;
 
   @Column({
     name: 'progress_percent',
@@ -16,7 +16,7 @@ export class GoalProgressRecord extends BaseEntity {
     precision: 5,
     scale: 2,
   })
-  progressPercent: number;
+  progressPercent!: number;
 
   @Column({
     name: 'current_value',
@@ -25,29 +25,29 @@ export class GoalProgressRecord extends BaseEntity {
     scale: 4,
     nullable: true,
   })
-  currentValue: number;
+  currentValue!: number;
 
   @Column({ type: 'text', nullable: true })
-  note: string;
+  note!: string;
 
   @Column({ name: 'recorded_by', nullable: true })
-  recordedBy: string;
+  recordedBy!: string;
 
   @Column({
     name: 'recorded_at',
     type: 'timestamp with time zone',
     default: () => 'NOW()',
   })
-  recordedAt: Date;
+  recordedAt!: Date;
 
   // Relations
   @ManyToOne(() => Goal, (goal) => goal.progressRecords, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'goal_id' })
-  goal: Goal;
+  goal!: Goal;
 
   @ManyToOne(() => Hollon, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'recorded_by' })
-  recordedByHollon: Hollon;
+  recordedByHollon!: Hollon;
 }

@@ -22,38 +22,38 @@ export enum NodeType {
 @Index(['createdAt'])
 export class Node extends BaseEntity {
   @Column({ length: 255 })
-  name: string;
+  name!: string;
 
   @Column({
     type: 'enum',
     enum: NodeType,
     default: NodeType.CUSTOM,
   })
-  type: NodeType;
+  type!: NodeType;
 
   @Column({ type: 'text', nullable: true })
-  description: string | null;
+  description!: string | null;
 
   @Column({ name: 'organization_id', type: 'uuid' })
-  organizationId: string;
+  organizationId!: string;
 
   // Flexible JSON properties for storing additional data
   @Column({ type: 'jsonb', default: {} })
-  properties: Record<string, any>;
+  properties!: Record<string, any>;
 
   // Metadata for search and filtering
   @Column({ type: 'text', array: true, default: [] })
-  tags: string[];
+  tags!: string[];
 
   // For soft delete pattern
   @Column({ name: 'is_active', default: true })
-  isActive: boolean;
+  isActive!: boolean;
 
   // Relations - outgoing edges (this node is the source)
   @OneToMany(() => Edge, (edge) => edge.sourceNode)
-  outgoingEdges: Edge[];
+  outgoingEdges!: Edge[];
 
   // Relations - incoming edges (this node is the target)
   @OneToMany(() => Edge, (edge) => edge.targetNode)
-  incomingEdges: Edge[];
+  incomingEdges!: Edge[];
 }

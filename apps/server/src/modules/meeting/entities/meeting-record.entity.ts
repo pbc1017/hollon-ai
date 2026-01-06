@@ -21,17 +21,17 @@ export enum MeetingType {
 @Entity('meeting_records')
 export class MeetingRecord {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ type: 'uuid', name: 'organization_id' })
-  organizationId: string;
+  organizationId!: string;
 
   @ManyToOne(() => Organization)
   @JoinColumn({ name: 'organization_id' })
-  organization: Organization;
+  organization!: Organization;
 
   @Column({ name: 'team_id', type: 'uuid', nullable: true })
-  teamId: string | null;
+  teamId!: string | null;
 
   @ManyToOne(() => Team, { nullable: true })
   @JoinColumn({ name: 'team_id' })
@@ -42,26 +42,26 @@ export class MeetingRecord {
     enum: MeetingType,
     name: 'meeting_type',
   })
-  meetingType: MeetingType;
+  meetingType!: MeetingType;
 
   @Column({ length: 500 })
-  title: string;
+  title!: string;
 
   @Column({ type: 'text' })
-  content: string;
+  content!: string;
 
   @Column({ type: 'jsonb', default: {} })
-  metadata: Record<string, any>;
+  metadata!: Record<string, any>;
 
   @Column({ type: 'timestamp', name: 'scheduled_at', nullable: true })
-  scheduledAt: Date | null;
+  scheduledAt!: Date | null;
 
   @Column({ type: 'timestamp', name: 'completed_at', nullable: true })
-  completedAt: Date | null;
+  completedAt!: Date | null;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 }

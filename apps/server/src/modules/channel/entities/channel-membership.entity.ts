@@ -19,41 +19,41 @@ export enum ChannelRole {
 @Entity('channel_memberships')
 export class ChannelMembership {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ type: 'uuid', name: 'channel_id' })
-  channelId: string;
+  channelId!: string;
 
   @ManyToOne(() => Channel)
   @JoinColumn({ name: 'channel_id' })
-  channel: Channel;
+  channel!: Channel;
 
   @Column({
     type: 'enum',
     enum: ParticipantType,
     name: 'member_type',
   })
-  memberType: ParticipantType;
+  memberType!: ParticipantType;
 
   @Column({ type: 'uuid', name: 'member_id' })
-  memberId: string;
+  memberId!: string;
 
   @Column({
     type: 'enum',
     enum: ChannelRole,
     default: ChannelRole.MEMBER,
   })
-  role: ChannelRole;
+  role!: ChannelRole;
 
   @Column({ type: 'timestamp', name: 'joined_at' })
-  joinedAt: Date;
+  joinedAt!: Date;
 
   @Column({ type: 'timestamp', name: 'last_read_at', nullable: true })
-  lastReadAt: Date | null;
+  lastReadAt!: Date | null;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 }

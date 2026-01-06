@@ -7,23 +7,23 @@ import { Project } from '../../project/entities/project.entity';
 @Entity('organizations')
 export class Organization extends BaseEntity {
   @Column({ length: 255 })
-  name: string;
+  name!: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string | null;
+  description!: string | null;
 
   @Column({ name: 'context_prompt', type: 'text', nullable: true })
-  contextPrompt: string | null;
+  contextPrompt!: string | null;
 
   @Column({ type: 'jsonb', nullable: true, default: {} })
-  settings: Record<string, unknown>;
+  settings!: Record<string, unknown>;
 
   @OneToMany(() => Team, (team) => team.organization)
-  teams: Team[];
+  teams!: Team[];
 
   @OneToMany(() => Hollon, (hollon) => hollon.organization)
-  hollons: Hollon[];
+  hollons!: Hollon[];
 
   @OneToMany(() => Project, (project) => project.organization)
-  projects: Project[];
+  projects!: Project[];
 }

@@ -28,33 +28,33 @@ export enum ResolutionStrategy {
 @Index(['conflictType', 'status'])
 export class ConflictResolution extends BaseEntity {
   @Column({ name: 'organization_id' })
-  organizationId: string;
+  organizationId!: string;
 
   @Column({
     type: 'enum',
     enum: ConflictType,
     name: 'conflict_type',
   })
-  conflictType: ConflictType;
+  conflictType!: ConflictType;
 
   @Column({
     type: 'enum',
     enum: ConflictStatus,
     default: ConflictStatus.DETECTED,
   })
-  status: ConflictStatus;
+  status!: ConflictStatus;
 
   @Column({ type: 'text' })
-  description: string;
+  description!: string;
 
   @Column({ type: 'jsonb', default: [] })
-  affectedTaskIds: string[];
+  affectedTaskIds!: string[];
 
   @Column({ type: 'jsonb', default: [] })
-  affectedHollonIds: string[];
+  affectedHollonIds!: string[];
 
   @Column({ type: 'jsonb', default: {} })
-  conflictContext: Record<string, any>;
+  conflictContext!: Record<string, any>;
 
   @Column({
     type: 'enum',
@@ -62,20 +62,20 @@ export class ConflictResolution extends BaseEntity {
     name: 'resolution_strategy',
     nullable: true,
   })
-  resolutionStrategy: ResolutionStrategy | null;
+  resolutionStrategy!: ResolutionStrategy | null;
 
   @Column({ name: 'resolution_details', type: 'text', nullable: true })
-  resolutionDetails: string | null;
+  resolutionDetails!: string | null;
 
   @Column({ name: 'resolved_at', type: 'timestamp', nullable: true })
-  resolvedAt: Date | null;
+  resolvedAt!: Date | null;
 
   @Column({ name: 'escalated_at', type: 'timestamp', nullable: true })
-  escalatedAt: Date | null;
+  escalatedAt!: Date | null;
 
   @Column({ name: 'escalation_reason', type: 'text', nullable: true })
-  escalationReason: string | null;
+  escalationReason!: string | null;
 
   @Column({ type: 'jsonb', default: {} })
-  metadata: Record<string, any>;
+  metadata!: Record<string, any>;
 }

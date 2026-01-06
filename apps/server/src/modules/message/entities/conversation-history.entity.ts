@@ -7,16 +7,16 @@ import { Message } from './message.entity';
 @Index(['conversationId', 'createdAt'])
 export class ConversationHistory extends BaseEntity {
   @Column({ type: 'uuid', name: 'conversation_id' })
-  conversationId: string;
+  conversationId!: string;
 
   @ManyToOne(() => Conversation, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'conversation_id' })
-  conversation: Conversation;
+  conversation!: Conversation;
 
   @Column({ type: 'uuid', name: 'message_id' })
-  messageId: string;
+  messageId!: string;
 
   @ManyToOne(() => Message, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'message_id' })
-  message: Message;
+  message!: Message;
 }

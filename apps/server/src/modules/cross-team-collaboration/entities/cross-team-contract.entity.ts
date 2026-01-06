@@ -52,38 +52,38 @@ export class CrossTeamContract extends BaseEntity {
   // ─────────────────────────────────────────────────────────────────────────
 
   @Column({ length: 255 })
-  title: string;
+  title!: string;
 
   @Column({ type: 'text' })
-  description: string;
+  description!: string;
 
   @Column({
     type: 'enum',
     enum: ContractPriority,
     default: ContractPriority.MEDIUM,
   })
-  priority: ContractPriority;
+  priority!: ContractPriority;
 
   @Column({ type: 'jsonb', default: [] })
-  deliverables: string[];
+  deliverables!: string[];
 
   // ─────────────────────────────────────────────────────────────────────────
   // 팀 관계
   // ─────────────────────────────────────────────────────────────────────────
 
   @Column({ name: 'requester_team_id' })
-  requesterTeamId: string;
+  requesterTeamId!: string;
 
   @ManyToOne(() => Team, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'requester_team_id' })
-  requesterTeam: Team;
+  requesterTeam!: Team;
 
   @Column({ name: 'target_team_id' })
-  targetTeamId: string;
+  targetTeamId!: string;
 
   @ManyToOne(() => Team, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'target_team_id' })
-  targetTeam: Team;
+  targetTeam!: Team;
 
   // ─────────────────────────────────────────────────────────────────────────
   // 상태 및 진행
@@ -94,39 +94,39 @@ export class CrossTeamContract extends BaseEntity {
     enum: ContractStatus,
     default: ContractStatus.PENDING,
   })
-  status: ContractStatus;
+  status!: ContractStatus;
 
   @Column({ name: 'negotiation_notes', type: 'text', nullable: true })
-  negotiationNotes: string | null;
+  negotiationNotes!: string | null;
 
   // ─────────────────────────────────────────────────────────────────────────
   // 마감일
   // ─────────────────────────────────────────────────────────────────────────
 
   @Column({ name: 'requested_deadline', type: 'timestamp', nullable: true })
-  requestedDeadline: Date | null;
+  requestedDeadline!: Date | null;
 
   @Column({ name: 'agreed_deadline', type: 'timestamp', nullable: true })
-  agreedDeadline: Date | null;
+  agreedDeadline!: Date | null;
 
   // ─────────────────────────────────────────────────────────────────────────
   // 타임스탬프
   // ─────────────────────────────────────────────────────────────────────────
 
   @Column({ name: 'accepted_at', type: 'timestamp', nullable: true })
-  acceptedAt: Date | null;
+  acceptedAt!: Date | null;
 
   @Column({ name: 'rejected_at', type: 'timestamp', nullable: true })
-  rejectedAt: Date | null;
+  rejectedAt!: Date | null;
 
   @Column({ name: 'delivered_at', type: 'timestamp', nullable: true })
-  deliveredAt: Date | null;
+  deliveredAt!: Date | null;
 
   @Column({ name: 'completed_at', type: 'timestamp', nullable: true })
-  completedAt: Date | null;
+  completedAt!: Date | null;
 
   @Column({ name: 'cancelled_at', type: 'timestamp', nullable: true })
-  cancelledAt: Date | null;
+  cancelledAt!: Date | null;
 
   // ─────────────────────────────────────────────────────────────────────────
   // 담당자 추적
@@ -134,19 +134,19 @@ export class CrossTeamContract extends BaseEntity {
 
   /** 계약을 수락한 홀론 ID */
   @Column({ name: 'accepted_by_hollon_id', type: 'uuid', nullable: true })
-  acceptedByHollonId: string | null;
+  acceptedByHollonId!: string | null;
 
   /** 계약을 거절한 홀론 ID */
   @Column({ name: 'rejected_by_hollon_id', type: 'uuid', nullable: true })
-  rejectedByHollonId: string | null;
+  rejectedByHollonId!: string | null;
 
   /** 거절 사유 */
   @Column({ name: 'rejection_reason', type: 'text', nullable: true })
-  rejectionReason: string | null;
+  rejectionReason!: string | null;
 
   /** 취소 사유 */
   @Column({ name: 'cancellation_reason', type: 'text', nullable: true })
-  cancellationReason: string | null;
+  cancellationReason!: string | null;
 
   // ─────────────────────────────────────────────────────────────────────────
   // 메타데이터
@@ -154,13 +154,13 @@ export class CrossTeamContract extends BaseEntity {
 
   /** 전달된 산출물 목록 (이행 시 기록) */
   @Column({ name: 'delivered_items', type: 'jsonb', default: [] })
-  deliveredItems: string[];
+  deliveredItems!: string[];
 
   /** 완료 피드백 */
   @Column({ type: 'text', nullable: true })
-  feedback: string | null;
+  feedback!: string | null;
 
   /** 추가 메타데이터 */
   @Column({ type: 'jsonb', default: {} })
-  metadata: Record<string, any>;
+  metadata!: Record<string, any>;
 }

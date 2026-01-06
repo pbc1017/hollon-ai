@@ -23,62 +23,62 @@ export enum IncidentStatus {
 @Index(['severity', 'status'])
 export class Incident extends BaseEntity {
   @Column({ name: 'organization_id' })
-  organizationId: string;
+  organizationId!: string;
 
   @Column({ length: 255 })
-  title: string;
+  title!: string;
 
   @Column({ type: 'text' })
-  description: string;
+  description!: string;
 
   @Column({
     type: 'enum',
     enum: IncidentSeverity,
   })
-  severity: IncidentSeverity;
+  severity!: IncidentSeverity;
 
   @Column({
     type: 'enum',
     enum: IncidentStatus,
     default: IncidentStatus.REPORTED,
   })
-  status: IncidentStatus;
+  status!: IncidentStatus;
 
   @Column({ name: 'reporter_hollon_id', type: 'uuid', nullable: true })
-  reporterHollonId: string | null;
+  reporterHollonId!: string | null;
 
   @ManyToOne(() => Hollon, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'reporter_hollon_id' })
   reporterHollon?: Hollon;
 
   @Column({ name: 'owner_hollon_id', type: 'uuid', nullable: true })
-  ownerHollonId: string | null;
+  ownerHollonId!: string | null;
 
   @ManyToOne(() => Hollon, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'owner_hollon_id' })
   ownerHollon?: Hollon;
 
   @Column({ name: 'channel_id', type: 'uuid', nullable: true })
-  channelId: string | null;
+  channelId!: string | null;
 
   @Column({ type: 'jsonb', default: {} })
-  impact: Record<string, any>;
+  impact!: Record<string, any>;
 
   @Column({ type: 'jsonb', default: [] })
-  timeline: Array<{
+  timeline!: Array<{
     timestamp: string;
     event: string;
     description: string;
   }>;
 
   @Column({ name: 'resolved_at', type: 'timestamp', nullable: true })
-  resolvedAt: Date | null;
+  resolvedAt!: Date | null;
 
   @Column({ name: 'resolution_summary', type: 'text', nullable: true })
-  resolutionSummary: string | null;
+  resolutionSummary!: string | null;
 
   @Column({ type: 'jsonb', nullable: true })
-  postmortem: {
+  postmortem!: {
     summary: string;
     rootCause: string;
     impactAssessment: string;
@@ -94,5 +94,5 @@ export class Incident extends BaseEntity {
   } | null;
 
   @Column({ type: 'jsonb', default: {} })
-  metadata: Record<string, any>;
+  metadata!: Record<string, any>;
 }

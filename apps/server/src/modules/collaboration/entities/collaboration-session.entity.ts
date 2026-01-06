@@ -29,48 +29,48 @@ export class CollaborationSession extends BaseEntity {
     type: 'enum',
     enum: CollaborationType,
   })
-  type: CollaborationType;
+  type!: CollaborationType;
 
   @Column({
     type: 'enum',
     enum: CollaborationStatus,
     default: CollaborationStatus.PENDING,
   })
-  status: CollaborationStatus;
+  status!: CollaborationStatus;
 
   @Column({ name: 'requester_hollon_id' })
-  requesterHollonId: string;
+  requesterHollonId!: string;
 
   @ManyToOne(() => Hollon, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'requester_hollon_id' })
-  requesterHollon: Hollon;
+  requesterHollon!: Hollon;
 
   @Column({ name: 'collaborator_hollon_id', type: 'uuid', nullable: true })
-  collaboratorHollonId: string | null;
+  collaboratorHollonId!: string | null;
 
   @ManyToOne(() => Hollon, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'collaborator_hollon_id' })
-  collaboratorHollon: Hollon | null;
+  collaboratorHollon!: Hollon | null;
 
   @Column({ name: 'task_id', type: 'uuid', nullable: true })
-  taskId: string | null;
+  taskId!: string | null;
 
   @ManyToOne(() => Task, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'task_id' })
-  task: Task | null;
+  task!: Task | null;
 
   @Column({ type: 'text', nullable: true })
-  description: string | null;
+  description!: string | null;
 
   @Column({ type: 'jsonb', default: {} })
-  metadata: Record<string, any>;
+  metadata!: Record<string, any>;
 
   @Column({ type: 'timestamp', name: 'started_at', nullable: true })
-  startedAt: Date | null;
+  startedAt!: Date | null;
 
   @Column({ type: 'timestamp', name: 'completed_at', nullable: true })
-  completedAt: Date | null;
+  completedAt!: Date | null;
 
   @Column({ type: 'text', nullable: true })
-  outcome: string | null;
+  outcome!: string | null;
 }
