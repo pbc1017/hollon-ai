@@ -621,8 +621,14 @@ export class CodeReviewService implements ICodeReviewService {
     // Test mode: Allow closing MERGED PRs (DB-only merge, GitHub PR still open)
     const isTestMode = process.env.NODE_ENV === 'test';
 
-    if (pr.status === PullRequestStatus.MERGED && !isTestMode) {
-      throw new Error(`PR ${prId} is already merged and cannot be closed`);
+    if (pr.status === PullRequestStatus.MERGED) {
+      if (!isTestMode) {
+        throw new Error(`PR ${prId} is already merged and cannot be closed`);
+      }
+      // In test mode, allow closing merged PRs (they were merged in DB only, not on GitHub)
+      this.logger.log(
+        `Test mode: Allowing close of DB-merged PR ${prId} (GitHub PR likely still open)`,
+      );
     }
 
     if (pr.status === PullRequestStatus.CLOSED) {
