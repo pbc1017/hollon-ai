@@ -1,6 +1,7 @@
 # Knowledge Graph Module Structure Analysis
 
 ## File Location
+
 `apps/server/src/modules/knowledge-graph/knowledge-graph.module.ts`
 
 ## Current Module Configuration
@@ -10,33 +11,39 @@
 The `KnowledgeGraphModule` follows NestJS best practices with comprehensive documentation:
 
 #### 1. **Imports Array**
+
 ```typescript
 imports: [
   TypeOrmModule.forFeature([
-    Node,  // Graph nodes representing entities/concepts
-    Edge,  // Graph edges representing relationships between nodes
+    Node, // Graph nodes representing entities/concepts
+    Edge, // Graph edges representing relationships between nodes
   ]),
-]
+];
 ```
+
 - Registers TypeORM entities for dependency injection
 - Enables repository pattern for database operations
 - Imports: `Node` and `Edge` entities from `./entities/`
 
 #### 2. **Controllers Array**
+
 ```typescript
-controllers: [KnowledgeGraphController]
+controllers: [KnowledgeGraphController];
 ```
+
 - Single controller: `KnowledgeGraphController`
 - Handles REST endpoints for graph operations (CRUD, queries, traversal)
 - Imported from `./knowledge-graph.controller`
 
 #### 3. **Providers Array**
+
 ```typescript
 providers: [
   KnowledgeGraphService,
   // Additional services will be added here as the module grows
-]
+];
 ```
+
 - Currently contains only `KnowledgeGraphService`
 - Well-documented with future service plans:
   - GraphQueryService (advanced graph query and pattern matching)
@@ -46,17 +53,20 @@ providers: [
 - Imported from `./knowledge-graph.service`
 
 #### 4. **Exports Array**
+
 ```typescript
 exports: [
   KnowledgeGraphService,
   // Additional services may be exported as needed
-]
+];
 ```
+
 - Exposes `KnowledgeGraphService` to other modules
 - Enables integration with: knowledge-extraction, task, orchestration modules
 - Follows public API pattern for module boundaries
 
 ## Module Directory Structure
+
 ```
 apps/server/src/modules/knowledge-graph/
 ├── entities/
@@ -70,13 +80,16 @@ apps/server/src/modules/knowledge-graph/
 ## Service Registration Pattern
 
 ### Standard Service Registration
+
 The module uses the standard NestJS provider pattern:
+
 1. Service class decorated with `@Injectable()`
 2. Added to `providers` array in module
 3. Optionally added to `exports` array for public API
 4. Injected via constructor in controllers/services
 
 ### KnowledgeGraphService Details
+
 - Constructor injection with TypeORM repositories:
   - `nodeRepository` (Repository<Node>)
   - `edgeRepository` (Repository<Edge>)
@@ -87,6 +100,7 @@ The module uses the standard NestJS provider pattern:
 ## Documentation Pattern
 
 The module file includes extensive inline documentation:
+
 - Module-level JSDoc explaining responsibilities
 - Section comments for each decorator property
 - Future roadmap annotations
@@ -95,10 +109,12 @@ The module file includes extensive inline documentation:
 ## Dependencies
 
 ### External Dependencies
+
 - `@nestjs/common` - Module, Injectable decorators
 - `@nestjs/typeorm` - TypeOrmModule for database integration
 
 ### Internal Dependencies
+
 - `./entities/node.entity` - Node entity
 - `./entities/edge.entity` - Edge entity
 - `./knowledge-graph.service` - Core service
@@ -107,6 +123,7 @@ The module file includes extensive inline documentation:
 ## Integration Points
 
 The module is designed to integrate with:
+
 - **knowledge-extraction** module (leverages graph for data storage)
 - **task** module (may use graph for task relationships)
 - **orchestration** module (may query graph for decision-making)
