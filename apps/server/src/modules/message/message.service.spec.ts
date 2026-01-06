@@ -839,4 +839,553 @@ describe('MessageService', () => {
       );
     });
   });
+
+  describe('Edge Cases - Empty/Null Inputs', () => {
+    describe('send with empty/null content', () => {
+      it('should handle empty string content', async () => {
+        const sendDto = {
+          fromType: ParticipantType.HOLLON,
+          fromId: 'hollon-123',
+          toType: ParticipantType.HOLLON,
+          toId: 'hollon-456',
+          messageType: MessageType.GENERAL,
+          content: '',
+        };
+
+        const createdMessage = { ...mockMessage, ...sendDto };
+        mockMessageRepository.create.mockReturnValue(createdMessage);
+        mockMessageRepository.save.mockResolvedValue(createdMessage);
+        mockConversationRepository.createQueryBuilder.mockReturnValue(
+          createMockQueryBuilder(null),
+        );
+        mockConversationRepository.create.mockReturnValue(mockConversation);
+        mockConversationRepository.save.mockResolvedValue(mockConversation);
+        mockConversationHistoryRepository.create.mockReturnValue({});
+        mockConversationHistoryRepository.save.mockResolvedValue({});
+
+        const result = await service.send(sendDto);
+
+        expect(result.content).toBe('');
+        expect(mockMessageRepository.save).toHaveBeenCalled();
+      });
+    });
+
+    describe('send with null metadata', () => {
+      it('should default null metadata to empty object', async () => {
+        const sendDto = {
+          fromType: ParticipantType.HOLLON,
+          fromId: 'hollon-123',
+          toType: ParticipantType.HOLLON,
+          toId: 'hollon-456',
+          messageType: MessageType.GENERAL,
+          content: 'Test',
+          metadata: null as any,
+        };
+
+        const createdMessage = { ...mockMessage, metadata: {} };
+        mockMessageRepository.create.mockReturnValue(createdMessage);
+        mockMessageRepository.save.mockResolvedValue(createdMessage);
+        mockConversationRepository.createQueryBuilder.mockReturnValue(
+          createMockQueryBuilder(null),
+        );
+        mockConversationRepository.create.mockReturnValue(mockConversation);
+        mockConversationRepository.save.mockResolvedValue(mockConversation);
+        mockConversationHistoryRepository.create.mockReturnValue({});
+        mockConversationHistoryRepository.save.mockResolvedValue({});
+
+        await service.send(sendDto);
+
+        expect(mockMessageRepository.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            metadata: {},
+          }),
+        );
+      });
+    });
+
+    describe('update with empty content', () => {
+      it('should allow updating to empty string content', async () => {
+        const existingMessage = { ...mockMessage, content: 'Original' };
+        mockMessageRepository.findOne.mockResolvedValue(existingMessage);
+        mockMessageRepository.save.mockResolvedValue({
+          ...existingMessage,
+          content: '',
+        });
+
+        const result = await service.update('message-123', { content: '' });
+
+        expect(result.content).toBe('');
+      });
+    });
+
+    describe('markAsRead with null message ID', () => {
+      it('should throw NotFoundException for null ID', async () => {
+        mockMessageRepository.findOne.mockResolvedValue(null);
+
+        await expect(service.markAsRead(null as any)).rejects.toThrow(
+          NotFoundException,
+        );
+      });
+    });
+  });
+
+  describe('Edge Cases - Special Characters', () => {
+    describe('send with special characters in content', () => {
+      it('should handle Unicode emoji characters', async () => {
+        const sendDto = {
+          fromType: ParticipantType.HOLLON,
+          fromId: 'hollon-123',
+          toType: ParticipantType.HOLLON,
+          toId: 'hollon-456',
+          messageType: MessageType.GENERAL,
+          content: 'Hello 👋 🎉 World! 🚀',
+        };
+
+        const createdMessage = { ...mockMessage, ...sendDto };
+        mockMessageRepository.create.mockReturnValue(createdMessage);
+        mockMessageRepository.save.mockResolvedValue(createdMessage);
+        mockConversationRepository.createQueryBuilder.mockReturnValue(
+          createMockQueryBuilder(null),
+        );
+        mockConversationRepository.create.mockReturnValue(mockConversation);
+        mockConversationRepository.save.mockResolvedValue(mockConversation);
+        mockConversationHistoryRepository.create.mockReturnValue({});
+        mockConversationHistoryRepository.save.mockResolvedValue({});
+
+        const result = await service.send(sendDto);
+
+        expect(result.content).toBe('Hello 👋 🎉 World! 🚀');
+      });
+
+      it('should handle HTML/XML special characters', async () => {
+        const sendDto = {
+          fromType: ParticipantType.HOLLON,
+          fromId: 'hollon-123',
+          toType: ParticipantType.HOLLON,
+          toId: 'hollon-456',
+          messageType: MessageType.GENERAL,
+          content: '<script>alert("test")</script> & "quotes" \'apostrophes\'',
+        };
+
+        const createdMessage = { ...mockMessage, ...sendDto };
+        mockMessageRepository.create.mockReturnValue(createdMessage);
+        mockMessageRepository.save.mockResolvedValue(createdMessage);
+        mockConversationRepository.createQueryBuilder.mockReturnValue(
+          createMockQueryBuilder(null),
+        );
+        mockConversationRepository.create.mockReturnValue(mockConversation);
+        mockConversationRepository.save.mockResolvedValue(mockConversation);
+        mockConversationHistoryRepository.create.mockReturnValue({});
+        mockConversationHistoryRepository.save.mockResolvedValue({});
+
+        const result = await service.send(sendDto);
+
+        expect(result.content).toContain('<script>');
+        expect(result.content).toContain('&');
+        expect(result.content).toContain('"');
+      });
+
+      it('should handle newlines and tabs', async () => {
+        const sendDto = {
+          fromType: ParticipantType.HOLLON,
+          fromId: 'hollon-123',
+          toType: ParticipantType.HOLLON,
+          toId: 'hollon-456',
+          messageType: MessageType.GENERAL,
+          content: 'Line 1\nLine 2\tTabbed\rCarriage return',
+        };
+
+        const createdMessage = { ...mockMessage, ...sendDto };
+        mockMessageRepository.create.mockReturnValue(createdMessage);
+        mockMessageRepository.save.mockResolvedValue(createdMessage);
+        mockConversationRepository.createQueryBuilder.mockReturnValue(
+          createMockQueryBuilder(null),
+        );
+        mockConversationRepository.create.mockReturnValue(mockConversation);
+        mockConversationRepository.save.mockResolvedValue(mockConversation);
+        mockConversationHistoryRepository.create.mockReturnValue({});
+        mockConversationHistoryRepository.save.mockResolvedValue({});
+
+        const result = await service.send(sendDto);
+
+        expect(result.content).toContain('\n');
+        expect(result.content).toContain('\t');
+      });
+
+      it('should handle SQL injection attempts in content', async () => {
+        const sendDto = {
+          fromType: ParticipantType.HOLLON,
+          fromId: 'hollon-123',
+          toType: ParticipantType.HOLLON,
+          toId: 'hollon-456',
+          messageType: MessageType.GENERAL,
+          content: "'; DROP TABLE messages; --",
+        };
+
+        const createdMessage = { ...mockMessage, ...sendDto };
+        mockMessageRepository.create.mockReturnValue(createdMessage);
+        mockMessageRepository.save.mockResolvedValue(createdMessage);
+        mockConversationRepository.createQueryBuilder.mockReturnValue(
+          createMockQueryBuilder(null),
+        );
+        mockConversationRepository.create.mockReturnValue(mockConversation);
+        mockConversationRepository.save.mockResolvedValue(mockConversation);
+        mockConversationHistoryRepository.create.mockReturnValue({});
+        mockConversationHistoryRepository.save.mockResolvedValue({});
+
+        const result = await service.send(sendDto);
+
+        expect(result.content).toBe("'; DROP TABLE messages; --");
+        expect(mockMessageRepository.save).toHaveBeenCalled();
+      });
+    });
+
+    describe('metadata with special characters', () => {
+      it('should handle complex nested metadata with special characters', async () => {
+        const sendDto = {
+          fromType: ParticipantType.HOLLON,
+          fromId: 'hollon-123',
+          toType: ParticipantType.HOLLON,
+          toId: 'hollon-456',
+          messageType: MessageType.GENERAL,
+          content: 'Test',
+          metadata: {
+            'key-with-dashes': 'value',
+            'key.with.dots': 123,
+            'key with spaces': true,
+            nested: {
+              special: '<>&"\'',
+              emoji: '🎉',
+            },
+          },
+        };
+
+        const createdMessage = { ...mockMessage, ...sendDto };
+        mockMessageRepository.create.mockReturnValue(createdMessage);
+        mockMessageRepository.save.mockResolvedValue(createdMessage);
+        mockConversationRepository.createQueryBuilder.mockReturnValue(
+          createMockQueryBuilder(null),
+        );
+        mockConversationRepository.create.mockReturnValue(mockConversation);
+        mockConversationRepository.save.mockResolvedValue(mockConversation);
+        mockConversationHistoryRepository.create.mockReturnValue({});
+        mockConversationHistoryRepository.save.mockResolvedValue({});
+
+        const result = await service.send(sendDto);
+
+        expect(result.metadata).toEqual(sendDto.metadata);
+        expect(result.metadata.nested.emoji).toBe('🎉');
+      });
+    });
+  });
+
+  describe('Edge Cases - Malformed Objects', () => {
+    describe('update with partial data', () => {
+      it('should handle update with only undefined values', async () => {
+        const existingMessage = {
+          ...mockMessage,
+          content: 'Original',
+          metadata: { original: true },
+        };
+        mockMessageRepository.findOne.mockResolvedValue(existingMessage);
+        mockMessageRepository.save.mockImplementation((msg) => msg);
+
+        await service.update('message-123', {
+          content: undefined,
+          metadata: undefined,
+          requiresResponse: undefined,
+        });
+
+        // Should not modify any fields
+        const saveCall = mockMessageRepository.save.mock.calls[0][0];
+        expect(saveCall.content).toBe('Original');
+        expect(saveCall.metadata).toEqual({ original: true });
+      });
+
+      it('should handle update with empty object', async () => {
+        const existingMessage = { ...mockMessage };
+        mockMessageRepository.findOne.mockResolvedValue(existingMessage);
+        mockMessageRepository.save.mockImplementation((msg) => msg);
+
+        await service.update('message-123', {});
+
+        // Should save but not change anything
+        expect(mockMessageRepository.save).toHaveBeenCalled();
+      });
+    });
+
+    describe('metadata edge cases', () => {
+      it('should handle deeply nested metadata objects', async () => {
+        const deepMetadata = {
+          level1: {
+            level2: {
+              level3: {
+                level4: {
+                  value: 'deep',
+                },
+              },
+            },
+          },
+        };
+
+        const existingMessage = { ...mockMessage };
+        mockMessageRepository.findOne.mockResolvedValue(existingMessage);
+        mockMessageRepository.save.mockResolvedValue({
+          ...existingMessage,
+          metadata: deepMetadata,
+        });
+
+        const result = await service.update('message-123', {
+          metadata: deepMetadata,
+        });
+
+        expect(result.metadata.level1.level2.level3.level4.value).toBe('deep');
+      });
+
+      it('should handle metadata with array values', async () => {
+        const arrayMetadata = {
+          tags: ['tag1', 'tag2', 'tag3'],
+          numbers: [1, 2, 3],
+          mixed: ['string', 123, true, null],
+        };
+
+        const existingMessage = { ...mockMessage };
+        mockMessageRepository.findOne.mockResolvedValue(existingMessage);
+        mockMessageRepository.save.mockResolvedValue({
+          ...existingMessage,
+          metadata: arrayMetadata,
+        });
+
+        const result = await service.update('message-123', {
+          metadata: arrayMetadata,
+        });
+
+        expect(result.metadata.tags).toHaveLength(3);
+        expect(result.metadata.mixed).toContain(null);
+      });
+
+      it('should handle metadata with null values', async () => {
+        const nullMetadata = {
+          key1: null,
+          key2: 'value',
+          key3: null,
+        };
+
+        const existingMessage = { ...mockMessage };
+        mockMessageRepository.findOne.mockResolvedValue(existingMessage);
+        mockMessageRepository.save.mockResolvedValue({
+          ...existingMessage,
+          metadata: nullMetadata,
+        });
+
+        const result = await service.update('message-123', {
+          metadata: nullMetadata,
+        });
+
+        expect(result.metadata.key1).toBeNull();
+        expect(result.metadata.key2).toBe('value');
+      });
+    });
+  });
+
+  describe('Edge Cases - Invalid Formats', () => {
+    describe('findOne with invalid ID formats', () => {
+      it('should throw NotFoundException for non-existent UUID', async () => {
+        mockMessageRepository.findOne.mockResolvedValue(null);
+
+        await expect(
+          service.findOne('00000000-0000-0000-0000-000000000000'),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it('should throw NotFoundException for malformed ID', async () => {
+        mockMessageRepository.findOne.mockResolvedValue(null);
+
+        await expect(service.findOne('invalid-id')).rejects.toThrow(
+          NotFoundException,
+        );
+      });
+    });
+
+    describe('getInbox with edge case pagination', () => {
+      it('should handle zero limit', async () => {
+        const mockQueryBuilder = createMockQueryBuilder([]);
+        mockMessageRepository.createQueryBuilder.mockReturnValue(
+          mockQueryBuilder,
+        );
+
+        await service.getInbox(ParticipantType.HOLLON, 'hollon-456', {
+          limit: 0,
+        });
+
+        expect(mockQueryBuilder.take).toHaveBeenCalledWith(0);
+      });
+
+      it('should handle negative offset as zero', async () => {
+        const mockQueryBuilder = createMockQueryBuilder([]);
+        mockMessageRepository.createQueryBuilder.mockReturnValue(
+          mockQueryBuilder,
+        );
+
+        await service.getInbox(ParticipantType.HOLLON, 'hollon-456', {
+          offset: -10,
+        });
+
+        expect(mockQueryBuilder.skip).toHaveBeenCalledWith(-10);
+      });
+
+      it('should handle very large pagination values', async () => {
+        const mockQueryBuilder = createMockQueryBuilder([]);
+        mockMessageRepository.createQueryBuilder.mockReturnValue(
+          mockQueryBuilder,
+        );
+
+        await service.getInbox(ParticipantType.HOLLON, 'hollon-456', {
+          limit: 999999,
+          offset: 888888,
+        });
+
+        expect(mockQueryBuilder.take).toHaveBeenCalledWith(999999);
+        expect(mockQueryBuilder.skip).toHaveBeenCalledWith(888888);
+      });
+    });
+
+    describe('findAll with conflicting filters', () => {
+      it('should handle all filters set to false/empty', async () => {
+        const mockQueryBuilder = createMockQueryBuilder([]);
+        mockMessageRepository.createQueryBuilder.mockReturnValue(
+          mockQueryBuilder,
+        );
+
+        await service.findAll({
+          isRead: false,
+          limit: 0,
+          offset: 0,
+        });
+
+        expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+          'message.is_read = :isRead',
+          { isRead: false },
+        );
+      });
+    });
+  });
+
+  describe('Edge Cases - Very Long Content', () => {
+    it('should handle very long message content', async () => {
+      const longContent = 'A'.repeat(10000);
+      const sendDto = {
+        fromType: ParticipantType.HOLLON,
+        fromId: 'hollon-123',
+        toType: ParticipantType.HOLLON,
+        toId: 'hollon-456',
+        messageType: MessageType.GENERAL,
+        content: longContent,
+      };
+
+      const createdMessage = { ...mockMessage, ...sendDto };
+      mockMessageRepository.create.mockReturnValue(createdMessage);
+      mockMessageRepository.save.mockResolvedValue(createdMessage);
+      mockConversationRepository.createQueryBuilder.mockReturnValue(
+        createMockQueryBuilder(null),
+      );
+      mockConversationRepository.create.mockReturnValue(mockConversation);
+      mockConversationRepository.save.mockResolvedValue(mockConversation);
+      mockConversationHistoryRepository.create.mockReturnValue({});
+      mockConversationHistoryRepository.save.mockResolvedValue({});
+
+      const result = await service.send(sendDto);
+
+      expect(result.content).toHaveLength(10000);
+      expect(result.content).toBe(longContent);
+    });
+
+    it('should handle large metadata objects', async () => {
+      const largeMetadata: Record<string, any> = {};
+      for (let i = 0; i < 100; i++) {
+        largeMetadata[`key${i}`] = `value${i}`;
+      }
+
+      const sendDto = {
+        fromType: ParticipantType.HOLLON,
+        fromId: 'hollon-123',
+        toType: ParticipantType.HOLLON,
+        toId: 'hollon-456',
+        messageType: MessageType.GENERAL,
+        content: 'Test',
+        metadata: largeMetadata,
+      };
+
+      const createdMessage = { ...mockMessage, ...sendDto };
+      mockMessageRepository.create.mockReturnValue(createdMessage);
+      mockMessageRepository.save.mockResolvedValue(createdMessage);
+      mockConversationRepository.createQueryBuilder.mockReturnValue(
+        createMockQueryBuilder(null),
+      );
+      mockConversationRepository.create.mockReturnValue(mockConversation);
+      mockConversationRepository.save.mockResolvedValue(mockConversation);
+      mockConversationHistoryRepository.create.mockReturnValue({});
+      mockConversationHistoryRepository.save.mockResolvedValue({});
+
+      const result = await service.send(sendDto);
+
+      expect(Object.keys(result.metadata)).toHaveLength(100);
+      expect(result.metadata.key99).toBe('value99');
+    });
+  });
+
+  describe('Edge Cases - Whitespace Handling', () => {
+    it('should preserve leading and trailing whitespace in content', async () => {
+      const sendDto = {
+        fromType: ParticipantType.HOLLON,
+        fromId: 'hollon-123',
+        toType: ParticipantType.HOLLON,
+        toId: 'hollon-456',
+        messageType: MessageType.GENERAL,
+        content: '   whitespace content   ',
+      };
+
+      const createdMessage = { ...mockMessage, ...sendDto };
+      mockMessageRepository.create.mockReturnValue(createdMessage);
+      mockMessageRepository.save.mockResolvedValue(createdMessage);
+      mockConversationRepository.createQueryBuilder.mockReturnValue(
+        createMockQueryBuilder(null),
+      );
+      mockConversationRepository.create.mockReturnValue(mockConversation);
+      mockConversationRepository.save.mockResolvedValue(mockConversation);
+      mockConversationHistoryRepository.create.mockReturnValue({});
+      mockConversationHistoryRepository.save.mockResolvedValue({});
+
+      const result = await service.send(sendDto);
+
+      expect(result.content).toBe('   whitespace content   ');
+      expect(result.content.trim()).toBe('whitespace content');
+    });
+
+    it('should handle content that is only whitespace', async () => {
+      const sendDto = {
+        fromType: ParticipantType.HOLLON,
+        fromId: 'hollon-123',
+        toType: ParticipantType.HOLLON,
+        toId: 'hollon-456',
+        messageType: MessageType.GENERAL,
+        content: '     ',
+      };
+
+      const createdMessage = { ...mockMessage, ...sendDto };
+      mockMessageRepository.create.mockReturnValue(createdMessage);
+      mockMessageRepository.save.mockResolvedValue(createdMessage);
+      mockConversationRepository.createQueryBuilder.mockReturnValue(
+        createMockQueryBuilder(null),
+      );
+      mockConversationRepository.create.mockReturnValue(mockConversation);
+      mockConversationRepository.save.mockResolvedValue(mockConversation);
+      mockConversationHistoryRepository.create.mockReturnValue({});
+      mockConversationHistoryRepository.save.mockResolvedValue({});
+
+      const result = await service.send(sendDto);
+
+      expect(result.content).toBe('     ');
+    });
+  });
 });
