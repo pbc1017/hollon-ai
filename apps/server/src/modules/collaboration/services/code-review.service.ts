@@ -1340,6 +1340,11 @@ ${review.decision === PullRequestStatus.APPROVED ? 'PR is approved and ready to 
         await this.checkAndTriggerParentTask(completedTask);
       }
 
+      // Fix #26: Check if parent Epic should be completed (was missing in autoMergePullRequest)
+      if (completedTask) {
+        await this.checkAndCompleteParentEpic(completedTask);
+      }
+
       // Phase 3.12: Task worktree 정리
       if (pr.authorHollonId) {
         await this.cleanupTaskWorktree(pr.taskId, pr.authorHollonId).catch(
@@ -1539,13 +1544,50 @@ _Automated review by Hollon AI_`;
     const gitCwd = task.workingDirectory || task.project.workingDirectory;
 
     try {
+      // Fix #26: Get branch name before removing worktree
+      let branchName: string | null = null;
+      try {
+        const { stdout } = await execAsync(
+          `git -C "${worktreePath}" rev-parse --abbrev-ref HEAD`,
+          {
+            cwd: gitCwd,
+            shell: process.env.SHELL || '/bin/bash',
+            env: { ...process.env },
+          },
+        );
+        branchName = stdout.trim();
+        this.logger.log(`Found branch name: ${branchName}`);
+      } catch {
+        // Branch name detection failed, continue anyway
+        this.logger.debug(`Could not detect branch name for ${worktreePath}`);
+      }
+
+      // Remove worktree
       this.logger.log(`Cleaning up task worktree: ${worktreePath}`);
-      await execAsync(`git worktree remove ${worktreePath} --force`, {
+      await execAsync(`git worktree remove "${worktreePath}" --force`, {
         cwd: gitCwd,
         shell: process.env.SHELL || '/bin/bash',
         env: { ...process.env },
       });
       this.logger.log(`Task worktree cleaned up: ${worktreePath}`);
+
+      // Fix #26: Delete the branch after worktree is removed
+      if (branchName && branchName !== 'main' && branchName !== 'HEAD') {
+        try {
+          await execAsync(`git branch -D "${branchName}"`, {
+            cwd: gitCwd,
+            shell: process.env.SHELL || '/bin/bash',
+            env: { ...process.env },
+          });
+          this.logger.log(`Deleted branch: ${branchName}`);
+        } catch (branchError) {
+          const err = branchError as Error;
+          // Branch might already be deleted or not exist
+          this.logger.debug(
+            `Could not delete branch ${branchName}: ${err.message}`,
+          );
+        }
+      }
     } catch (error) {
       const err = error as Error;
       // Worktree가 이미 삭제되었거나 없을 수 있음 (정상)
