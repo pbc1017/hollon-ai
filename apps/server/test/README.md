@@ -142,6 +142,7 @@ The test database connects to PostgreSQL with the following configuration:
 ```
 
 **Key Points**:
+
 - **Port 5432** is used for test database (same as development in CI)
 - **Schema isolation** via `hollon_test_worker_N` allows parallel test execution
 - **search_path** includes `hollon` schema to access pgvector extension
