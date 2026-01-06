@@ -11,6 +11,7 @@
 This audit report documents the current state of database migrations in the Hollon-AI project, with a focus on the pgvector vector similarity search implementation. The audit covers 30+ migration files, migration workflow patterns, and identifies the vector storage capabilities added to the system.
 
 **Key Findings:**
+
 - ✅ pgvector extension properly configured in initial schema migration
 - ✅ Vector storage capability implemented in documents table
 - ✅ Migration workflow follows TypeORM best practices
@@ -22,16 +23,19 @@ This audit report documents the current state of database migrations in the Holl
 ## 1. Migration Files Inventory
 
 ### Total Migration Count
+
 **30 migration files** located in `apps/server/src/database/migrations/`
 
 ### Critical Migrations for Vector Storage
 
 #### 1.1 Initial Schema Migration
+
 **File**: `1733295000000-InitialSchema.ts`
 **Created**: December 2024
 **Purpose**: Foundation schema including pgvector setup
 
 **Key Features**:
+
 ```typescript
 // Line 6: Enable pgvector extension
 await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
@@ -41,6 +45,7 @@ await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
 ```
 
 **Tables Created**:
+
 - organizations
 - brain_provider_configs
 - roles
@@ -53,6 +58,7 @@ await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
 - approval_requests
 
 **Vector Configuration**:
+
 - Extension: `vector`
 - Dimension: 1536 (OpenAI embedding standard)
 - Column: `documents.embedding`
@@ -62,14 +68,17 @@ await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
 **Rollback Safety**: ✅ Includes `DROP EXTENSION IF EXISTS vector` in down migration
 
 #### 1.2 Knowledge Items Migration
+
 **File**: `1766556710000-CreateKnowledgeItemsTable.ts`
 **Created**: January 2025
 **Purpose**: Knowledge extraction module support
 
 **Tables Created**:
+
 - knowledge_items
 
 **Schema**:
+
 ```sql
 CREATE TABLE "knowledge_items" (
   "id" uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -84,6 +93,7 @@ CREATE TABLE "knowledge_items" (
 ```
 
 **Indexes**:
+
 - idx_knowledge_items_organization_id
 - idx_knowledge_items_source
 - idx_knowledge_items_extracted_at
@@ -94,39 +104,39 @@ CREATE TABLE "knowledge_items" (
 
 ### Complete Migration Timeline
 
-| Timestamp | Migration Name | Purpose |
-|-----------|---------------|---------|
-| 1733295000000 | InitialSchema | Foundation + pgvector |
-| 1733400000000 | MessagingSystem | Messaging features |
-| 1733500000000 | MeetingSystem | Meeting management |
-| 1733600000000 | AddCycles | Sprint cycle support |
-| 1733700000000 | AddCollaboration | Collaboration features |
-| 1733710000000 | AddApprovalAndWeek12 | Approval workflow |
-| 1733720000000 | AddConflictResolution | Conflict handling |
-| 1733800000000 | AddGoalEntities | Goal management |
-| 1733800000000 | AddMissingTaskColumns | Task enhancements |
-| 1733900000000 | AddHollonDepth | Hierarchical depth |
-| 1733950000000 | AddMessageConversationFields | Message improvements |
-| 1734000000000 | AddOrganizationContextPrompt | Context prompts |
-| 1734100000000 | AddStoryPointsColumn | Story points |
-| 1734200000000 | AddChannelGroupColumns | Channel groups |
-| 1734300000000 | SyncEntitySchemas | Schema synchronization |
-| 1734400000000 | HierarchicalOrganization | Org hierarchy |
-| 1734500000000 | AddTaskBackoffColumns | Task retry logic |
-| 1734550000000 | AddHollonExpiresAt | Hollon expiration |
-| 1734600000000 | Phase38TeamDistribution | Team distribution |
-| 1734600000000 | AddTaskMetadataColumn | Task metadata |
-| 1734600000000 | AddTeamIdToDocuments | Document-team link |
-| 1734700000000 | AddAvailableForTemporaryHollonToRole | Temporary roles |
-| 1734700100000 | CreateTaskDependenciesJoinTable | Task dependencies |
-| 1734800000000 | AddReviewFieldsToTasks | Review workflow |
-| 1734900000000 | AddReviewerHollonIdToTasks | Reviewer assignment |
-| 1734900000001 | AddTaskWorkingDirectory | Working directories |
-| 1735000000001 | ModifyTaskAssignmentConstraint | Assignment rules |
-| 1735100000000 | AddTeamManagerReviewerType | Manager reviews |
-| 1735200000000 | AddWaitingForHollonStatus | Status additions |
-| 1766366491000 | AddPlanningAndTestingTaskTypes | Task types |
-| 1766556710000 | CreateKnowledgeItemsTable | Knowledge extraction |
+| Timestamp     | Migration Name                       | Purpose                |
+| ------------- | ------------------------------------ | ---------------------- |
+| 1733295000000 | InitialSchema                        | Foundation + pgvector  |
+| 1733400000000 | MessagingSystem                      | Messaging features     |
+| 1733500000000 | MeetingSystem                        | Meeting management     |
+| 1733600000000 | AddCycles                            | Sprint cycle support   |
+| 1733700000000 | AddCollaboration                     | Collaboration features |
+| 1733710000000 | AddApprovalAndWeek12                 | Approval workflow      |
+| 1733720000000 | AddConflictResolution                | Conflict handling      |
+| 1733800000000 | AddGoalEntities                      | Goal management        |
+| 1733800000000 | AddMissingTaskColumns                | Task enhancements      |
+| 1733900000000 | AddHollonDepth                       | Hierarchical depth     |
+| 1733950000000 | AddMessageConversationFields         | Message improvements   |
+| 1734000000000 | AddOrganizationContextPrompt         | Context prompts        |
+| 1734100000000 | AddStoryPointsColumn                 | Story points           |
+| 1734200000000 | AddChannelGroupColumns               | Channel groups         |
+| 1734300000000 | SyncEntitySchemas                    | Schema synchronization |
+| 1734400000000 | HierarchicalOrganization             | Org hierarchy          |
+| 1734500000000 | AddTaskBackoffColumns                | Task retry logic       |
+| 1734550000000 | AddHollonExpiresAt                   | Hollon expiration      |
+| 1734600000000 | Phase38TeamDistribution              | Team distribution      |
+| 1734600000000 | AddTaskMetadataColumn                | Task metadata          |
+| 1734600000000 | AddTeamIdToDocuments                 | Document-team link     |
+| 1734700000000 | AddAvailableForTemporaryHollonToRole | Temporary roles        |
+| 1734700100000 | CreateTaskDependenciesJoinTable      | Task dependencies      |
+| 1734800000000 | AddReviewFieldsToTasks               | Review workflow        |
+| 1734900000000 | AddReviewerHollonIdToTasks           | Reviewer assignment    |
+| 1734900000001 | AddTaskWorkingDirectory              | Working directories    |
+| 1735000000001 | ModifyTaskAssignmentConstraint       | Assignment rules       |
+| 1735100000000 | AddTeamManagerReviewerType           | Manager reviews        |
+| 1735200000000 | AddWaitingForHollonStatus            | Status additions       |
+| 1766366491000 | AddPlanningAndTestingTaskTypes       | Task types             |
+| 1766556710000 | CreateKnowledgeItemsTable            | Knowledge extraction   |
 
 ---
 
@@ -135,6 +145,7 @@ CREATE TABLE "knowledge_items" (
 ### 2.1 Infrastructure Setup
 
 **Docker Configuration** (`docker/docker-compose.yml`)
+
 ```yaml
 postgres:
   image: pgvector/pgvector:pg16
@@ -143,6 +154,7 @@ postgres:
 ```
 
 **Version Information**:
+
 - PostgreSQL: 16
 - pgvector: Latest (bundled in image)
 - Image: `pgvector/pgvector:pg16`
@@ -154,18 +166,21 @@ postgres:
 **Primary Table**: `documents`
 
 **Vector Column Specification**:
+
 ```sql
 "embedding" vector(1536)
 ```
 
 **Characteristics**:
+
 - **Data Type**: PostgreSQL vector (pgvector extension)
 - **Dimensions**: 1536
 - **Reasoning**: Standard for OpenAI text-embedding-ada-002 model
 - **Nullable**: Yes (allows gradual embedding generation)
-- **Storage**: Approximately 6KB per embedding (1536 * 4 bytes)
+- **Storage**: Approximately 6KB per embedding (1536 \* 4 bytes)
 
 **Intended Use Cases**:
+
 1. Retrieval-Augmented Generation (RAG)
 2. Semantic document search
 3. Knowledge base similarity matching
@@ -176,6 +191,7 @@ postgres:
 **File**: `apps/server/src/modules/document/entities/document.entity.ts`
 
 **TypeORM Workaround**:
+
 ```typescript
 // Vector embedding for RAG (pgvector)
 // Note: 실제 vector 타입은 migration에서 설정
@@ -184,6 +200,7 @@ embedding: string;
 ```
 
 **Explanation**:
+
 - TypeORM doesn't natively support `vector` type
 - Entity uses `type: 'text'` as placeholder
 - Actual database column is `vector(1536)` via migration
@@ -191,6 +208,7 @@ embedding: string;
 - Application code must handle vector serialization/deserialization
 
 **Document Entity Overview**:
+
 ```typescript
 @Entity('documents')
 export class Document extends BaseEntity {
@@ -209,6 +227,7 @@ export class Document extends BaseEntity {
 ```
 
 **Indexes**:
+
 - organizationId (for tenant isolation)
 - projectId + type (for project-scoped searches)
 - hollonId (for agent-specific documents)
@@ -218,11 +237,13 @@ export class Document extends BaseEntity {
 ### 2.4 Vector Search Services
 
 #### Service 1: Knowledge Extraction Module
+
 **File**: `apps/server/src/modules/knowledge-extraction/services/vector-search.service.ts`
 
 **Status**: 🚧 Stub Implementation
 
 **Planned Methods**:
+
 ```typescript
 class VectorSearchService {
   // Search similar knowledge items with filtering
@@ -234,24 +255,25 @@ class VectorSearchService {
       threshold?: number;
       projectId?: string | null;
       teamId?: string | null;
-    }
-  ): Promise<unknown[]>
+    },
+  ): Promise<unknown[]>;
 
   // Generate embeddings from text
-  async generateEmbedding(text: string): Promise<number[]>
+  async generateEmbedding(text: string): Promise<number[]>;
 
   // Index knowledge item for search
-  async indexItem(itemId: string, text: string): Promise<void>
+  async indexItem(itemId: string, text: string): Promise<void>;
 
   // Remove from index
-  async removeFromIndex(itemId: string): Promise<void>
+  async removeFromIndex(itemId: string): Promise<void>;
 
   // Update existing index entry
-  async updateIndex(itemId: string, text: string): Promise<void>
+  async updateIndex(itemId: string, text: string): Promise<void>;
 }
 ```
 
 **Implementation Notes**:
+
 - All methods contain TODO markers
 - Return empty arrays/void currently
 - Organization-scoped search planned
@@ -259,28 +281,27 @@ class VectorSearchService {
 - Configurable similarity threshold
 
 #### Service 2: General Vector Search Module
+
 **File**: `apps/server/src/modules/vector-search/vector-search.service.ts`
 
 **Status**: 🚧 Stub Implementation
 
 **Planned Methods**:
+
 ```typescript
 class VectorSearchService {
   // Basic similarity search
-  async searchSimilarVectors(
-    query: string,
-    limit: number
-  ): Promise<unknown[]>
+  async searchSimilarVectors(query: string, limit: number): Promise<unknown[]>;
 
   // Index document for search
   async indexDocument(
     id: string,
     content: string,
-    metadata: object
-  ): Promise<void>
+    metadata: object,
+  ): Promise<void>;
 
   // Remove document from index
-  async deleteDocument(id: string): Promise<void>
+  async deleteDocument(id: string): Promise<void>;
 }
 ```
 
@@ -289,6 +310,7 @@ class VectorSearchService {
 ### 2.5 Database Configuration
 
 **TypeORM DataSource** (`apps/server/src/config/typeorm.config.ts`)
+
 ```typescript
 export default new DataSource({
   type: 'postgres',
@@ -301,12 +323,14 @@ export default new DataSource({
 ```
 
 **Key Points**:
+
 - Schema-based isolation
 - search_path includes 'public' for extension access
 - synchronize: false (migrations only)
 - Migration-based schema management (best practice)
 
 **NestJS Database Config** (`apps/server/src/config/database.config.ts`)
+
 ```typescript
 export const databaseConfig = (configService: ConfigService) => ({
   synchronize: false,
@@ -319,6 +343,7 @@ export const databaseConfig = (configService: ConfigService) => ({
 ```
 
 **Test Mode Behavior**:
+
 - Automatically runs migrations
 - Ensures test database schema is up-to-date
 - No schema dropping between tests (data persistence)
@@ -328,6 +353,7 @@ export const databaseConfig = (configService: ConfigService) => ({
 **Seed Data References** (`apps/server/src/database/seed.ts`)
 
 Lines referencing pgvector capabilities:
+
 - Line 222: Data Engineer role includes "pgvector (vector similarity)"
 - Line 253: AI Engineer optimization tasks mention "PostgreSQL 데이터베이스 최적화 (pgvector 포함)"
 - Line 260: Data Engineer dependencies include "pgvector (vector extension)"
@@ -335,6 +361,7 @@ Lines referencing pgvector capabilities:
 - Line 822: DevBot tests include "pgvector Extension 및 Vector 검색"
 
 **Current Memory Retrieval** (`prompt-composer.service.ts:190`)
+
 ```typescript
 // Uses simple keyword matching for now
 // (can be upgraded to vector search later)
@@ -369,6 +396,7 @@ pnpm db:seed
 ```
 
 **Root Level Commands** (from root `package.json`):
+
 ```bash
 pnpm db:migrate        # Runs server migration
 pnpm db:seed           # Runs server seed
@@ -377,6 +405,7 @@ pnpm db:seed           # Runs server seed
 ### 3.2 Migration File Structure
 
 **Standard Pattern**:
+
 ```typescript
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
@@ -394,6 +423,7 @@ export class MigrationName1234567890000 implements MigrationInterface {
 ```
 
 **Naming Convention**:
+
 - Format: `{timestamp}-{Description}.ts`
 - Timestamp: Unix milliseconds
 - Description: PascalCase descriptive name
@@ -402,6 +432,7 @@ export class MigrationName1234567890000 implements MigrationInterface {
 ### 3.3 Best Practices Observed
 
 ✅ **Proper Extension Management**:
+
 ```typescript
 // up migration
 await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
@@ -411,6 +442,7 @@ await queryRunner.query(`DROP EXTENSION IF EXISTS vector`);
 ```
 
 ✅ **Index Creation**:
+
 ```typescript
 await queryRunner.query(`
   CREATE INDEX "idx_name" ON "table_name"("column_name");
@@ -418,6 +450,7 @@ await queryRunner.query(`
 ```
 
 ✅ **Foreign Key Constraints**:
+
 ```typescript
 CONSTRAINT "FK_name"
   FOREIGN KEY ("column")
@@ -426,6 +459,7 @@ CONSTRAINT "FK_name"
 ```
 
 ✅ **Enum Types**:
+
 ```typescript
 await queryRunner.query(`
   CREATE TYPE "enum_name" AS ENUM ('value1', 'value2');
@@ -433,6 +467,7 @@ await queryRunner.query(`
 ```
 
 ✅ **Comments for Documentation**:
+
 ```typescript
 await queryRunner.query(`
   COMMENT ON TABLE "table_name" IS 'Description...';
@@ -441,6 +476,7 @@ await queryRunner.query(`
 ```
 
 ✅ **Proper Down Migrations**:
+
 - Drop in reverse order of creation
 - Handle dependencies correctly
 - Clean up enums and extensions
@@ -448,6 +484,7 @@ await queryRunner.query(`
 ### 3.4 TypeORM Configuration Pattern
 
 **Environment-Based Configuration**:
+
 ```typescript
 // Development: .env.local + .env
 // Test: NODE_ENV=test + specific schema
@@ -455,18 +492,21 @@ await queryRunner.query(`
 ```
 
 **Schema Isolation**:
+
 - Development: `hollon` schema
 - Test: `hollon_test_worker_1` (or other worker schemas)
 - Production: Configurable via DB_SCHEMA
 
 **Migration Loading**:
+
 ```typescript
-migrations: [join(__dirname, '../database/migrations/*{.ts,.js}')]
+migrations: [join(__dirname, '../database/migrations/*{.ts,.js}')];
 ```
 
 **Entity Loading**:
+
 ```typescript
-entities: [join(__dirname, '../**/*.entity{.ts,.js}')]
+entities: [join(__dirname, '../**/*.entity{.ts,.js}')];
 ```
 
 ---
@@ -476,17 +516,17 @@ entities: [join(__dirname, '../**/*.entity{.ts,.js}')]
 ### 4.1 Critical Gaps
 
 #### Gap 1: Knowledge Items Missing Vector Column
+
 **Current State**: `knowledge_items` table exists without embedding column
 **Required State**: Add `embedding vector(1536)` column
 
 **Recommendation**: Create new migration
+
 ```typescript
 // Suggested migration name:
 // 1735XXXXXX-AddEmbeddingToKnowledgeItems.ts
 
-export class AddEmbeddingToKnowledgeItems1735XXXXXX
-  implements MigrationInterface {
-
+export class AddEmbeddingToKnowledgeItems1735XXXXXX implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       ALTER TABLE "knowledge_items"
@@ -515,20 +555,24 @@ export class AddEmbeddingToKnowledgeItems1735XXXXXX
 ```
 
 #### Gap 2: Vector Search Implementation
+
 **Current State**: All vector search methods are stubs
 **Required State**: Fully implemented vector search
 
 **Recommendation**: Implement core methods
+
 1. Embedding generation (OpenAI API integration)
 2. Vector similarity queries (SQL with pgvector operators)
 3. Document indexing workflow
 4. Similarity search with filtering
 
 #### Gap 3: Vector Indexes
+
 **Current State**: No vector-specific indexes created
 **Required State**: Performance indexes on vector columns
 
 **Recommendation**: Add vector indexes
+
 ```sql
 -- IVFFlat index for approximate search
 CREATE INDEX ON documents
@@ -544,6 +588,7 @@ CREATE INDEX ON documents
 ### 4.2 Documentation Gaps
 
 **Missing Documentation**:
+
 1. ❌ Setup guide for pgvector
 2. ❌ Vector search implementation guide
 3. ❌ API documentation for vector endpoints
@@ -551,9 +596,11 @@ CREATE INDEX ON documents
 5. ❌ Testing strategy for vector operations
 
 **Existing Documentation**:
+
 1. ✅ Comprehensive implementation review (`docs/pgvector-implementation-review.md`)
 
 **Recommendation**: Create documentation structure
+
 ```
 docs/
 ├── database/
@@ -573,6 +620,7 @@ docs/
 **Current State**: No vector-specific security measures identified
 
 **Recommendations**:
+
 1. ✅ Already implemented: Organization-scoped access (via organizationId)
 2. ⚠️ TODO: Rate limiting for embedding generation API calls
 3. ⚠️ TODO: Embedding data retention policy
@@ -581,12 +629,14 @@ docs/
 ### 4.4 Performance Considerations
 
 **Identified Needs**:
+
 1. Vector index creation strategy (when to index)
 2. Bulk embedding generation workflow
 3. Query result caching strategy
 4. Monitoring and alerting for vector operations
 
 **Recommendations**:
+
 1. Create indexes after initial bulk load
 2. Implement batch embedding generation
 3. Use Redis for frequently accessed embeddings
@@ -599,15 +649,17 @@ docs/
 ### 5.1 Current Testing Setup
 
 **Test Database Configuration**:
+
 ```typescript
 // Auto-runs migrations in test mode
-migrationsRun: isTest
+migrationsRun: isTest;
 
 // Uses separate schema
-DB_SCHEMA=hollon_test_worker_1
+DB_SCHEMA = hollon_test_worker_1;
 ```
 
 **Test Scripts**:
+
 ```bash
 pnpm test                    # Unit tests
 pnpm test:integration        # Integration tests
@@ -618,18 +670,21 @@ pnpm test:e2e               # End-to-end tests
 ### 5.2 Vector Testing Needs
 
 **Unit Tests Required**:
+
 - [ ] Embedding generation
 - [ ] Vector similarity calculations
 - [ ] Document indexing operations
 - [ ] Error handling for invalid vectors
 
 **Integration Tests Required**:
+
 - [ ] End-to-end vector search flow
 - [ ] Migration with vector columns
 - [ ] pgvector extension availability
 - [ ] Multi-tenant vector isolation
 
 **Performance Tests Required**:
+
 - [ ] Search latency benchmarks
 - [ ] Index build time measurements
 - [ ] Concurrent search handling
@@ -642,26 +697,31 @@ pnpm test:e2e               # End-to-end tests
 ### 6.1 Runtime Dependencies
 
 **Database**:
+
 - PostgreSQL: 16+ (required for latest pgvector features)
 - pgvector: Latest via Docker image
 - Connection: pg@8.13.1
 
 **ORM**:
+
 - TypeORM: 0.3.20
 - @nestjs/typeorm: 10.0.2
 
 **Framework**:
+
 - NestJS: 10.4.15
 - Node.js: >= 20.0.0
 
 ### 6.2 Development Dependencies
 
 **Migration Tools**:
+
 - ts-node: 10.9.2
 - tsconfig-paths: 4.2.0
 - dotenv-cli: 11.0.0
 
 **Testing**:
+
 - jest: 29.7.0
 - ts-jest: 29.2.5
 - supertest: 7.0.0
@@ -669,11 +729,13 @@ pnpm test:e2e               # End-to-end tests
 ### 6.3 Future Dependencies
 
 **For Vector Implementation**:
+
 - OpenAI SDK (for embeddings) - TBD
 - OR Hugging Face Transformers - TBD
 - OR Custom embedding service - TBD
 
 **Considerations**:
+
 - Cost of API calls for embedding generation
 - Latency requirements
 - On-premise vs cloud embedding generation
@@ -686,11 +748,13 @@ pnpm test:e2e               # End-to-end tests
 ### 7.1 Access Control
 
 **Current Implementation**:
+
 - ✅ Organization-scoped queries (organizationId filtering)
 - ✅ Foreign key constraints enforce relationships
 - ✅ ON DELETE CASCADE for organization cleanup
 
 **TODO**:
+
 - ⚠️ API authentication for vector search endpoints
 - ⚠️ Rate limiting for embedding generation
 - ⚠️ Audit logging for vector operations
@@ -698,6 +762,7 @@ pnpm test:e2e               # End-to-end tests
 ### 7.2 Data Privacy
 
 **Considerations**:
+
 1. **Embeddings contain semantic information**
    - May reveal document content even without source text
    - Consider encryption at rest for sensitive data
@@ -711,6 +776,7 @@ pnpm test:e2e               # End-to-end tests
    - Data portability: Export embeddings with data
 
 **Recommendations**:
+
 - Document embedding generation consent
 - Implement embedding deletion on document removal
 - Consider differential privacy techniques
@@ -722,18 +788,21 @@ pnpm test:e2e               # End-to-end tests
 ### 8.1 Metrics to Track
 
 **Performance Metrics**:
+
 - Vector search query latency (p50, p95, p99)
 - Embedding generation time
 - Index build duration
 - Database connection pool usage
 
 **Business Metrics**:
+
 - Number of vector searches per day
 - Search result relevance (user feedback)
 - Embedding generation costs
 - Storage used by vectors
 
 **Health Metrics**:
+
 - pgvector extension status
 - Index health and size
 - Failed embedding generations
@@ -742,11 +811,13 @@ pnpm test:e2e               # End-to-end tests
 ### 8.2 Recommended Monitoring Setup
 
 **Tools**:
+
 1. PostgreSQL metrics: pg_stat_statements
 2. Application metrics: NestJS interceptors
 3. Infrastructure: Docker container metrics
 
 **Alerts**:
+
 - Vector search latency > threshold
 - Embedding generation failure rate > 1%
 - Vector index size growth anomaly
@@ -759,6 +830,7 @@ pnpm test:e2e               # End-to-end tests
 ### 9.1 Summary of Findings
 
 **Strengths**:
+
 - ✅ Well-structured migration system
 - ✅ Proper pgvector extension setup
 - ✅ Vector column correctly configured in documents table
@@ -768,6 +840,7 @@ pnpm test:e2e               # End-to-end tests
 - ✅ Good documentation foundation
 
 **Weaknesses**:
+
 - ⚠️ Knowledge items table missing vector column
 - ⚠️ Vector search service implementations incomplete
 - ⚠️ No vector indexes created
@@ -775,6 +848,7 @@ pnpm test:e2e               # End-to-end tests
 - ⚠️ No performance testing strategy
 
 **Risks**:
+
 - 🔴 Vector search functionality non-functional (stubs only)
 - 🟡 Performance issues without indexes at scale
 - 🟡 Security considerations not fully addressed
@@ -783,20 +857,14 @@ pnpm test:e2e               # End-to-end tests
 ### 9.2 Priority Actions
 
 **Immediate (P0)**:
+
 1. Add embedding column to knowledge_items table
 2. Implement embedding generation service
 3. Implement basic vector similarity search
 
-**Short-term (P1)**:
-4. Create vector indexes for performance
-5. Write comprehensive documentation
-6. Implement integration tests
-7. Add monitoring and metrics
+**Short-term (P1)**: 4. Create vector indexes for performance 5. Write comprehensive documentation 6. Implement integration tests 7. Add monitoring and metrics
 
-**Long-term (P2)**:
-8. Performance optimization and tuning
-9. Advanced search features (hybrid search, filtering)
-10. Production monitoring and alerting setup
+**Long-term (P2)**: 8. Performance optimization and tuning 9. Advanced search features (hybrid search, filtering) 10. Production monitoring and alerting setup
 
 ### 9.3 Sign-off
 
@@ -821,6 +889,7 @@ find apps/server/src/database/migrations -name "*.ts" -type f \
 ### Appendix B: Vector Search Query Examples
 
 **Cosine Similarity Search**:
+
 ```sql
 SELECT
   id,
@@ -836,6 +905,7 @@ LIMIT 10;
 ```
 
 **Inner Product Search**:
+
 ```sql
 SELECT
   id,
@@ -848,6 +918,7 @@ LIMIT 10;
 ```
 
 **L2 Distance Search**:
+
 ```sql
 SELECT
   id,
@@ -861,20 +932,22 @@ LIMIT 10;
 
 ### Appendix C: Useful pgvector Operators
 
-| Operator | Description | Use Case |
-|----------|-------------|----------|
-| `<->` | L2 distance | Euclidean distance |
-| `<#>` | Inner product | Normalized embeddings |
-| `<=>` | Cosine distance | Default for semantic search |
+| Operator | Description     | Use Case                    |
+| -------- | --------------- | --------------------------- |
+| `<->`    | L2 distance     | Euclidean distance          |
+| `<#>`    | Inner product   | Normalized embeddings       |
+| `<=>`    | Cosine distance | Default for semantic search |
 
 ### Appendix D: Vector Index Types
 
 **IVFFlat (Inverted File with Flat Compression)**:
+
 - Pros: Fast build, reasonable accuracy
 - Cons: Requires VACUUM ANALYZE, fixed lists parameter
 - Best for: Medium datasets (10K-1M vectors)
 
 **HNSW (Hierarchical Navigable Small World)**:
+
 - Pros: Better accuracy, no VACUUM needed
 - Cons: Slower build, higher memory usage
 - Best for: High accuracy requirements, > 1M vectors
@@ -882,11 +955,13 @@ LIMIT 10;
 ### Appendix E: References
 
 **Documentation**:
+
 - pgvector GitHub: https://github.com/pgvector/pgvector
 - TypeORM Migrations: https://typeorm.io/migrations
 - PostgreSQL Extensions: https://www.postgresql.org/docs/current/extend-extensions.html
 
 **Internal Documents**:
+
 - `docs/pgvector-implementation-review.md`
 - `apps/server/src/config/typeorm.config.ts`
 - `docker/docker-compose.yml`
