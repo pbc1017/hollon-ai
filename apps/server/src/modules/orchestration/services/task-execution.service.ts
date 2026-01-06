@@ -25,6 +25,7 @@ import {
   Document,
   DocumentType,
 } from '../../document/entities/document.entity';
+import { TaskPullRequest } from '../../collaboration/entities/task-pull-request.entity';
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 import { BrainResponse } from '../../brain-provider/interfaces/brain-provider.interface';
 import { ICodeReviewPort } from '../domain/ports/code-review.port';
@@ -103,6 +104,8 @@ export class TaskExecutionService {
     private readonly documentRepo: Repository<Document>,
     @InjectRepository(Role)
     private readonly roleRepo: Repository<Role>,
+    @InjectRepository(TaskPullRequest)
+    private readonly prRepo: Repository<TaskPullRequest>,
     private readonly brainProvider: BrainProviderService,
     private readonly qualityGateService: QualityGateService,
     @Inject('ICodeReviewPort')
