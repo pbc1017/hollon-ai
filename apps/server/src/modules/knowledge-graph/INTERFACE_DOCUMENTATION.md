@@ -16,33 +16,40 @@ The `KnowledgeGraphService` is the core service for managing the knowledge graph
 ## Dependencies
 
 ### Repository Injections
+
 - `nodeRepository: Repository<Node>` - TypeORM repository for Node entities
 - `edgeRepository: Repository<Edge>` - TypeORM repository for Edge entities
 
 ### External Dependencies
+
 - `@nestjs/common` - Injectable decorator
 - `@nestjs/typeorm` - InjectRepository decorator
 - `typeorm` - Repository type
 
 ### Entity Dependencies
+
 - `Node` from `./entities/node.entity`
 - `Edge` from `./entities/edge.entity`
 
 ## Current Methods
 
 ### 1. findAllNodes()
+
 ```typescript
 async findAllNodes(): Promise<Node[]>
 ```
+
 **Status**: Implemented (basic)
 **Description**: Retrieves all nodes from the knowledge graph
 **Returns**: Promise resolving to an array of all Node entities
 **Usage**: Basic query without filtering or pagination
 
 ### 2. findAllEdges()
+
 ```typescript
 async findAllEdges(): Promise<Edge[]>
 ```
+
 **Status**: Implemented (basic)
 **Description**: Retrieves all edges from the knowledge graph
 **Returns**: Promise resolving to an array of all Edge entities
@@ -51,8 +58,10 @@ async findAllEdges(): Promise<Edge[]>
 ## Entity Structures
 
 ### Node Entity
+
 **Table**: `knowledge_graph_nodes`
 **Key Fields**:
+
 - `id` (uuid, primary key) - from BaseEntity
 - `name` (string, 255) - Node name
 - `type` (enum: NodeType) - Node type (person, organization, team, task, document, code, concept, goal, skill, tool, custom)
@@ -64,17 +73,21 @@ async findAllEdges(): Promise<Edge[]>
 - `createdAt`, `updatedAt` (timestamps) - from BaseEntity
 
 **Relationships**:
+
 - `outgoingEdges: Edge[]` - OneToMany relationship (this node as source)
 - `incomingEdges: Edge[]` - OneToMany relationship (this node as target)
 
 **Indexes**:
+
 - `type`
 - `organizationId`
 - `createdAt`
 
 ### Edge Entity
+
 **Table**: `knowledge_graph_edges`
 **Key Fields**:
+
 - `id` (uuid, primary key) - from BaseEntity
 - `sourceNodeId` (uuid) - Source node reference
 - `targetNodeId` (uuid) - Target node reference
@@ -86,10 +99,12 @@ async findAllEdges(): Promise<Edge[]>
 - `createdAt`, `updatedAt` (timestamps) - from BaseEntity
 
 **Relationships**:
+
 - `sourceNode: Node` - ManyToOne relationship (CASCADE delete)
 - `targetNode: Node` - ManyToOne relationship (CASCADE delete)
 
 **Indexes**:
+
 - `type`
 - `sourceNodeId, targetNodeId` (composite)
 - `sourceNodeId, type` (composite)
@@ -104,17 +119,21 @@ Based on typical knowledge graph operations and the entity structure, the follow
 ### Node Operations
 
 #### Create Operations
+
 ```typescript
 async createNode(data: CreateNodeDto): Promise<Node>
 ```
+
 - Create a new node in the knowledge graph
 - Validate organization context
 - Return created node entity
 
 #### Read Operations
+
 ```typescript
 async findNodeById(id: string): Promise<Node>
 ```
+
 - Find a specific node by ID
 - Include relations if needed
 - Throw NotFoundException if not found
@@ -122,26 +141,31 @@ async findNodeById(id: string): Promise<Node>
 ```typescript
 async findNodesByType(type: NodeType, organizationId: string): Promise<Node[]>
 ```
+
 - Find all nodes of a specific type within an organization
 - Support filtering by isActive
 
 ```typescript
 async findNodesByOrganization(organizationId: string): Promise<Node[]>
 ```
+
 - Find all nodes belonging to an organization
 - Support filtering and pagination
 
 ```typescript
 async searchNodes(searchDto: SearchNodesDto): Promise<Node[]>
 ```
+
 - Search nodes by name, description, tags, or properties
 - Support full-text search and filtering
 - Return paginated results
 
 #### Update Operations
+
 ```typescript
 async updateNode(id: string, data: UpdateNodeDto): Promise<Node>
 ```
+
 - Update an existing node
 - Validate organization context
 - Return updated node entity
@@ -149,20 +173,24 @@ async updateNode(id: string, data: UpdateNodeDto): Promise<Node>
 ```typescript
 async updateNodeProperties(id: string, properties: Record<string, any>): Promise<Node>
 ```
+
 - Update only the properties field (JSONB)
 - Merge with existing properties
 - Return updated node entity
 
 #### Delete Operations
+
 ```typescript
 async deleteNode(id: string): Promise<void>
 ```
+
 - Hard delete a node
 - Cascade delete edges (handled by database)
 
 ```typescript
 async softDeleteNode(id: string): Promise<Node>
 ```
+
 - Soft delete by setting isActive to false
 - Preserve data for recovery
 - Return updated node entity
@@ -170,18 +198,22 @@ async softDeleteNode(id: string): Promise<Node>
 ### Edge Operations
 
 #### Create Operations
+
 ```typescript
 async createEdge(data: CreateEdgeDto): Promise<Edge>
 ```
+
 - Create a new edge between nodes
 - Validate source and target nodes exist
 - Validate organization context
 - Return created edge entity
 
 #### Read Operations
+
 ```typescript
 async findEdgeById(id: string): Promise<Edge>
 ```
+
 - Find a specific edge by ID
 - Include relations if needed
 - Throw NotFoundException if not found
@@ -189,30 +221,36 @@ async findEdgeById(id: string): Promise<Edge>
 ```typescript
 async findEdgesBySourceNode(sourceNodeId: string): Promise<Edge[]>
 ```
+
 - Find all outgoing edges from a node
 - Support filtering by type and isActive
 
 ```typescript
 async findEdgesByTargetNode(targetNodeId: string): Promise<Edge[]>
 ```
+
 - Find all incoming edges to a node
 - Support filtering by type and isActive
 
 ```typescript
 async findEdgesBetweenNodes(sourceNodeId: string, targetNodeId: string): Promise<Edge[]>
 ```
+
 - Find all edges connecting two specific nodes
 - Support bidirectional search option
 
 ```typescript
 async findEdgesByType(type: EdgeType, organizationId: string): Promise<Edge[]>
 ```
+
 - Find all edges of a specific type within an organization
 
 #### Update Operations
+
 ```typescript
 async updateEdge(id: string, data: UpdateEdgeDto): Promise<Edge>
 ```
+
 - Update an existing edge
 - Validate organization context
 - Return updated edge entity
@@ -220,18 +258,22 @@ async updateEdge(id: string, data: UpdateEdgeDto): Promise<Edge>
 ```typescript
 async updateEdgeWeight(id: string, weight: number): Promise<Edge>
 ```
+
 - Update edge weight for weighted graph algorithms
 - Return updated edge entity
 
 #### Delete Operations
+
 ```typescript
 async deleteEdge(id: string): Promise<void>
 ```
+
 - Hard delete an edge
 
 ```typescript
 async softDeleteEdge(id: string): Promise<Edge>
 ```
+
 - Soft delete by setting isActive to false
 - Return updated edge entity
 
@@ -243,6 +285,7 @@ async getNodeRelationships(nodeId: string): Promise<{
   incoming: Edge[];
 }>
 ```
+
 - Get all relationships for a node
 - Return both outgoing and incoming edges
 - Support filtering by type and isActive
@@ -250,6 +293,7 @@ async getNodeRelationships(nodeId: string): Promise<{
 ```typescript
 async getConnectedNodes(nodeId: string, depth?: number): Promise<Node[]>
 ```
+
 - Get all nodes connected to a given node
 - Support depth parameter for multi-hop traversal
 - Default depth: 1 (immediate neighbors)
@@ -257,6 +301,7 @@ async getConnectedNodes(nodeId: string, depth?: number): Promise<Node[]>
 ```typescript
 async getNodeNeighbors(nodeId: string, direction?: 'in' | 'out' | 'both'): Promise<Node[]>
 ```
+
 - Get neighboring nodes (1-hop)
 - Support direction filtering
 - Default: 'both'
@@ -266,6 +311,7 @@ async getNodeNeighbors(nodeId: string, direction?: 'in' | 'out' | 'both'): Promi
 ```typescript
 async findPath(sourceNodeId: string, targetNodeId: string): Promise<Node[]>
 ```
+
 - Find shortest path between two nodes
 - Return array of nodes in path
 - Return empty array if no path exists
@@ -273,6 +319,7 @@ async findPath(sourceNodeId: string, targetNodeId: string): Promise<Node[]>
 ```typescript
 async findAllPaths(sourceNodeId: string, targetNodeId: string, maxDepth?: number): Promise<Node[][]>
 ```
+
 - Find all paths between two nodes
 - Limit by maximum depth to prevent infinite loops
 - Return array of paths
@@ -283,6 +330,7 @@ async getSubgraph(nodeId: string, depth: number): Promise<{
   edges: Edge[];
 }>
 ```
+
 - Extract a subgraph centered on a node
 - Include all nodes and edges within specified depth
 - Return both nodes and edges
@@ -296,6 +344,7 @@ async getNodeDegree(nodeId: string): Promise<{
   totalDegree: number;
 }>
 ```
+
 - Calculate node degree (number of connections)
 - Return in-degree, out-degree, and total
 
@@ -307,6 +356,7 @@ async getGraphStatistics(organizationId: string): Promise<{
   edgesByType: Record<EdgeType, number>;
 }>
 ```
+
 - Get high-level statistics about the knowledge graph
 - Group by types
 - Filter by organization
@@ -316,15 +366,18 @@ async getGraphStatistics(organizationId: string): Promise<{
 Based on the methods above, the following DTOs should be created in a `dto/` directory:
 
 ### Node DTOs
+
 - `CreateNodeDto` - Validation for creating nodes
 - `UpdateNodeDto` - Validation for updating nodes
 - `SearchNodesDto` - Search parameters with pagination
 
 ### Edge DTOs
+
 - `CreateEdgeDto` - Validation for creating edges
 - `UpdateEdgeDto` - Validation for updating edges
 
 ### Common DTOs
+
 - `PaginationDto` - Reusable pagination parameters
 - `FilterDto` - Reusable filter parameters
 
@@ -338,6 +391,7 @@ Based on the methods above, the following DTOs should be created in a `dto/` dir
 **Exports**: KnowledgeGraphService
 
 **Future Providers** (documented in module):
+
 - GraphQueryService - Advanced graph query and pattern matching
 - GraphTraversalService - Specialized graph traversal algorithms
 - RelationshipInferenceService - ML-based relationship discovery
@@ -368,6 +422,7 @@ Based on the project's TypeScript patterns observed in similar services:
 ## Testing Requirements
 
 Following project standards, each method should have:
+
 - Unit tests in `knowledge-graph.service.spec.ts`
 - Test coverage for success and error cases
 - Mock repositories using Jest
