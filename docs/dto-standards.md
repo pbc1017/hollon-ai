@@ -24,6 +24,7 @@
 ## Overview
 
 This project uses:
+
 - **class-validator** for DTO validation
 - **class-transformer** for type transformation
 - **@nestjs/mapped-types** for creating derived DTOs
@@ -74,24 +75,24 @@ apps/server/src/modules/task/
 
 Use **kebab-case** for file names with the `.dto.ts` suffix:
 
-| Pattern | Example | Purpose |
-|---------|---------|---------|
-| `create-{entity}.dto.ts` | `create-task.dto.ts` | Creating new entities |
-| `update-{entity}.dto.ts` | `update-task.dto.ts` | Updating existing entities |
-| `{action}-{entity}.dto.ts` | `send-message.dto.ts` | Specific actions |
-| `{entity}-query.dto.ts` | `message-query.dto.ts` | Query parameters |
-| `{entity}-response.dto.ts` | `knowledge-extraction-response.dto.ts` | API responses |
+| Pattern                    | Example                                | Purpose                    |
+| -------------------------- | -------------------------------------- | -------------------------- |
+| `create-{entity}.dto.ts`   | `create-task.dto.ts`                   | Creating new entities      |
+| `update-{entity}.dto.ts`   | `update-task.dto.ts`                   | Updating existing entities |
+| `{action}-{entity}.dto.ts` | `send-message.dto.ts`                  | Specific actions           |
+| `{entity}-query.dto.ts`    | `message-query.dto.ts`                 | Query parameters           |
+| `{entity}-response.dto.ts` | `knowledge-extraction-response.dto.ts` | API responses              |
 
 ### DTO Class Names
 
 Use **PascalCase** with `Dto` suffix:
 
 ```typescript
-export class CreateTaskDto { }
-export class UpdateTaskDto { }
-export class SendMessageDto { }
-export class MessageQueryDto { }
-export class KnowledgeExtractionResponseDto { }
+export class CreateTaskDto {}
+export class UpdateTaskDto {}
+export class SendMessageDto {}
+export class MessageQueryDto {}
+export class KnowledgeExtractionResponseDto {}
 ```
 
 ---
@@ -280,6 +281,7 @@ export class MessageQueryDto {
 ```
 
 **When to use `@Type()`:**
+
 - Query parameters (GET requests)
 - When explicit type conversion is needed
 - With `enableImplicitConversion: true` in ValidationPipe, simple types are auto-converted, but complex types need `@Type()`
@@ -370,6 +372,7 @@ export class CreateGroupChannelDto {
 ```
 
 **Key points**:
+
 1. Define the nested DTO class separately
 2. Use `@ValidateNested({ each: true })` for arrays of objects
 3. Use `@Type(() => NestedDtoClass)` to enable transformation
@@ -416,6 +419,7 @@ export class ComposePromptDto {
 ### When to Use Response DTOs
 
 Response DTOs are used to:
+
 1. Define the structure of API responses
 2. Document return types for OpenAPI/Swagger
 3. Apply transformations to outgoing data
@@ -423,7 +427,13 @@ Response DTOs are used to:
 ### Response DTO Example
 
 ```typescript
-import { IsString, IsDate, IsObject, IsOptional, IsUUID } from 'class-validator';
+import {
+  IsString,
+  IsDate,
+  IsObject,
+  IsOptional,
+  IsUUID,
+} from 'class-validator';
 
 export class KnowledgeExtractionResponseDto {
   @IsUUID()
@@ -483,11 +493,11 @@ import { ValidationPipe } from '@nestjs/common';
 
 app.useGlobalPipes(
   new ValidationPipe({
-    whitelist: true,              // Strip properties without decorators
-    forbidNonWhitelisted: true,   // Throw error if non-whitelisted properties exist
-    transform: true,              // Auto-transform payloads to DTO instances
+    whitelist: true, // Strip properties without decorators
+    forbidNonWhitelisted: true, // Throw error if non-whitelisted properties exist
+    transform: true, // Auto-transform payloads to DTO instances
     transformOptions: {
-      enableImplicitConversion: true,  // Auto-convert primitive types
+      enableImplicitConversion: true, // Auto-convert primitive types
     },
   }),
 );
@@ -821,5 +831,6 @@ These patterns ensure type safety, consistent validation, and maintainable code 
 ---
 
 **Related Documents**:
+
 - [Project Overview](./README.md)
 - [SSOT Principles](./principles/ssot.md)
