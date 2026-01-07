@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, Injectable } from '@nestjs/common';
-import { VectorSearchModule } from '../vector-search.module';
-import { VectorSearchService } from '../services/vector-search.service';
+import { VectorSearchModule } from '@/modules/vector-search/vector-search.module';
+import { VectorSearchService } from '@/modules/vector-search/services/vector-search.service';
 
 /**
  * Test consumer service to verify VectorSearchService can be injected
