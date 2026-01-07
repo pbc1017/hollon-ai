@@ -191,7 +191,9 @@ export class BaseRepository<
       // Update in chunks
       for (let i = 0; i < entities.length; i += chunkSize) {
         const chunk = entities.slice(i, i + chunkSize);
-        const ids = chunk.map((entity: Entity & { id: string | number }) => entity.id);
+        const ids = chunk.map(
+          (entity: Entity & { id: string | number }) => entity.id,
+        );
 
         const result = await queryRunner.manager.update(
           this.target,
@@ -315,10 +317,7 @@ export class BaseRepository<
       return result;
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      this.logger.error(
-        `Transaction failed for ${this.metadata.name}`,
-        error,
-      );
+      this.logger.error(`Transaction failed for ${this.metadata.name}`, error);
       throw error;
     } finally {
       await queryRunner.release();

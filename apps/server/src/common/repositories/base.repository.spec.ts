@@ -30,11 +30,7 @@ describe('BaseRepository', () => {
     jest.clearAllMocks();
 
     dataSource = mockDataSource as unknown as DataSource;
-    repository = new BaseRepository(
-      TestEntity,
-      dataSource,
-      undefined,
-    );
+    repository = new BaseRepository(TestEntity, dataSource, undefined);
 
     // Setup queryRunner manager with mock methods
     mockQueryRunner.manager = {
@@ -63,10 +59,12 @@ describe('BaseRepository', () => {
       );
 
       // Mock findByIds
-      jest.spyOn(repository, 'findByIds').mockResolvedValue([
-        { id: '1', name: 'Entity 1', value: 100 } as TestEntity,
-        { id: '2', name: 'Entity 2', value: 200 } as TestEntity,
-      ]);
+      jest
+        .spyOn(repository, 'findByIds')
+        .mockResolvedValue([
+          { id: '1', name: 'Entity 1', value: 100 } as TestEntity,
+          { id: '2', name: 'Entity 2', value: 200 } as TestEntity,
+        ]);
 
       const result = await repository.batchInsert(entities);
 
@@ -99,11 +97,11 @@ describe('BaseRepository', () => {
         raw: [],
       });
 
-      jest.spyOn(repository, 'findByIds').mockResolvedValue(
-        entities.map(
-          (e, i) => ({ id: `${i}`, ...e }) as TestEntity,
-        ),
-      );
+      jest
+        .spyOn(repository, 'findByIds')
+        .mockResolvedValue(
+          entities.map((e, i) => ({ id: `${i}`, ...e }) as TestEntity),
+        );
 
       const result = await repository.batchInsert(entities);
 
@@ -124,9 +122,7 @@ describe('BaseRepository', () => {
       const entities = [{ name: 'Entity 1', value: 100 }];
       const error = new Error('Insert failed');
 
-      (mockQueryRunner.manager.insert as jest.Mock).mockRejectedValue(
-        error,
-      );
+      (mockQueryRunner.manager.insert as jest.Mock).mockRejectedValue(error);
 
       await expect(repository.batchInsert(entities)).rejects.toThrow(
         'Insert failed',
@@ -292,17 +288,17 @@ describe('BaseRepository', () => {
       const updates = { value: 200 };
       const error = new Error('Update failed');
 
-      jest.spyOn(repository, 'find').mockResolvedValue([
-        { id: '1', name: 'Entity 1', value: 100 } as TestEntity,
-      ]);
+      jest
+        .spyOn(repository, 'find')
+        .mockResolvedValue([
+          { id: '1', name: 'Entity 1', value: 100 } as TestEntity,
+        ]);
 
-      (mockQueryRunner.manager.update as jest.Mock).mockRejectedValue(
-        error,
+      (mockQueryRunner.manager.update as jest.Mock).mockRejectedValue(error);
+
+      await expect(repository.batchUpdate(criteria, updates)).rejects.toThrow(
+        'Update failed',
       );
-
-      await expect(
-        repository.batchUpdate(criteria, updates),
-      ).rejects.toThrow('Update failed');
 
       expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
     });
@@ -416,15 +412,11 @@ describe('BaseRepository', () => {
         generatedMaps: [],
       });
 
-      const result = await repository.withTransaction(
-        async (repo, qr) => {
-          await qr.manager.insert(TestEntity, [
-            { name: 'New 1', value: 1 },
-          ]);
-          await qr.manager.update(TestEntity, '1', { value: 100 });
-          return { inserted: 1, updated: 1 };
-        },
-      );
+      const result = await repository.withTransaction(async (repo, qr) => {
+        await qr.manager.insert(TestEntity, [{ name: 'New 1', value: 1 }]);
+        await qr.manager.update(TestEntity, '1', { value: 100 });
+        return { inserted: 1, updated: 1 };
+      });
 
       expect(result).toEqual({ inserted: 1, updated: 1 });
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
@@ -434,9 +426,7 @@ describe('BaseRepository', () => {
   describe('transaction management', () => {
     it('should properly clean up resources even on error', async () => {
       const error = new Error('Database error');
-      (mockQueryRunner.manager.insert as jest.Mock).mockRejectedValue(
-        error,
-      );
+      (mockQueryRunner.manager.insert as jest.Mock).mockRejectedValue(error);
 
       await expect(
         repository.batchInsert([{ name: 'Test', value: 1 }]),
@@ -457,9 +447,9 @@ describe('BaseRepository', () => {
         insertResult,
       );
 
-      jest.spyOn(repository, 'findByIds').mockResolvedValue([
-        { id: '1', name: 'Test', value: 1 } as TestEntity,
-      ]);
+      jest
+        .spyOn(repository, 'findByIds')
+        .mockResolvedValue([{ id: '1', name: 'Test', value: 1 } as TestEntity]);
 
       const promises = [
         repository.batchInsert([{ name: 'Test 1', value: 1 }]),
@@ -490,9 +480,11 @@ describe('BaseRepository', () => {
         insertResult,
       );
 
-      jest.spyOn(repository, 'findByIds').mockResolvedValue([
-        { id: '1', name: 'Single', value: 1 } as TestEntity,
-      ]);
+      jest
+        .spyOn(repository, 'findByIds')
+        .mockResolvedValue([
+          { id: '1', name: 'Single', value: 1 } as TestEntity,
+        ]);
 
       const result = await repository.batchInsert(entities);
 
