@@ -13,7 +13,7 @@ export class CreateKnowledgeItemsTable1766556710000 implements MigrationInterfac
       CREATE TABLE "knowledge_items" (
         "id" uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
         "content" text NOT NULL,
-        "source" varchar(255) NOT NULL,
+        "type" varchar(255) NOT NULL,
         "extracted_at" timestamp NOT NULL,
         "metadata" jsonb,
         "organization_id" uuid NOT NULL,
@@ -31,8 +31,8 @@ export class CreateKnowledgeItemsTable1766556710000 implements MigrationInterfac
       CREATE INDEX "idx_knowledge_items_organization_id"
         ON "knowledge_items"("organization_id");
 
-      CREATE INDEX "idx_knowledge_items_source"
-        ON "knowledge_items"("source");
+      CREATE INDEX "idx_knowledge_items_type"
+        ON "knowledge_items"("type");
 
       CREATE INDEX "idx_knowledge_items_extracted_at"
         ON "knowledge_items"("extracted_at");
@@ -47,8 +47,8 @@ export class CreateKnowledgeItemsTable1766556710000 implements MigrationInterfac
       COMMENT ON COLUMN "knowledge_items"."content" IS
         'The extracted knowledge content or text.';
 
-      COMMENT ON COLUMN "knowledge_items"."source" IS
-        'Source identifier of where the knowledge was extracted from.';
+      COMMENT ON COLUMN "knowledge_items"."type" IS
+        'Type/category of the knowledge item (e.g., conversation, document, insight).';
 
       COMMENT ON COLUMN "knowledge_items"."extracted_at" IS
         'Timestamp when the knowledge was extracted.';
@@ -62,7 +62,7 @@ export class CreateKnowledgeItemsTable1766556710000 implements MigrationInterfac
     // Drop indexes
     await queryRunner.query(`
       DROP INDEX IF EXISTS "idx_knowledge_items_extracted_at";
-      DROP INDEX IF EXISTS "idx_knowledge_items_source";
+      DROP INDEX IF EXISTS "idx_knowledge_items_type";
       DROP INDEX IF EXISTS "idx_knowledge_items_organization_id";
     `);
 
