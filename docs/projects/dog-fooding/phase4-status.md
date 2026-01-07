@@ -27,6 +27,8 @@
 | 199536e | #25   | Auto-complete Team Epic when all children complete (during PR merge, not cron)                      |
 | ceaad88 | #27.3 | Construct worktree path from task/hollon IDs when workingDirectory missing                          |
 | 0c5412b | #27.4 | Merge-time conflict detection + manager re-review on success (second timing point)                  |
+| cba3454 | #28   | Handle uncommitted changes before rebase in conflict resolution (stash/pop workflow)                |
+| TBD     | #29   | Transaction for PR record + task status update, Orphaned PR sync cron (5분 주기)                    |
 
 ---
 
@@ -81,31 +83,36 @@
 
 ---
 
-## Current Status
+## Current Status (2026-01-07 13:40 KST)
 
-| Metric            | Count |
-| ----------------- | ----- |
-| Projects          | 6     |
-| Goals             | 1     |
-| Tasks Total       | 45    |
-| Tasks In Progress | 9     |
-| Tasks Completed   | 0     |
-| Tasks Ready       | 36    |
-| Tasks Blocked     | 0     |
-| Worktrees Active  | 7     |
-| Hollons Working   | 3     |
-| Claude Processes  | 3+    |
-| Open PRs          | 3     |
+| Metric               | Count |
+| -------------------- | ----- |
+| Open PRs             | 32    |
+| - CLEAN              | 1     |
+| - UNSTABLE (CI Fail) | 3     |
+| - CONFLICTING        | 1     |
+| - UNKNOWN            | 27    |
+| Tasks IN_REVIEW      | 4     |
 
-### PR Status (Post-Fix #14)
+### Recent PR Activity
 
-| PR  | CI Status           | Task Status        | Issue                                 |
-| --- | ------------------- | ------------------ | ------------------------------------- |
-| #84 | ✅ ALL SUCCESS      | `ready_for_review` | ✅ Manager review 대기 중             |
-| #85 | ❌ Integration FAIL | `ready`            | CI 수정 필요 (Integration Tests 실패) |
-| #86 | ✅ ALL SUCCESS      | `ready_for_review` | ✅ Manager review 대기 중             |
-| #85 | ❌ Integration FAIL | `ready`            | CI 수정 후 retry 필요                 |
-| #86 | ✅ ALL SUCCESS      | `ready`            | Fix #13 후 retry 필요                 |
+| PR   | Status      | Task Status | Result                                     |
+| ---- | ----------- | ----------- | ------------------------------------------ |
+| #197 | ✅ MERGED   | `completed` | Analyze KnowledgeGraphModule structure     |
+| #192 | ✅ MERGED   | `completed` | Review VectorSearchModule implementation   |
+| #180 | CONFLICTING | `blocked`   | Merge conflicts - Brain Provider 해결 필요 |
+| #159 | CONFLICTING | `blocked`   | Merge conflicts - Brain Provider 해결 필요 |
+
+### 주요 Blocked 원인 분석
+
+1. **Merge Conflicts (PR #159, #180)**
+   - GitHub에서 `mergeStateStatus: DIRTY`, `mergeable: CONFLICTING` 상태
+   - 워크트리에서 uncommitted changes로 인해 rebase 실패 → Fix #28로 해결
+   - 그러나 여전히 actual merge conflicts 존재 (Brain Provider 해결 필요)
+
+2. **UNKNOWN Mergeable Status (다수 PRs)**
+   - GitHub API에서 `mergeable: UNKNOWN` 반환
+   - GitHub이 mergeable 상태를 계산 중이거나 만료된 상태
 
 ---
 
@@ -937,4 +944,247 @@ private async autoResolveConflictsBeforeMerge(
 
 ---
 
-**Last Updated**: 2026-01-07T01:17:00+09:00
+### Issue #28: Uncommitted Changes Block Rebase in Conflict Resolution
+
+**발견 시간**: 2026-01-07 09:30 KST
+
+**증상**:
+
+- autoCheckPRCI가 merge conflict 해결을 시도할 때 rebase 실패
+- 에러 메시지: `rebase 할 수 없습니다: 인덱스에 커밋하지 않은 변경 사항이 있습니다`
+- PR #159, #180 등 여러 PR이 CONFLICTING 상태로 blocked 유지
+- 워크트리에 uncommitted changes가 있어 rebase 불가
+
+**근본 원인**:
+
+- 워크트리에서 작업 중 uncommitted changes가 남아있음
+- `git rebase origin/main` 명령은 working tree가 clean해야 실행 가능
+- 이전 작업에서 남은 변경사항이나 Brain Provider가 생성한 파일이 uncommitted 상태로 남음
+
+**영향받는 코드**:
+
+```typescript
+// goal-automation.listener.ts (before fix)
+// 4. Rebase on main
+this.logger.log(`Attempting rebase on origin/main...`);
+try {
+  await execAsync(`git rebase origin/main`, { cwd: worktreePath });
+  // ❌ uncommitted changes가 있으면 실패!
+```
+
+**해결 (Fix #28)**:
+
+```typescript
+// goal-automation.listener.ts:1618-1662
+// 4. Check for uncommitted changes and stash if needed
+const { stdout: statusCheck } = await execAsync(
+  `git status --porcelain`,
+  { cwd: worktreePath },
+);
+const hasUncommittedChanges = statusCheck.trim().length > 0;
+
+if (hasUncommittedChanges) {
+  this.logger.log(
+    `Found uncommitted changes, stashing before rebase...`,
+  );
+  await execAsync(
+    `git stash push -m "autoCheckPRCI: temp stash for rebase"`,
+    { cwd: worktreePath },
+  );
+}
+
+// 5. Rebase on main
+this.logger.log(`Attempting rebase on origin/main...`);
+try {
+  await execAsync(`git rebase origin/main`, { cwd: worktreePath });
+  this.logger.log(`✅ Rebase successful without conflicts`);
+
+  // 6. Restore stashed changes if we stashed
+  if (hasUncommittedChanges) {
+    this.logger.log(`Restoring stashed changes...`);
+    try {
+      await execAsync(`git stash pop`, { cwd: worktreePath });
+    } catch (stashPopError) {
+      this.logger.warn(
+        `Failed to pop stash (may have conflicts): ${stashPopError instanceof Error ? stashPopError.message : 'Unknown error'}`,
+      );
+      // Continue anyway - the rebase succeeded
+    }
+  }
+
+  // 7. Force push (since rebase rewrites history)
+  this.logger.log(`Force pushing resolved changes...`);
+  await execAsync(`git push --force-with-lease`, { cwd: worktreePath });
+```
+
+**변경 사항 요약**:
+
+1. Rebase 전에 `git status --porcelain`으로 uncommitted changes 확인
+2. 변경사항이 있으면 `git stash push`로 임시 저장
+3. Rebase 수행
+4. Rebase 성공 후 `git stash pop`으로 변경사항 복원
+5. Stash pop 실패 시 경고만 출력하고 계속 진행 (rebase는 성공했으므로)
+
+**예상 효과**:
+
+- Uncommitted changes가 있어도 rebase 가능
+- Conflict resolution workflow가 더 robust해짐
+- 이전에 stuck되었던 PR들이 다시 처리 가능
+
+**남은 이슈**:
+
+- PR #159, #180은 여전히 actual merge conflicts 존재
+- Brain Provider를 통한 conflict resolution이 필요하지만 현재 placeholder 상태
+- 실제 conflict 파일을 Brain Provider가 수정하고 commit하는 로직 구현 필요
+
+**상태**: ✅ 수정 완료 (cba3454)
+
+---
+
+### Issue #29: Orphaned PRs - Tasks with PRs not in IN_REVIEW status
+
+**발견 시간**: 2026-01-07 13:15 KST
+
+**증상**:
+
+- GitHub에 PR이 존재하지만 해당 태스크가 `in_review` 상태가 아님
+- `blocked`, `in_progress`, `waiting_for_hollon` 등 다른 상태로 남아있음
+- `autoCheckPRCI` cron이 이 태스크들을 무시함
+
+**영향받는 태스크**:
+
+| Task ID  | PR # | 발견 시 상태       | PR 상태 |
+| -------- | ---- | ------------------ | ------- |
+| 61af2f9b | #197 | in_progress        | CLEAN   |
+| f5b1688c | #192 | in_progress        | CLEAN   |
+| 131f0155 | #172 | blocked            | CLEAN   |
+| 315e03d8 | #120 | blocked            | CLEAN   |
+| 8407e733 | #145 | blocked            | CLEAN   |
+| 4242eac6 | #112 | blocked            | CLEAN   |
+| f329e52c | #105 | waiting_for_hollon | CLEAN   |
+
+**근본 원인**:
+
+1. PR 생성 후 태스크 상태 업데이트 전에 에러/서버 크래시 발생
+2. 외부 API (GitHub PR 생성)와 DB 업데이트가 트랜잭션으로 묶이지 않음
+3. GitHub PR은 생성되었지만 DB 상태는 이전 상태로 남음
+
+**임시 해결**:
+
+```bash
+# 수동으로 태스크 상태 in_review로 전환
+curl -X PATCH "http://localhost:3001/api/tasks/{task_id}" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "in_review"}'
+```
+
+**결과**:
+
+| Task ID  | 전환 후 상태                 | 최종 상태        |
+| -------- | ---------------------------- | ---------------- |
+| 61af2f9b | in_review → ready_for_review | ✅ **completed** |
+| f5b1688c | in_review → ready_for_review | ✅ **completed** |
+| 131f0155 | in_review → ready_for_review | ✅ **completed** |
+| 315e03d8 | in_review → ready_for_review | ✅ **completed** |
+| 8407e733 | in_review → ready_for_review | ✅ **completed** |
+| 4242eac6 | in_review → ready_for_review | ✅ **completed** |
+| f329e52c | in_review → ready_for_review | ✅ **completed** |
+
+**재발 방지 권장안**:
+
+1. **트랜잭션 적용** (중요도: 높음)
+
+   ```typescript
+   // PR 레코드 저장 + 태스크 상태 업데이트를 트랜잭션으로 묶기
+   await this.dataSource.transaction(async (manager) => {
+     await manager.save(TaskPullRequest, { taskId, prUrl, ... });
+     await manager.update(Task, taskId, { status: TaskStatus.IN_REVIEW });
+   });
+   ```
+
+2. **Orphaned PR Sync Cron** (중요도: 중간)
+   ```typescript
+   @Cron('*/5 * * * *')
+   async syncOrphanedPRTasks(): Promise<void> {
+     // PR이 있지만 IN_REVIEW가 아닌 태스크 찾아서 자동 전환
+   }
+   ```
+
+**영구적 해결 구현 (Fix #29)**:
+
+1. **트랜잭션 적용** (`code-review.service.ts`)
+
+   ```typescript
+   // PR 저장 + Task 상태 업데이트를 원자적으로 처리
+   const pr = await this.dataSource.transaction(async (manager) => {
+     const prRepository = manager.getRepository(TaskPullRequest);
+     const newPr = await prRepository.save({
+       taskId: dto.taskId,
+       prNumber: dto.prNumber,
+       ...
+     });
+
+     const taskRepository = manager.getRepository(Task);
+     await taskRepository.update(dto.taskId, {
+       status: TaskStatus.IN_REVIEW,
+     });
+
+     return newPr;
+   });
+   ```
+
+2. **Orphaned PR Sync Cron** (`goal-automation.listener.ts`)
+
+   ```typescript
+   @Cron('*/5 * * * *') // 5분마다
+   async syncOrphanedPRs(): Promise<void> {
+     // PR이 있지만 IN_REVIEW/READY_FOR_REVIEW/COMPLETED/BLOCKED가 아닌 태스크
+     const orphanedPRs = await this.prRepo
+       .createQueryBuilder('pr')
+       .leftJoinAndSelect('pr.task', 'task')
+       .where('task.status NOT IN (:...expectedStatuses)', {
+         expectedStatuses: ['in_review', 'ready_for_review', 'completed', 'blocked'],
+       })
+       .getMany();
+
+     // 자동으로 IN_REVIEW로 전환
+     for (const pr of orphanedPRs) {
+       await this.taskRepo.update(pr.task.id, { status: TaskStatus.IN_REVIEW });
+     }
+   }
+   ```
+
+**상태**: ✅ 수동 해결 완료 + 영구적 수정 구현 완료
+
+---
+
+### PR Cleanup (2026-01-07 13:20 KST)
+
+**정리한 PR**:
+
+| PR   | 이유                              | 조치   |
+| ---- | --------------------------------- | ------ |
+| #196 | impl-\* hollon (삭제됨)           | Closed |
+| #115 | impl-\* hollon (삭제됨)           | Closed |
+| #97  | impl-\* hollon (삭제됨)           | Closed |
+| #101 | 중복 (task-d6718ea6, #180과 동일) | Closed |
+| #176 | 중복 (task-67fec5f3, #178과 동일) | Closed |
+
+**PR 상태 (정리 후)**:
+
+| 상태     | 개수 | 설명           |
+| -------- | ---- | -------------- |
+| DIRTY    | 17   | Merge conflict |
+| UNSTABLE | 12   | CI 실패        |
+| CLEAN    | 0    | 모두 머지됨    |
+
+**머지된 PR (자동화)**:
+
+| PR   | 머지 시간 | 태스크                       |
+| ---- | --------- | ---------------------------- |
+| #197 | 13:25:33  | Analyze KnowledgeGraphModule |
+| #192 | 13:26:04  | Review VectorSearchModule    |
+
+---
+
+**Last Updated**: 2026-01-07T13:40:00+09:00
