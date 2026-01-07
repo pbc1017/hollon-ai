@@ -1452,13 +1452,32 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
         `Attempting to resolve conflicts for PR #${pr.prNumber} (task ${task.id})`,
       );
 
-      // 1. Task의 worktree 경로 확인
-      const worktreePath = task.workingDirectory;
+      // 1. Task의 worktree 경로 확인 (Fix #27: workingDirectory가 없으면 생성)
+      let worktreePath = task.workingDirectory;
       if (!worktreePath) {
-        this.logger.error(
-          `Task ${task.id} has no workingDirectory, cannot resolve conflicts`,
+        // Construct worktree path from task and hollon IDs
+        if (!task.assignedHollonId) {
+          this.logger.error(
+            `Task ${task.id} has no assignedHollonId, cannot construct worktree path`,
+          );
+          return false;
+        }
+
+        const hollonShortId = task.assignedHollonId.split('-')[0];
+        const taskShortId = task.id.split('-')[0];
+        const gitRoot = await execAsync('git rev-parse --show-toplevel').then(
+          (r) => r.stdout.trim(),
         );
-        return false;
+        worktreePath = path.join(
+          gitRoot,
+          '.git-worktrees',
+          `hollon-${hollonShortId}`,
+          `task-${taskShortId}`,
+        );
+
+        this.logger.warn(
+          `Task ${task.id} has no workingDirectory, constructed path: ${worktreePath}`,
+        );
       }
 
       // 2. Worktree 경로 존재 확인 (Fix #27: 없으면 재생성)
