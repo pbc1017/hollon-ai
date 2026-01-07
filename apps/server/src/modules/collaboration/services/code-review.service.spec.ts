@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { CodeReviewService } from './code-review.service';
 import {
   TaskPullRequest,
@@ -122,14 +123,16 @@ describe('CodeReviewService', () => {
           useValue: mockMessageService,
         },
         {
+          provide: ModuleRef,
+          useValue: {
+            get: jest.fn(),
+          },
+        },
+        {
           provide: BrainProviderService,
           useValue: {
-            analyzeTask: jest.fn(),
-            generateCode: jest.fn(),
-            getProvider: jest.fn(),
-            getBrainProvider: jest.fn(),
-            executeTask: jest.fn(),
-            resolveConflicts: jest.fn(),
+            generate: jest.fn(),
+            chat: jest.fn(),
           },
         },
       ],
