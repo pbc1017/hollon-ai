@@ -19,6 +19,7 @@ This document summarizes research findings on pgvector extension installation re
 **Latest Tested**: PostgreSQL 18
 
 **Version-Specific Considerations**:
+
 - **PostgreSQL 13+**: Full pgvector support with all features
 - **PostgreSQL 17.0-17.2**: Known linking issues; upgrade to 17.3+ if using PostgreSQL 17
 - **PostgreSQL 14+**: Better performance optimizations for vector operations
@@ -29,6 +30,7 @@ This document summarizes research findings on pgvector extension installation re
 pgvector can be installed through multiple channels:
 
 1. **Docker** (Recommended for Development)
+
    ```yaml
    # Official image with pgvector pre-installed
    image: pgvector/pgvector:pg16
@@ -41,6 +43,7 @@ pgvector can be installed through multiple channels:
    - **Conda**: conda-forge channel
 
 3. **From Source**
+
    ```bash
    git clone --branch v0.8.1 https://github.com/pgvector/pgvector.git
    cd pgvector
@@ -59,16 +62,19 @@ pgvector can be installed through multiple channels:
 ### 1.3 System Requirements
 
 **Build Requirements** (when compiling from source):
+
 - PostgreSQL development packages (postgresql-server-dev)
 - C compiler (gcc/clang)
 - make utility
 
 **Windows-Specific**:
+
 - Visual Studio with C++ support
 - x64 Native Tools Command Prompt
 - Use `nmake` instead of `make`
 
 **Runtime Requirements**:
+
 - No special requirements beyond standard PostgreSQL installation
 - Sufficient shared memory for vector operations (configure `shm_size` in Docker)
 
@@ -95,6 +101,7 @@ export class EnablePgvectorExtension1234567890 implements MigrationInterface {
 ```
 
 **Key Principles**:
+
 1. **Always use `IF NOT EXISTS`** to make migrations idempotent
 2. **Create extensions early** in migration history before tables that use them
 3. **Use CASCADE on drop** to handle dependent objects (use cautiously)
@@ -105,6 +112,7 @@ export class EnablePgvectorExtension1234567890 implements MigrationInterface {
 #### UUID Extensions (Comparison Example)
 
 **For PostgreSQL < 13**:
+
 ```typescript
 await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
 
@@ -114,6 +122,7 @@ id: string;
 ```
 
 **For PostgreSQL 13+**:
+
 ```typescript
 // No extension needed - use native function
 @Column({ default: () => "gen_random_uuid()" })
@@ -127,7 +136,7 @@ export class CreateVectorEmbeddingsTable1234567890 implements MigrationInterface
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Step 1: Ensure extension exists
     await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
-    
+
     // Step 2: Create table with vector columns
     await queryRunner.query(`
       CREATE TABLE "knowledge_items" (
@@ -137,7 +146,7 @@ export class CreateVectorEmbeddingsTable1234567890 implements MigrationInterface
         "created_at" timestamp NOT NULL DEFAULT now()
       )
     `);
-    
+
     // Step 3: Create indexes for vector similarity search
     await queryRunner.query(`
       CREATE INDEX idx_knowledge_items_embedding_hnsw
@@ -148,7 +157,9 @@ export class CreateVectorEmbeddingsTable1234567890 implements MigrationInterface
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_knowledge_items_embedding_hnsw`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_knowledge_items_embedding_hnsw`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS knowledge_items`);
     // Note: Don't drop extension as other tables may depend on it
   }
@@ -160,17 +171,20 @@ export class CreateVectorEmbeddingsTable1234567890 implements MigrationInterface
 **Development vs Production**:
 
 **Development** (typically has superuser privileges):
+
 ```typescript
 // Extension creation works automatically
 await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
 ```
 
 **Production** (may have restricted permissions):
+
 - Database users often lack `CREATE EXTENSION` privileges
 - Extension must be pre-installed by database administrator
 - Migration will succeed silently due to `IF NOT EXISTS` clause
 
 **Best Practice for Production**:
+
 1. **Pre-deployment checklist**: Verify extension is installed
 2. **Deployment documentation**: Document extension requirements
 3. **Health checks**: Verify extension availability on application startup
@@ -181,12 +195,12 @@ await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
 public async up(queryRunner: QueryRunner): Promise<void> {
   // Attempt to create extension
   await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
-  
+
   // Verify extension is available
   const result = await queryRunner.query(`
     SELECT * FROM pg_extension WHERE extname = 'vector'
   `);
-  
+
   if (result.length === 0) {
     throw new Error('pgvector extension is not available');
   }
@@ -198,11 +212,13 @@ public async up(queryRunner: QueryRunner): Promise<void> {
 **Recommended Order**:
 
 1. **Extensions first** (e.g., `1733295000000-InitialSchema.ts`)
+
    ```typescript
    CREATE EXTENSION IF NOT EXISTS vector
    ```
 
 2. **Tables with vector columns** (same or subsequent migration)
+
    ```typescript
    CREATE TABLE documents (embedding vector(1536))
    ```
@@ -213,6 +229,7 @@ public async up(queryRunner: QueryRunner): Promise<void> {
    ```
 
 **Why This Order Matters**:
+
 - Extensions must exist before creating columns with extension-provided types
 - Indexes should be created after bulk data loading for better performance
 - Separate migrations enable rolling back index creation without affecting table structure
@@ -220,6 +237,7 @@ public async up(queryRunner: QueryRunner): Promise<void> {
 ### 2.5 Common Pitfalls and Solutions
 
 **Pitfall 1**: Creating vector columns before extension
+
 ```typescript
 // WRONG - will fail
 await queryRunner.query(`CREATE TABLE docs (embedding vector(1536))`);
@@ -231,21 +249,25 @@ await queryRunner.query(`CREATE TABLE docs (embedding vector(1536))`);
 ```
 
 **Pitfall 2**: Silent failures in production
+
 ```typescript
 // PROBLEM: Extension creation fails silently, then vector column creation fails
-await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);  // Fails silently
-await queryRunner.query(`CREATE TABLE docs (embedding vector(1536))`);  // Fails loudly
+await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`); // Fails silently
+await queryRunner.query(`CREATE TABLE docs (embedding vector(1536))`); // Fails loudly
 
 // SOLUTION: Verify extension availability
 const [ext] = await queryRunner.query(`
   SELECT 1 FROM pg_extension WHERE extname = 'vector'
 `);
 if (!ext) {
-  throw new Error('pgvector extension not available - contact database administrator');
+  throw new Error(
+    'pgvector extension not available - contact database administrator',
+  );
 }
 ```
 
 **Pitfall 3**: Dropping extensions that are still in use
+
 ```typescript
 // PROBLEM: Other tables may still use the extension
 public async down(queryRunner: QueryRunner): Promise<void> {
@@ -289,6 +311,7 @@ ivfflat.iterative_scan = 'relaxed_order'
 ### 3.2 Docker Configuration (Current Project)
 
 **Current Setup** (`docker/docker-compose.yml`):
+
 ```yaml
 postgres:
   image: pgvector/pgvector:pg16
@@ -297,20 +320,21 @@ postgres:
     POSTGRES_PASSWORD: ${DB_PASSWORD}
   volumes:
     - postgres_data:/var/lib/postgresql/data
-  shm_size: 1gb  # Shared memory for pgvector operations
+  shm_size: 1gb # Shared memory for pgvector operations
 ```
 
 **Recommended Enhancements**:
+
 ```yaml
 postgres:
   image: pgvector/pgvector:pg16
-  shm_size: 2gb  # Increase for better performance
+  shm_size: 2gb # Increase for better performance
   command:
-    - "postgres"
-    - "-c"
-    - "shared_buffers=1GB"
-    - "-c"
-    - "work_mem=128MB"
+    - 'postgres'
+    - '-c'
+    - 'shared_buffers=1GB'
+    - '-c'
+    - 'work_mem=128MB'
   deploy:
     resources:
       limits:
@@ -320,21 +344,23 @@ postgres:
 ### 3.3 TypeORM Connection Configuration
 
 **Current Project** (`apps/server/src/config/database.config.ts`):
+
 ```typescript
 return {
   type: 'postgres',
   schema: schema,
   entities: [__dirname + '/../**/*.entity.{ts,js}'],
   migrations: [__dirname + '/../database/migrations/*.{ts,js}'],
-  synchronize: false,  // ✓ Correct: Use migrations only
+  synchronize: false, // ✓ Correct: Use migrations only
   migrationsRun: isTest,
   extra: {
-    options: `-c search_path=${schema},public`,  // ✓ Includes public for extensions
+    options: `-c search_path=${schema},public`, // ✓ Includes public for extensions
   },
 };
 ```
 
 **Key Configuration Points**:
+
 1. **`synchronize: false`**: Always use migrations in production
 2. **`search_path`**: Must include `public` schema for extension types
 3. **`migrationsRun`**: Auto-run migrations in test environment
@@ -346,28 +372,28 @@ return {
 
 ### 4.1 pgvector Data Types (v0.8.1)
 
-| Type        | Max Dimensions | Bytes per Dimension | Use Case                     |
-|-------------|----------------|---------------------|------------------------------|
-| `vector`    | 2,000          | 4                   | Standard embeddings          |
-| `halfvec`   | 4,000          | 2                   | 50% storage reduction        |
-| `sparsevec` | 1,000 non-zero | Variable            | Sparse embeddings (BM25)     |
+| Type        | Max Dimensions | Bytes per Dimension | Use Case                            |
+| ----------- | -------------- | ------------------- | ----------------------------------- |
+| `vector`    | 2,000          | 4                   | Standard embeddings                 |
+| `halfvec`   | 4,000          | 2                   | 50% storage reduction               |
+| `sparsevec` | 1,000 non-zero | Variable            | Sparse embeddings (BM25)            |
 | `bit`       | 64,000         | 0.125               | Binary quantization (96% reduction) |
 
 ### 4.2 Distance Operators
 
-| Operator | Distance Type    | Use Case                   | Operator Name         |
-|----------|------------------|----------------------------|-----------------------|
-| `<->`    | L2 (Euclidean)   | General similarity         | `vector_l2_ops`       |
-| `<=>`    | Cosine distance  | Text embeddings (recommended) | `vector_cosine_ops` |
-| `<#>`    | Inner product    | Normalized vectors         | `vector_ip_ops`       |
-| `<+>`    | L1 (Manhattan)   | Specialized use            | `vector_l1_ops`       |
-| `<~>`    | Hamming          | Binary vectors             | `bit_hamming_ops`     |
-| `<%>`    | Jaccard          | Binary vectors             | `bit_jaccard_ops`     |
+| Operator | Distance Type   | Use Case                      | Operator Name       |
+| -------- | --------------- | ----------------------------- | ------------------- |
+| `<->`    | L2 (Euclidean)  | General similarity            | `vector_l2_ops`     |
+| `<=>`    | Cosine distance | Text embeddings (recommended) | `vector_cosine_ops` |
+| `<#>`    | Inner product   | Normalized vectors            | `vector_ip_ops`     |
+| `<+>`    | L1 (Manhattan)  | Specialized use               | `vector_l1_ops`     |
+| `<~>`    | Hamming         | Binary vectors                | `bit_hamming_ops`   |
+| `<%>`    | Jaccard         | Binary vectors                | `bit_jaccard_ops`   |
 
 ### 4.3 Common Embedding Dimensions
 
 | Model                         | Dimensions | Storage (vector) | Storage (halfvec) |
-|-------------------------------|------------|------------------|-------------------|
+| ----------------------------- | ---------- | ---------------- | ----------------- |
 | OpenAI text-embedding-ada-002 | 1,536      | ~6 KB            | ~3 KB             |
 | OpenAI text-embedding-3-small | 1,536      | ~6 KB            | ~3 KB             |
 | OpenAI text-embedding-3-large | 3,072      | ~12 KB           | ~6 KB             |
@@ -382,32 +408,37 @@ return {
 ### 5.1 pgvector Release Timeline
 
 **v0.8.1** (Latest - December 2024)
+
 - Latest stable version
 - Available on major cloud platforms
 
 **v0.8.0** (November 2024)
+
 - **Iterative index scans**: Prevents underfiltering in filtered searches
 - Automatic result completion when filters are too restrictive
 - Query performance improvements for filtered searches
 
 **v0.7.0** (September 2024)
+
 - **Binary quantization**: `bit` type for 96.9% storage reduction
 - **Scalar quantization**: `halfvec` type for 50% storage reduction
 - **Sparse vectors**: `sparsevec` type for BM25 and sparse embeddings
 - 67x faster index builds with quantization
 
 **v0.6.0** (June 2024)
+
 - HNSW improvements
 - Better memory management
 
 **v0.5.0** (March 2024)
+
 - Initial HNSW support
 - Performance optimizations
 
 ### 5.2 Compatibility Matrix
 
 | pgvector Version | PostgreSQL 13 | PostgreSQL 14 | PostgreSQL 15 | PostgreSQL 16 | PostgreSQL 17 | PostgreSQL 18 |
-|------------------|---------------|---------------|---------------|---------------|---------------|---------------|
+| ---------------- | ------------- | ------------- | ------------- | ------------- | ------------- | ------------- |
 | 0.8.1            | ✓             | ✓             | ✓             | ✓             | ✓ (17.3+)     | ✓             |
 | 0.8.0            | ✓             | ✓             | ✓             | ✓             | ✓ (17.3+)     | ✓             |
 | 0.7.0            | ✓             | ✓             | ✓             | ✓             | ✓             | ✗             |
@@ -456,22 +487,26 @@ return {
 ### 7.1 Extension Creation Failures
 
 **Error**: `ERROR: could not open extension control file`
+
 ```
 ERROR:  could not open extension control file "/usr/share/postgresql/16/extension/vector.control": No such file or directory
 ```
 
 **Solution**: pgvector is not installed on the database server
+
 ```bash
 # Install pgvector or use Docker image
 docker run -d pgvector/pgvector:pg16
 ```
 
 **Error**: `ERROR: permission denied to create extension`
+
 ```
 ERROR:  permission denied to create extension "vector"
 ```
 
 **Solution**: Database user lacks superuser privileges
+
 ```sql
 -- Option 1: Grant privileges (requires superuser)
 ALTER USER hollon WITH SUPERUSER;
@@ -483,12 +518,14 @@ CREATE EXTENSION IF NOT EXISTS vector;
 ### 7.2 Vector Column Creation Failures
 
 **Error**: `ERROR: type "vector" does not exist`
+
 ```
 ERROR:  type "vector" does not exist
 LINE 1: CREATE TABLE docs (embedding vector(1536))
 ```
 
 **Solution**: Create extension before creating vector columns
+
 ```typescript
 // Fix migration order
 await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
@@ -498,6 +535,7 @@ await queryRunner.query(`CREATE TABLE docs (embedding vector(1536))`);
 ### 7.3 Performance Issues
 
 **Slow Queries**: Vector search without indexes
+
 ```sql
 -- Check if index is being used
 EXPLAIN ANALYZE
@@ -510,6 +548,7 @@ CREATE INDEX ON documents USING hnsw (embedding vector_cosine_ops);
 ```
 
 **Slow Index Builds**: Insufficient memory allocation
+
 ```sql
 -- Increase memory temporarily
 SET maintenance_work_mem = '4GB';
