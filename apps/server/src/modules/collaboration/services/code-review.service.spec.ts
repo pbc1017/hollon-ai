@@ -125,6 +125,7 @@ describe('CodeReviewService', () => {
           provide: BrainProviderService,
           useValue: {
             getProvider: jest.fn(),
+            executeTask: jest.fn(),
             getBrainProvider: jest.fn(),
           },
         },
