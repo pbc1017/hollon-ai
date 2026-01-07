@@ -1,5 +1,10 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule } from '@nestjs/config';
 import { VectorSearchService } from './vector-search.service';
+import { VectorSearchConfigService } from './services/vector-search-config.service';
+import { VectorSearchConfig } from './entities/vector-search-config.entity';
+import { VectorEmbedding } from '../../entities/vector-embedding.entity';
 
 /**
  * VectorSearchModule
@@ -7,36 +12,36 @@ import { VectorSearchService } from './vector-search.service';
  * This module provides vector-based semantic search capabilities for the application,
  * enabling similarity searches across documents, messages, and knowledge base content.
  *
- * Key responsibilities:
+ * Features:
+ * - Semantic search using pgvector
+ * - Embedding generation via OpenAI or other providers
+ * - Multi-tenant configuration management
+ * - Document indexing and similarity search
+ *
+ * Key Responsibilities:
  * - Performing semantic similarity searches using vector embeddings
  * - Managing vector storage and retrieval operations
  * - Providing vector search services to other modules (knowledge-extraction, prompt-composer, etc.)
+ *
+ * Services:
+ * - VectorSearchService: Core business logic for vector-based semantic search operations
+ * - VectorSearchConfigService: Organization-specific configuration management
+ *
+ * Entities:
+ * - VectorSearchConfig: Organization-specific vector search settings
+ * - VectorEmbedding: Stored vector embeddings with metadata
+ *
+ * Used by modules such as:
+ * - PromptComposerModule: For retrieving semantically relevant context
+ * - KnowledgeExtractionModule: For finding related knowledge entries
+ * - OrchestrationModule: For context-aware decision making
  */
 @Module({
-  /**
-   * Providers (Services)
-   *
-   * Internal services available within this module:
-   * - VectorSearchService: Core business logic for vector-based semantic search operations
-   *
-   * Future services may include:
-   * - VectorIndexService: Managing vector index optimization and maintenance
-   * - EmbeddingService: Generating and managing vector embeddings
-   * - SimilarityService: Advanced similarity scoring and ranking algorithms
-   */
-  providers: [VectorSearchService],
-
-  /**
-   * Exports (Public API)
-   *
-   * Services exposed to other modules:
-   * - VectorSearchService: Enables other modules to perform semantic searches
-   *
-   * Used by modules such as:
-   * - PromptComposerModule: For retrieving semantically relevant context
-   * - KnowledgeExtractionModule: For finding related knowledge entries
-   * - OrchestrationModule: For context-aware decision making
-   */
-  exports: [VectorSearchService],
+  imports: [
+    TypeOrmModule.forFeature([VectorSearchConfig, VectorEmbedding]),
+    ConfigModule,
+  ],
+  providers: [VectorSearchService, VectorSearchConfigService],
+  exports: [VectorSearchService, VectorSearchConfigService],
 })
 export class VectorSearchModule {}
