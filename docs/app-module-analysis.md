@@ -71,7 +71,7 @@ PostgresListenerModule;
 
 ### Feature Modules (Current)
 
-The app.module.ts currently imports 28 feature modules, organized as:
+The app.module.ts currently imports 23 feature modules, organized as:
 
 1. **Core Business Modules:**
    - HealthModule
@@ -97,12 +97,11 @@ The app.module.ts currently imports 28 feature modules, organized as:
    - ConflictResolutionModule
 5. **Goals:**
    - GoalModule
-6. **Architecture:**
-   - DddProvidersModule (Global Port Providers)
-7. **Knowledge & AI:**
-   - KnowledgeGraphModule
+6. **Knowledge & AI:**
+   - KnowledgeGraphModule ✅ **REGISTERED** (line 74)
    - PromptComposerModule
-   - KnowledgeExtractionModule
+7. **Architecture:**
+   - DddProvidersModule (Global Port Providers)
 
 ## ConfigService Usage Patterns
 
@@ -180,193 +179,142 @@ The `configuration.ts` factory exports a structured configuration object:
 
 **Key Pattern:** Even though ConfigModule is global, modules explicitly import it for clarity.
 
-## VectorSearchModule Analysis
+## KnowledgeGraphModule Analysis
 
 ### Current Module Structure
 
-**Location:** `apps/server/src/modules/vector-search/vector-search.module.ts`
+**Location:** `apps/server/src/modules/knowledge-graph/knowledge-graph.module.ts`
 
 ```typescript
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([VectorSearchConfig, VectorEmbedding]),
-    ConfigModule,
-  ],
-  providers: [VectorSearchService, VectorSearchConfigService],
-  exports: [VectorSearchService, VectorSearchConfigService],
+  imports: [TypeOrmModule.forFeature([GraphNode, GraphEdge])],
+  providers: [KnowledgeGraphService],
+  exports: [KnowledgeGraphService],
 })
-export class VectorSearchModule {}
+export class KnowledgeGraphModule {}
 ```
 
 **Key Characteristics:**
 
-- **Entities:** VectorSearchConfig, VectorEmbedding
+- **Entities:** GraphNode, GraphEdge
 - **Services:**
-  - `VectorSearchService`: Core semantic search operations
-  - `VectorSearchConfigService`: Organization-specific configuration
-- **Dependencies:** TypeORM, ConfigModule
-- **Exports:** Both services (available for other modules to use)
+  - `KnowledgeGraphService`: Graph operations and knowledge management
+- **Dependencies:** TypeORM
+- **Exports:** KnowledgeGraphService (available for other modules to use)
 
 ### Current Integration Status
 
-**Important Finding:** VectorSearchModule is **NOT** directly imported in app.module.ts.
+✅ **KnowledgeGraphModule is REGISTERED** in app.module.ts at line 74.
 
-**However**, it IS indirectly available through module dependencies:
+**Module Registration:**
 
-1. **PromptComposerModule** imports VectorSearchModule:
+```typescript
+// Feature modules
+HealthModule,
+OrganizationModule,
+// ... other modules ...
+KnowledgeGraphModule,  // ✅ Line 74
+PromptComposerModule,
 
-   ```typescript
-   imports: [
-     KnowledgeExtractionModule,
-     VectorSearchModule, // ✅ Direct import
-     KnowledgeGraphModule,
-   ];
-   ```
+// ✅ DDD: Global Port Providers Module
+DddProvidersModule,
+```
 
-2. **KnowledgeExtractionModule** has its own `VectorSearchService` (different service):
-   ```typescript
-   providers: [KnowledgeExtractionService, VectorSearchService];
-   ```
-
-**This creates a potential issue:**
-
-- There are TWO different VectorSearchService classes:
-  1. `apps/server/src/modules/vector-search/vector-search.service.ts` (VectorSearchModule)
-  2. `apps/server/src/modules/knowledge-extraction/services/vector-search.service.ts` (KnowledgeExtractionModule)
+**Import Statement:** Line 28 in app.module.ts:
+```typescript
+import { KnowledgeGraphModule } from './modules/knowledge-graph/knowledge-graph.module';
+```
 
 ### Module Dependency Graph
 
 ```
 AppModule
-  ├── PromptComposerModule
-  │     ├── VectorSearchModule ✅ (imports VectorSearchService)
-  │     ├── KnowledgeExtractionModule (has its own VectorSearchService)
-  │     └── KnowledgeGraphModule
-  └── KnowledgeExtractionModule (separate import, own VectorSearchService)
+  ├── KnowledgeGraphModule ✅ (direct registration at app level)
+  │     └── provides: KnowledgeGraphService
+  └── PromptComposerModule
+        ├── imports: KnowledgeGraphModule (can use KnowledgeGraphService)
+        └── imports: KnowledgeExtractionModule
 ```
 
-## Integration Recommendations
+## KnowledgeGraphModule Registration Analysis
 
-### Option 1: Add to app.module.ts (Recommended for Global Availability)
+### ✅ Current Status: FULLY REGISTERED
 
-If VectorSearchModule services should be available to ANY module in the application:
+KnowledgeGraphModule is **already properly registered** in app.module.ts. No additional integration work is needed.
 
-**Add to app.module.ts in the "Knowledge & AI" section:**
+**Registration Details:**
 
-```typescript
-// Knowledge & AI
-KnowledgeGraphModule,
-PromptComposerModule,
-KnowledgeExtractionModule,
-VectorSearchModule, // ⭐ Add here for global availability
-```
+1. **Import Statement** (line 28):
+   ```typescript
+   import { KnowledgeGraphModule } from './modules/knowledge-graph/knowledge-graph.module';
+   ```
 
-**Pros:**
+2. **Module Registration** (line 74):
+   ```typescript
+   imports: [
+     // ... other modules ...
+     GoalModule,
+     KnowledgeGraphModule,  // ✅ REGISTERED HERE
+     PromptComposerModule,
+     // ...
+   ]
+   ```
 
-- Makes VectorSearchService globally available to all modules
-- Consistent with other shared infrastructure services
-- Clear declaration of system-wide capabilities
+3. **Placement:** Located in the "Knowledge & AI" section, positioned between:
+   - **Before:** GoalModule
+   - **After:** PromptComposerModule
 
-**Cons:**
+### Integration Pattern
 
-- Currently only used by PromptComposerModule, so global import may be premature
+KnowledgeGraphModule follows the standard NestJS module pattern:
 
-### Option 2: Keep in PromptComposerModule Only (Current State)
+1. **Entities:** Registered with TypeORM via `TypeOrmModule.forFeature([GraphNode, GraphEdge])`
+2. **Service:** KnowledgeGraphService is provided and exported
+3. **Availability:** Because the module is registered at the app level, KnowledgeGraphService is available to:
+   - Any module that imports KnowledgeGraphModule
+   - Currently used by PromptComposerModule
 
-Keep VectorSearchModule imported only in PromptComposerModule.
+### Module Position Rationale
 
-**Pros:**
+The current position (line 74) is **optimal** because:
 
-- Follows "import only what you need" principle
-- Reduces unnecessary module initialization
-- Clear dependency chain
-
-**Cons:**
-
-- Other modules can't easily use VectorSearchService without importing VectorSearchModule
-- Less discoverable as a system capability
-
-### Option 3: Resolve VectorSearchService Naming Conflict
-
-**Critical Issue:** Two services with the same name exist:
-
-1. Rename `KnowledgeExtractionModule`'s `VectorSearchService` to something more specific:
-   - `KnowledgeVectorService`
-   - `ExtractionVectorService`
-   - `KnowledgeEmbeddingService`
-2. Keep `VectorSearchModule`'s `VectorSearchService` as the canonical service
-3. Potentially have `KnowledgeExtractionModule` import and use `VectorSearchModule`'s service instead
-
-## Recommended Integration Point
-
-**Primary Recommendation:**
-
-1. **Add VectorSearchModule to app.module.ts** in the "Knowledge & AI" section (after KnowledgeExtractionModule)
-2. **Reason:**
-   - Vector search is a cross-cutting concern that may be needed by multiple modules (OrchestrationModule, TaskModule, etc.)
-   - ConfigService already has comprehensive vectorSearch configuration
-   - Aligns with the architecture where knowledge capabilities are top-level concerns
-
-**Placement in app.module.ts:**
-
-```typescript
-// Knowledge & AI
-KnowledgeGraphModule,
-PromptComposerModule,
-KnowledgeExtractionModule,
-VectorSearchModule, // ⭐ Add here
-```
-
-**Secondary Recommendation:**
-
-- Resolve the naming conflict between the two VectorSearchService classes
-- Consider whether KnowledgeExtractionModule should use VectorSearchModule's service instead of its own
+1. **Logical Grouping:** Placed with other knowledge/AI-related modules (PromptComposerModule follows it)
+2. **Dependency Order:** Modules that depend on it (like PromptComposerModule) can safely import it
+3. **Clean Organization:** Maintains the separation between business logic and knowledge infrastructure
 
 ## ConfigService Integration
 
-VectorSearchModule already properly integrates with ConfigService:
+KnowledgeGraphModule can integrate with ConfigService if needed:
 
-1. **Imports ConfigModule:**
+1. **Module can import ConfigModule:**
    ```typescript
-   imports: [TypeOrmModule.forFeature([...]), ConfigModule];
+   imports: [TypeOrmModule.forFeature([GraphNode, GraphEdge]), ConfigModule];
    ```
-2. **Can inject ConfigService:**
+2. **Services can inject ConfigService:**
    ```typescript
    constructor(private configService: ConfigService) {
-     const vectorConfig = this.configService.get('vectorSearch');
+     // Access configuration as needed
    }
    ```
-3. **Configuration available at:** `configService.get('vectorSearch')`
-
-## Next Steps
-
-1. **Decision Required:** Choose integration strategy (Option 1, 2, or 3)
-2. **If Option 1 (Add to app.module.ts):**
-   - Add VectorSearchModule import to app.module.ts
-   - Update module import order (place in Knowledge & AI section)
-   - Test that module initializes correctly
-3. **If Option 3 (Resolve naming conflict):**
-   - Rename KnowledgeExtractionModule's VectorSearchService
-   - Update all references in KnowledgeExtractionModule
-   - Consider refactoring to use VectorSearchModule's service
-4. **Remove PromptComposerModule's direct import** (if adding to app.module.ts):
-   - VectorSearchModule will be available globally
-   - Clean up PromptComposerModule's imports
+3. **Currently:** KnowledgeGraphModule doesn't require ConfigService integration as it operates on TypeORM entities
 
 ## Summary
 
-- **ConfigService:** Already configured with comprehensive vector search settings
-- **VectorSearchModule:** Exists and is functional, but not in app.module.ts
-- **Current Usage:** Only PromptComposerModule imports VectorSearchModule
-- **Naming Conflict:** Two different VectorSearchService classes exist
-- **Recommendation:** Add VectorSearchModule to app.module.ts for global availability and resolve naming conflict
+- **KnowledgeGraphModule:** ✅ **FULLY REGISTERED** in app.module.ts (line 74)
+- **Location:** Properly placed in the "Knowledge & AI" section
+- **Import Statement:** Correctly imported at line 28
+- **Dependencies:** TypeORM entities (GraphNode, GraphEdge)
+- **Exports:** KnowledgeGraphService (available to other modules)
+- **Current Consumers:** PromptComposerModule
+- **Status:** No additional integration work needed
 
 ## Files Referenced
 
-- `apps/server/src/app.module.ts` - Main application module
-- `apps/server/src/config/configuration.ts` - Configuration factory with vectorSearch config
+- `apps/server/src/app.module.ts` - Main application module (KnowledgeGraphModule registered at line 74)
+- `apps/server/src/config/configuration.ts` - Configuration factory
 - `apps/server/src/config/database.config.ts` - Database configuration pattern
-- `apps/server/src/modules/vector-search/vector-search.module.ts` - VectorSearchModule
-- `apps/server/src/modules/prompt-composer/prompt-composer.module.ts` - Current VectorSearchModule consumer
-- `apps/server/src/modules/knowledge-extraction/knowledge-extraction.module.ts` - Has conflicting VectorSearchService
-- `apps/server/src/modules/brain-provider/brain-provider.module.ts` - ConfigModule usage example
+- `apps/server/src/modules/knowledge-graph/knowledge-graph.module.ts` - KnowledgeGraphModule definition
+- `apps/server/src/modules/knowledge-graph/entities/graph-node.entity.ts` - GraphNode entity
+- `apps/server/src/modules/knowledge-graph/entities/graph-edge.entity.ts` - GraphEdge entity
+- `apps/server/src/modules/knowledge-graph/knowledge-graph.service.ts` - KnowledgeGraphService
+- `apps/server/src/modules/prompt-composer/prompt-composer.module.ts` - Current KnowledgeGraphModule consumer
