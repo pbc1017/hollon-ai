@@ -11,9 +11,11 @@ This document reviews the current `.env.example` file structure and identifies a
 The `.env.example` file already includes a comprehensive "Vector Search Configuration" section with the following variables:
 
 #### Core Vector Search Settings
+
 - `VECTOR_SEARCH_ENABLED` - Enable/disable vector search functionality (default: true)
 
 #### Embedding Provider Configuration
+
 - `VECTOR_EMBEDDING_PROVIDER` - Provider for embeddings (default: openai)
 - `VECTOR_EMBEDDING_MODEL` - Model name (default: text-embedding-3-small)
 - `VECTOR_EMBEDDING_DIMENSIONS` - Vector dimensions (default: 1536)
@@ -23,6 +25,7 @@ The `.env.example` file already includes a comprehensive "Vector Search Configur
 - `VECTOR_EMBEDDING_TIMEOUT_MS` - Request timeout (default: 30000ms)
 
 #### Search Configuration
+
 - `VECTOR_SEARCH_DEFAULT_METRIC` - Similarity metric (default: cosine)
 - `VECTOR_SEARCH_DEFAULT_MIN_SIMILARITY` - Minimum similarity threshold (default: 0.7)
 - `VECTOR_SEARCH_DEFAULT_LIMIT` - Default result limit (default: 10)
@@ -30,12 +33,14 @@ The `.env.example` file already includes a comprehensive "Vector Search Configur
 - `VECTOR_SEARCH_INCLUDE_SCORES_BY_DEFAULT` - Include similarity scores (default: true)
 
 #### pgvector Index Configuration
+
 - `VECTOR_INDEX_NAME` - Index identifier (default: vector_embeddings)
 - `VECTOR_INDEX_AUTO_CREATE` - Auto-create index (default: true)
 - `VECTOR_INDEX_LISTS` - IVF index lists for pgvector (default: 100)
 - `VECTOR_INDEX_PROBES` - Search probes for pgvector (default: 10)
 
 #### Performance Configuration
+
 - `VECTOR_PERFORMANCE_ENABLE_CACHE` - Enable embedding cache (default: true)
 - `VECTOR_PERFORMANCE_CACHE_TTL_SECONDS` - Cache TTL (default: 3600)
 - `VECTOR_PERFORMANCE_POOL_SIZE` - Connection pool size (default: 10)
@@ -43,6 +48,7 @@ The `.env.example` file already includes a comprehensive "Vector Search Configur
 ### Database Configuration
 
 The database section includes:
+
 - `DB_HOST` - Database host (default: localhost)
 - `DB_PORT` - Database port (default: 5432)
 - `DB_NAME` - Database name (default: hollon)
@@ -55,12 +61,14 @@ The database section includes:
 **`DB_SCHEMA`** - This variable is used extensively throughout the codebase but is NOT documented in `.env.example`.
 
 #### Usage of DB_SCHEMA in Codebase:
+
 - `apps/server/src/config/configuration.ts` - Uses `process.env.DB_SCHEMA || 'hollon'`
 - `apps/server/src/config/typeorm.config.ts` - Uses `process.env.DB_SCHEMA || 'hollon'`
 - Multiple test scripts and setup files reference it
 - CI/CD workflow uses it: `DB_SCHEMA: hollon_test_worker_1`
 
 #### Purpose:
+
 - Allows schema isolation between production, development, and test environments
 - Enables parallel test execution with worker-specific schemas
 - Default: `hollon` for production/development, `hollon_test` for testing
@@ -81,12 +89,14 @@ DB_SCHEMA=hollon
 ### 2. Verify pgvector Docker Setup
 
 The `docker/docker-compose.yml` already uses the correct pgvector image:
+
 ```yaml
 postgres:
   image: pgvector/pgvector:pg16
 ```
 
 The `docker/init-scripts/01-init.sql` properly:
+
 - Enables the vector extension: `CREATE EXTENSION IF NOT EXISTS "vector" SCHEMA public;`
 - Creates required schemas: `hollon` and `hollon_test`
 - Grants proper permissions
@@ -94,6 +104,7 @@ The `docker/init-scripts/01-init.sql` properly:
 ### 3. Configuration Validation
 
 The `vector-search.config.ts` includes a `validateVectorSearchConfig()` function that validates:
+
 - Embedding dimensions > 0
 - OpenAI API key when using OpenAI provider
 - Similarity thresholds between 0 and 1
@@ -105,17 +116,20 @@ The `vector-search.config.ts` includes a `validateVectorSearchConfig()` function
 Based on the codebase and documentation review:
 
 #### Supported Distance Metrics:
+
 - Cosine similarity (default, recommended for text embeddings)
 - Euclidean distance (L2)
 - Dot product
 - Inner product
 
 #### Supported Embedding Providers:
+
 - OpenAI (primary, with models: ada-002, text-embedding-3-small, text-embedding-3-large)
 - Anthropic (planned)
 - Local (planned)
 
 #### pgvector-Specific Features:
+
 - IVF (Inverted File) indexing with configurable lists
 - Configurable probe counts for search optimization
 - Support for dimensions up to 2,000 (standard vector type)
@@ -126,11 +140,13 @@ Based on the codebase and documentation review:
 The codebase documentation mentions pgvector 0.7.0+ features that are NOT currently configured:
 
 #### Alternative Vector Types (not in current .env):
+
 - `halfvec` - 50% storage reduction, supports up to 4,000 dimensions
 - `sparsevec` - For sparse embeddings (BM25, BGE-M3)
 - `bit` - Binary quantization, 96.9% storage reduction
 
 These could be added as optional configuration if needed:
+
 ```env
 # Advanced pgvector features (optional)
 VECTOR_TYPE=vector  # Options: vector, halfvec, sparsevec, bit
