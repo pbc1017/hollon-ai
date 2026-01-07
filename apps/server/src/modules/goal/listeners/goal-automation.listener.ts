@@ -1502,17 +1502,20 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
         );
       }
 
-      // 2. Worktree 경로 존재 확인 (Fix #27: 없으면 재생성)
+      // 2. Worktree 경로 존재 확인 (Fix #27 + Fix #28: 없으면 재생성 with enhanced logging)
       let worktreeExists = false;
       try {
         await execAsync(`test -d "${worktreePath}"`);
         worktreeExists = true;
+        this.logger.log(
+          `[Worktree Lifecycle] Worktree exists at ${worktreePath}`,
+        );
       } catch {
         this.logger.warn(
-          `Worktree path ${worktreePath} does not exist, attempting to recreate...`,
+          `[Worktree Lifecycle] Worktree path ${worktreePath} does not exist, attempting to recreate...`,
         );
 
-        // Recreate worktree for conflict resolution
+        // Fix #28: Recreate worktree for conflict resolution with validation
         try {
           // Get git root from working directory
           const { stdout: gitRootOutput } = await execAsync(
@@ -1529,29 +1532,63 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
             return false;
           }
 
+          // Fix #28: Validate branch exists before attempting worktree creation
+          this.logger.log(
+            `[Worktree Lifecycle] Validating branch ${branchName} exists...`,
+          );
+          try {
+            await execAsync(`git rev-parse --verify "${branchName}"`, {
+              cwd: gitRoot,
+            });
+            this.logger.log(
+              `[Worktree Lifecycle] Branch ${branchName} validated`,
+            );
+          } catch (branchError) {
+            this.logger.error(
+              `[Worktree Lifecycle] Branch ${branchName} does not exist, cannot recreate worktree: ${branchError instanceof Error ? branchError.message : 'Unknown error'}`,
+            );
+            return false;
+          }
+
           // Create worktree directory
           await execAsync(`mkdir -p "${path.dirname(worktreePath)}"`);
+          this.logger.log(
+            `[Worktree Lifecycle] Created parent directory: ${path.dirname(worktreePath)}`,
+          );
 
           // Add worktree for the branch
+          this.logger.log(
+            `[Worktree Lifecycle] Creating worktree at ${worktreePath} for branch ${branchName}`,
+          );
           await execAsync(
             `git worktree add "${worktreePath}" "${branchName}"`,
             { cwd: gitRoot },
           );
 
           this.logger.log(
-            `✅ Successfully recreated worktree at ${worktreePath}`,
+            `[Worktree Lifecycle] ✅ Successfully recreated worktree for PR #${pr.prNumber} at ${worktreePath}`,
           );
           worktreeExists = true;
+
+          // Fix #28: Update task.workingDirectory in database
+          await this.taskRepo.update(task.id, {
+            workingDirectory: worktreePath,
+          });
+          this.logger.log(
+            `[Worktree Lifecycle] Updated task.workingDirectory in database`,
+          );
         } catch (recreateError) {
           this.logger.error(
-            `Failed to recreate worktree: ${recreateError instanceof Error ? recreateError.message : 'Unknown error'}`,
+            `[Worktree Lifecycle] Failed to recreate worktree: ${recreateError instanceof Error ? recreateError.message : 'Unknown error'}`,
           );
           return false;
         }
       }
 
       if (!worktreeExists) {
-        this.logger.error(`Unable to establish worktree at ${worktreePath}`);
+        this.logger.error(
+          `[Worktree Lifecycle] Unable to establish worktree at ${worktreePath}`,
+        );
         return false;
       }
 
