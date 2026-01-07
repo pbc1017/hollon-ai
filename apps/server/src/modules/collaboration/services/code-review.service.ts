@@ -1619,6 +1619,32 @@ _Automated review by Hollon AI_`;
       return;
     }
 
+    // Fix #28: Check if task has a PR before cleanup
+    // Preserve worktrees for PRs that are not yet merged or closed
+    const pr = await this.prRepo.findOne({
+      where: { taskId: task.id },
+    });
+
+    if (pr) {
+      // Only cleanup worktree if PR is fully merged or closed
+      // All other states might need the worktree for updates or conflict resolution
+      const safeToCleanup = [
+        PullRequestStatus.MERGED,
+        PullRequestStatus.CLOSED,
+      ];
+
+      if (!safeToCleanup.includes(pr.status)) {
+        this.logger.log(
+          `[Worktree Lifecycle] Preserving worktree for PR #${pr.prNumber} (status: ${pr.status}) - may need for updates or conflict resolution`,
+        );
+        return;
+      }
+
+      this.logger.log(
+        `[Worktree Lifecycle] PR #${pr.prNumber} is ${pr.status}, safe to cleanup worktree`,
+      );
+    }
+
     // Phase 3.12: Use task-specific worktree path if available
     const worktreePath =
       task.workingDirectory ||
@@ -1652,14 +1678,18 @@ _Automated review by Hollon AI_`;
         this.logger.debug(`Could not detect branch name for ${worktreePath}`);
       }
 
+      // Fix #28: Log worktree cleanup for audit trail
+      this.logger.log(
+        `[Worktree Lifecycle] Cleaning up worktree for task ${task.id}${pr ? ` (PR #${pr.prNumber})` : ''}: ${worktreePath}`,
+      );
+
       // Remove worktree
-      this.logger.log(`Cleaning up task worktree: ${worktreePath}`);
       await execAsync(`git worktree remove "${worktreePath}" --force`, {
         cwd: gitCwd,
         shell: process.env.SHELL || '/bin/bash',
         env: { ...process.env },
       });
-      this.logger.log(`Task worktree cleaned up: ${worktreePath}`);
+      this.logger.log(`[Worktree Lifecycle] Worktree removed: ${worktreePath}`);
 
       // Fix #26: Delete the branch after worktree is removed
       if (branchName && branchName !== 'main' && branchName !== 'HEAD') {

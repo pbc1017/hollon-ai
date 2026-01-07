@@ -5,7 +5,7 @@ import {
   IsNumber,
   IsBoolean,
 } from 'class-validator';
-import { EdgeType } from '../entities/edge.entity';
+import { RelationshipType } from '../../../knowledge/enums/relationship-type.enum';
 
 export class CreateEdgeDto {
   @IsUUID()
@@ -14,8 +14,8 @@ export class CreateEdgeDto {
   @IsUUID()
   targetNodeId: string;
 
-  @IsEnum(EdgeType)
-  type: EdgeType;
+  @IsEnum(RelationshipType)
+  type: RelationshipType;
 
   @IsUUID()
   organizationId: string;
