@@ -5,6 +5,7 @@
 The `KnowledgeGraphModule` is a self-contained NestJS module that provides graph-based data structures for representing and querying relationships between entities in the Hollon-AI system. This document provides a comprehensive analysis of its structure, dependencies, configuration requirements, and integration points.
 
 **Key Findings:**
+
 - **Status:** Fully implemented with basic CRUD operations
 - **Controller:** Defined but not yet implemented (placeholder)
 - **Dependencies:** Standalone module with one external dependency (RelationshipType enum)
@@ -33,6 +34,7 @@ The `KnowledgeGraphModule` is a self-contained NestJS module that provides graph
 **Primary File:** `apps/server/src/modules/knowledge-graph/knowledge-graph.module.ts`
 
 **Directory Structure:**
+
 ```
 apps/server/src/modules/knowledge-graph/
 ├── dto/                                    # Data Transfer Objects
@@ -78,24 +80,28 @@ export class KnowledgeGraphModule {}
 ### Breakdown
 
 #### 1. Imports Array
+
 - **TypeOrmModule.forFeature([GraphNode, GraphEdge])**
   - Registers `GraphNode` and `GraphEdge` entities for dependency injection
   - Makes `Repository<GraphNode>` and `Repository<GraphEdge>` available for injection
   - Scoped to this module only
 
 #### 2. Providers Array
+
 - **KnowledgeGraphService**
   - Core business logic for graph operations
   - Injectable service with repository dependencies
   - Currently implements: createNode, createEdge, findNodeById, findNodesByOrganization, findEdgesByNode, deleteNode, deleteEdge
 
 #### 3. Exports Array
+
 - **KnowledgeGraphService**
   - Exposed as public API for other modules
   - Enables cross-module integration
   - Follows NestJS module boundaries pattern
 
 #### 4. Controllers
+
 - **Note:** The module definition does NOT include the controller in its decorator
   - `knowledge-graph.controller.ts` exists but is a placeholder
   - Will need to be added to module when endpoints are implemented
@@ -106,32 +112,35 @@ export class KnowledgeGraphModule {}
 
 ### External NPM Dependencies
 
-| Package | Version | Purpose | Scope |
-|---------|---------|---------|-------|
-| `@nestjs/common` | ^10.4.15 | Core NestJS decorators (@Module, @Injectable) | Required |
-| `@nestjs/typeorm` | ^10.0.2 | TypeORM integration with NestJS | Required |
-| `@nestjs/config` | ^3.3.0 | Configuration management (indirect) | Required |
-| `typeorm` | ^0.3.20 | ORM and database abstraction | Required |
-| `pg` | ^8.13.1 | PostgreSQL driver | Required |
-| `class-validator` | ^0.14.1 | DTO validation decorators | Required |
-| `class-transformer` | ^0.5.1 | DTO transformation | Required |
-| `uuid` | ^11.0.3 | UUID generation and validation | Required |
-| `reflect-metadata` | ^0.2.2 | TypeScript metadata reflection | Required |
+| Package             | Version  | Purpose                                       | Scope    |
+| ------------------- | -------- | --------------------------------------------- | -------- |
+| `@nestjs/common`    | ^10.4.15 | Core NestJS decorators (@Module, @Injectable) | Required |
+| `@nestjs/typeorm`   | ^10.0.2  | TypeORM integration with NestJS               | Required |
+| `@nestjs/config`    | ^3.3.0   | Configuration management (indirect)           | Required |
+| `typeorm`           | ^0.3.20  | ORM and database abstraction                  | Required |
+| `pg`                | ^8.13.1  | PostgreSQL driver                             | Required |
+| `class-validator`   | ^0.14.1  | DTO validation decorators                     | Required |
+| `class-transformer` | ^0.5.1   | DTO transformation                            | Required |
+| `uuid`              | ^11.0.3  | UUID generation and validation                | Required |
+| `reflect-metadata`  | ^0.2.2   | TypeScript metadata reflection                | Required |
 
 ### Internal Dependencies
 
 #### From Common Layer
+
 - `apps/server/src/common/entities/base.entity.ts` - BaseEntity class
   - Provides: id (UUID), createdAt, updatedAt fields
   - Used by: GraphNode, GraphEdge entities
 
 #### From Knowledge Module
+
 - `apps/server/src/knowledge/enums/relationship-type.enum.ts` - RelationshipType enum
   - **Critical Dependency:** Used by Edge entity and CreateEdgeDto
   - Contains comprehensive relationship types (RELATES_TO, DERIVED_FROM, CONTRADICTS, etc.)
   - This is the **only cross-module dependency** in the KnowledgeGraphModule
 
 #### Local Dependencies
+
 - `entities/graph-node.entity.ts` - GraphNode entity
 - `entities/graph-edge.entity.ts` - GraphEdge entity
 - `knowledge-graph.service.ts` - Core service
@@ -163,6 +172,7 @@ export class KnowledgeGraphModule {}
 **Table:** `graph_nodes`
 
 **Schema:**
+
 ```typescript
 {
   // From BaseEntity
@@ -186,6 +196,7 @@ export class KnowledgeGraphModule {}
 ```
 
 **NodeType Enum:**
+
 ```typescript
 enum NodeType {
   CONCEPT = 'concept',
@@ -199,6 +210,7 @@ enum NodeType {
 ```
 
 **Indexes:**
+
 - `[organizationId, nodeType]` (composite)
 - `[organizationId, label]` (composite)
 
@@ -207,6 +219,7 @@ enum NodeType {
 **Table:** `graph_edges`
 
 **Schema:**
+
 ```typescript
 {
   // From BaseEntity
@@ -229,6 +242,7 @@ enum NodeType {
 ```
 
 **EdgeType Enum:**
+
 ```typescript
 enum EdgeType {
   RELATED_TO = 'related_to',
@@ -245,10 +259,12 @@ enum EdgeType {
 **Note:** `EdgeType` is an alias for `RelationshipType` enum from the knowledge module. The actual RelationshipType enum contains many more values (23 total).
 
 **Indexes:**
+
 - `[organizationId, edgeType]` (composite)
 - `[sourceNodeId, targetNodeId]` (composite)
 
 **Foreign Keys:**
+
 - `sourceNodeId` → `graph_nodes.id` (CASCADE DELETE)
 - `targetNodeId` → `graph_nodes.id` (CASCADE DELETE)
 
@@ -262,24 +278,25 @@ The service exposes the following methods:
 
 #### Node Operations
 
-| Method | Parameters | Returns | Description |
-|--------|-----------|---------|-------------|
-| `createNode()` | `Partial<GraphNode>` | `Promise<GraphNode>` | Create a new graph node |
-| `findNodeById()` | `id: string` | `Promise<GraphNode \| null>` | Find node by UUID |
-| `findNodesByOrganization()` | `organizationId: string` | `Promise<GraphNode[]>` | Find all nodes for an organization (sorted by createdAt DESC) |
-| `deleteNode()` | `id: string` | `Promise<void>` | Delete node (CASCADE deletes edges) |
+| Method                      | Parameters               | Returns                      | Description                                                   |
+| --------------------------- | ------------------------ | ---------------------------- | ------------------------------------------------------------- |
+| `createNode()`              | `Partial<GraphNode>`     | `Promise<GraphNode>`         | Create a new graph node                                       |
+| `findNodeById()`            | `id: string`             | `Promise<GraphNode \| null>` | Find node by UUID                                             |
+| `findNodesByOrganization()` | `organizationId: string` | `Promise<GraphNode[]>`       | Find all nodes for an organization (sorted by createdAt DESC) |
+| `deleteNode()`              | `id: string`             | `Promise<void>`              | Delete node (CASCADE deletes edges)                           |
 
 #### Edge Operations
 
-| Method | Parameters | Returns | Description |
-|--------|-----------|---------|-------------|
-| `createEdge()` | `Partial<GraphEdge>` | `Promise<GraphEdge>` | Create a new graph edge |
-| `findEdgesByNode()` | `nodeId: string` | `Promise<GraphEdge[]>` | Find all edges connected to a node (includes relations) |
-| `deleteEdge()` | `id: string` | `Promise<void>` | Delete edge |
+| Method              | Parameters           | Returns                | Description                                             |
+| ------------------- | -------------------- | ---------------------- | ------------------------------------------------------- |
+| `createEdge()`      | `Partial<GraphEdge>` | `Promise<GraphEdge>`   | Create a new graph edge                                 |
+| `findEdgesByNode()` | `nodeId: string`     | `Promise<GraphEdge[]>` | Find all edges connected to a node (includes relations) |
+| `deleteEdge()`      | `id: string`         | `Promise<void>`        | Delete edge                                             |
 
 ### DTOs
 
 #### CreateNodeDto
+
 ```typescript
 {
   name: string (max 255 chars, required)
@@ -293,6 +310,7 @@ The service exposes the following methods:
 ```
 
 #### CreateEdgeDto
+
 ```typescript
 {
   sourceNodeId: string (UUID, required)
@@ -318,6 +336,7 @@ The module **does not directly consume** environment variables. It inherits data
 **Required (via AppModule):**
 
 From `.env.example`:
+
 ```bash
 # Database Connection
 DB_HOST=localhost
@@ -350,6 +369,7 @@ PGVECTOR_IVFFLAT_PROBES=10
 **Location:** `apps/server/src/config/database.config.ts`
 
 **Requirements:**
+
 - PostgreSQL database (type: 'postgres')
 - Entity auto-loading: `entities: [__dirname + '/../**/*.entity.{ts,js}']`
 - Migration support: `migrations: [__dirname + '/../database/migrations/*.{ts,js}']`
@@ -358,13 +378,13 @@ PGVECTOR_IVFFLAT_PROBES=10
 - SSL: Enabled in production
 
 **TypeORM Module Registration (in AppModule):**
+
 ```typescript
 TypeOrmModule.forRootAsync({
   imports: [ConfigModule],
-  useFactory: (configService: ConfigService) =>
-    databaseConfig(configService),
+  useFactory: (configService: ConfigService) => databaseConfig(configService),
   inject: [ConfigService],
-})
+});
 ```
 
 ### 3. Migration Requirements
@@ -372,6 +392,7 @@ TypeOrmModule.forRootAsync({
 **Migration File:** `apps/server/src/database/migrations/1735100000001-AddKnowledgeGraph.ts`
 
 **Creates:**
+
 1. **Enums:**
    - `node_type_enum` (7 values: concept, entity, event, attribute, task, hollon, document)
    - `edge_type_enum` (8 values: related_to, depends_on, part_of, causes, assigned_to, created_by, references, follows)
@@ -387,6 +408,7 @@ TypeOrmModule.forRootAsync({
    - `IDX_graph_edges_source_target`
 
 **Running Migrations:**
+
 ```bash
 # Development
 npm run db:migrate
@@ -404,6 +426,7 @@ npm run db:migrate:revert
 ### 4. No Special Configuration Required
 
 The module does **NOT** require:
+
 - ❌ Custom configuration providers
 - ❌ Feature flags
 - ❌ External service connections (yet)
@@ -418,6 +441,7 @@ The module does **NOT** require:
 ### Tables Created by Migration
 
 #### `graph_nodes` Table
+
 ```sql
 CREATE TABLE "graph_nodes" (
   "id" uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -434,6 +458,7 @@ CREATE TABLE "graph_nodes" (
 ```
 
 #### `graph_edges` Table
+
 ```sql
 CREATE TABLE "graph_edges" (
   "id" uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -457,10 +482,12 @@ CREATE TABLE "graph_edges" (
 ### Indexing Strategy
 
 **Multi-tenancy Support:**
+
 - All indexes include `organization_id` for efficient tenant isolation
 - Composite indexes optimize common query patterns
 
 **Query Optimization:**
+
 - Type-based filtering: `[organizationId, nodeType]`, `[organizationId, edgeType]`
 - Graph traversal: `[sourceNodeId, targetNodeId]`
 - Label search: `[organizationId, label]`
@@ -502,7 +529,7 @@ import { KnowledgeGraphModule } from '../knowledge-graph/knowledge-graph.module'
 import { MyService } from './my.service';
 
 @Module({
-  imports: [KnowledgeGraphModule],  // Import the module
+  imports: [KnowledgeGraphModule], // Import the module
   providers: [MyService],
 })
 export class MyModule {}
@@ -516,12 +543,11 @@ import { KnowledgeGraphService } from '../knowledge-graph/knowledge-graph.servic
 
 @Injectable()
 export class MyService {
-  constructor(
-    private readonly knowledgeGraphService: KnowledgeGraphService,
-  ) {}
+  constructor(private readonly knowledgeGraphService: KnowledgeGraphService) {}
 
   async myMethod() {
-    const nodes = await this.knowledgeGraphService.findNodesByOrganization('org-id');
+    const nodes =
+      await this.knowledgeGraphService.findNodesByOrganization('org-id');
     // ... use nodes
   }
 }
@@ -554,6 +580,7 @@ Based on the module's design:
 ### For Proper Module Initialization
 
 ✅ **Already Done:**
+
 1. Import `KnowledgeGraphModule` in `AppModule`
 2. TypeORM configured at app level
 3. Entities registered via `TypeOrmModule.forFeature()`
@@ -561,6 +588,7 @@ Based on the module's design:
 5. Migration file created
 
 ⚠️ **Not Yet Done:**
+
 1. Controller not added to module decorator (placeholder exists)
 2. No HTTP endpoints implemented yet
 3. DTOs defined but not all used by service
@@ -570,6 +598,7 @@ Based on the module's design:
 To set up the KnowledgeGraphModule in a new environment:
 
 1. **Set Environment Variables**
+
    ```bash
    DB_HOST=your_host
    DB_PORT=5432
@@ -580,16 +609,19 @@ To set up the KnowledgeGraphModule in a new environment:
    ```
 
 2. **Create Database**
+
    ```bash
    createdb your_db
    ```
 
 3. **Run Migrations**
+
    ```bash
    npm run db:migrate
    ```
 
 4. **Verify Setup**
+
    ```bash
    npm run db:migrate:show
    ```
@@ -602,6 +634,7 @@ To set up the KnowledgeGraphModule in a new environment:
 ### No Additional Configuration Needed
 
 The module is designed to work out-of-the-box once:
+
 - Database connection is configured
 - Migrations are run
 - AppModule is properly set up
@@ -613,12 +646,15 @@ The module is designed to work out-of-the-box once:
 ### Test Files
 
 **Unit Tests:**
+
 - `knowledge-graph.service.spec.ts` - Service unit tests (exists)
 
 **Integration Tests:**
+
 - Not yet created
 
 **E2E Tests:**
+
 - Not yet created (controller not implemented)
 
 ### Running Tests
@@ -640,6 +676,7 @@ npm run test:cov
 ### Test Dependencies
 
 Tests use:
+
 - `@nestjs/testing` for test module creation
 - `jest` for test runner
 - TypeORM repository mocks for service tests
@@ -651,6 +688,7 @@ Tests use:
 ### Module Characteristics
 
 ✅ **Strengths:**
+
 - Self-contained with minimal external dependencies
 - Clear separation of concerns (entities, service, DTOs)
 - Proper use of TypeORM patterns
@@ -659,6 +697,7 @@ Tests use:
 - Migration-based schema management
 
 ⚠️ **Limitations:**
+
 - Controller not yet implemented (no HTTP endpoints)
 - Service API is basic (only essential CRUD operations)
 - No pagination support in service (DTOs exist)
@@ -666,6 +705,7 @@ Tests use:
 - Legacy entity files create confusion
 
 🔧 **Configuration Needs:**
+
 - **Environment:** Database connection variables (inherited from app)
 - **Database:** PostgreSQL with migrations applied
 - **External Deps:** One cross-module dependency (RelationshipType enum)
