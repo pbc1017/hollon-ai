@@ -41,6 +41,25 @@ export class TaskPoolService {
   async pullNextTask(hollonId: string): Promise<TaskPullResult> {
     this.logger.log(`Pulling next task for hollon: ${hollonId}`);
 
+    // Guard: Prevent pulling new tasks if hollon already has IN_PROGRESS tasks
+    // This prevents task accumulation when Brain Provider hangs/timeouts
+    const inProgressCount = await this.taskRepo.count({
+      where: {
+        assignedHollonId: hollonId,
+        status: TaskStatus.IN_PROGRESS,
+      },
+    });
+
+    if (inProgressCount > 0) {
+      this.logger.warn(
+        `Hollon ${hollonId} already has ${inProgressCount} task(s) in progress - cannot pull new task`,
+      );
+      return {
+        task: null,
+        reason: `Already has ${inProgressCount} task(s) in progress`,
+      };
+    }
+
     const hollon = await this.hollonRepo.findOne({
       where: { id: hollonId },
       relations: ['team', 'role', 'assignedTasks'],
