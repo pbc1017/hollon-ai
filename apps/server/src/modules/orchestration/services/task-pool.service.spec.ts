@@ -13,6 +13,7 @@ describe('TaskPoolService', () => {
     findOne: jest.fn(),
     update: jest.fn(),
     query: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
     createQueryBuilder: jest.fn(),
   };
 
