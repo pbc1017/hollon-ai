@@ -13,6 +13,7 @@ This document provides a comprehensive analysis of the knowledge graph schema, i
 Represents entities or concepts in the knowledge graph.
 
 **Columns:**
+
 - `id` (UUID, PK) - Primary key, auto-generated
 - `name` (VARCHAR(255)) - Node name/label
 - `type` (ENUM) - Node type classification (person, organization, team, task, document, code, concept, goal, skill, tool, custom)
@@ -25,6 +26,7 @@ Represents entities or concepts in the knowledge graph.
 - `updated_at` (TIMESTAMP) - Record update timestamp
 
 **Relationships:**
+
 - `outgoingEdges` (OneToMany → Edge.sourceNode) - Edges where this node is the source
 - `incomingEdges` (OneToMany → Edge.targetNode) - Edges where this node is the target
 
@@ -33,6 +35,7 @@ Represents entities or concepts in the knowledge graph.
 Represents relationships between nodes in the knowledge graph.
 
 **Columns:**
+
 - `id` (UUID, PK) - Primary key, auto-generated
 - `source_node_id` (UUID, FK) - Source node reference
 - `target_node_id` (UUID, FK) - Target node reference
@@ -45,6 +48,7 @@ Represents relationships between nodes in the knowledge graph.
 - `updated_at` (TIMESTAMP) - Record update timestamp
 
 **Relationships:**
+
 - `sourceNode` (ManyToOne → Node, CASCADE delete) - Source node
 - `targetNode` (ManyToOne → Node, CASCADE delete) - Target node
 
@@ -80,6 +84,7 @@ Represents relationships between nodes in the knowledge graph.
 ```
 
 **Current Indexes:**
+
 1. **Single-column index on `type`**
    - Purpose: Filter nodes by type (e.g., all tasks, all documents)
    - Use case: `SELECT * FROM knowledge_graph_nodes WHERE type = 'task'`
@@ -104,6 +109,7 @@ Represents relationships between nodes in the knowledge graph.
 ```
 
 **Current Indexes:**
+
 1. **Single-column index on `type`**
    - Purpose: Filter edges by relationship type
    - Use case: `SELECT * FROM knowledge_graph_edges WHERE type = 'depends_on'`
@@ -137,46 +143,50 @@ Represents relationships between nodes in the knowledge graph.
 #### Node Queries
 
 1. **Find all nodes (with pagination)**
+
    ```typescript
-   nodeRepository.find() // Uses: None (full table scan)
-   nodeRepository.findAndCount({ order: { createdAt: 'DESC' } }) // Uses: created_at index
+   nodeRepository.find(); // Uses: None (full table scan)
+   nodeRepository.findAndCount({ order: { createdAt: 'DESC' } }); // Uses: created_at index
    ```
 
 2. **Find node by ID**
+
    ```typescript
    nodeRepository.findOne({ where: { id }, relations: [...] }) // Uses: PK index
    ```
 
 3. **Create/Update/Delete node**
    ```typescript
-   nodeRepository.save(node) // Uses: PK index for updates
-   nodeRepository.remove(node) // Uses: PK index + triggers cascade deletes on edges
+   nodeRepository.save(node); // Uses: PK index for updates
+   nodeRepository.remove(node); // Uses: PK index + triggers cascade deletes on edges
    ```
 
 #### Edge Queries
 
 1. **Find all edges (with pagination)**
+
    ```typescript
-   edgeRepository.find() // Uses: None (full table scan)
-   edgeRepository.findAndCount({ 
+   edgeRepository.find(); // Uses: None (full table scan)
+   edgeRepository.findAndCount({
      order: { createdAt: 'DESC' },
-     relations: ['sourceNode', 'targetNode']
-   }) // Uses: created_at index + FK joins
+     relations: ['sourceNode', 'targetNode'],
+   }); // Uses: created_at index + FK joins
    ```
 
 2. **Find edge by ID**
+
    ```typescript
-   edgeRepository.findOne({ 
+   edgeRepository.findOne({
      where: { id },
-     relations: ['sourceNode', 'targetNode']
-   }) // Uses: PK index + FK joins
+     relations: ['sourceNode', 'targetNode'],
+   }); // Uses: PK index + FK joins
    ```
 
 3. **Validate edge creation**
    ```typescript
    // Checks both source and target nodes exist
-   findOneNode(sourceNodeId) // Uses: PK index
-   findOneNode(targetNodeId) // Uses: PK index
+   findOneNode(sourceNodeId); // Uses: PK index
+   findOneNode(targetNodeId); // Uses: PK index
    ```
 
 ### Expected Future Query Patterns
@@ -211,16 +221,19 @@ Based on graph operations and common knowledge graph use cases:
 ### Current Coverage
 
 ✅ **Well-Covered:**
+
 - Single entity lookups by ID (primary key)
 - Edge existence checks (source + target composite)
 - Type-specific graph traversal (source/target + type composites)
 - Temporal ordering (created_at indexes)
 
 ⚠️ **Partially Covered:**
+
 - Organization scoping (single-column indexes, but no composites)
 - Graph traversal (good for type-specific, missing general traversal)
 
 ❌ **Missing Coverage:**
+
 - Multi-tenancy + filtering combinations
 - Soft delete filtering (is_active not indexed)
 - Tag-based searches (array operations)
@@ -259,11 +272,13 @@ Based on graph operations and common knowledge graph use cases:
 ```
 
 **Benefits:**
+
 - Efficient for: `WHERE organization_id = ? AND type = ?`
 - Can use left-prefix for organization-only queries
 - Supports most common filtering pattern
 
 **Trade-offs:**
+
 - Slightly redundant with existing single-column indexes
 - Additional storage overhead
 - Maintained on all inserts/updates
@@ -277,11 +292,13 @@ Based on graph operations and common knowledge graph use cases:
 ```
 
 **Benefits:**
+
 - Efficient for: `WHERE organization_id = ? AND is_active = true`
 - Critical for production queries that should exclude soft-deleted records
 - Supports common data isolation pattern
 
 **Trade-offs:**
+
 - Low cardinality on is_active (mostly true values)
 - May have limited selectivity
 
@@ -294,11 +311,13 @@ Based on graph operations and common knowledge graph use cases:
 ```
 
 **Benefits:**
+
 - Efficient for: `WHERE organization_id = ? AND type = ?`
 - Can use left-prefix for organization-only queries
 - Supports relationship-type filtering within organization
 
 **Trade-offs:**
+
 - Additional storage overhead
 - Maintained on all inserts/updates
 
@@ -311,11 +330,13 @@ Based on graph operations and common knowledge graph use cases:
 ```
 
 **Benefits:**
+
 - Efficient for: `WHERE organization_id = ? AND is_active = true`
 - Ensures active edge queries are performant
 - Matches node indexing pattern
 
 **Trade-offs:**
+
 - Low cardinality on is_active
 - Limited selectivity improvement
 
@@ -332,11 +353,13 @@ Based on graph operations and common knowledge graph use cases:
 ```
 
 **Benefits:**
+
 - Efficient for: `WHERE 'tag' = ANY(tags)` or `WHERE tags @> ARRAY['tag1', 'tag2']`
 - Supports tag-based knowledge discovery
 - Enables efficient multi-tag searches
 
 **Trade-offs:**
+
 - Larger index size than B-tree
 - Slower updates (GIN index maintenance)
 - Requires PostgreSQL-specific SQL
@@ -353,11 +376,13 @@ If tag searches are infrequent, defer this optimization.
 ```
 
 **Benefits:**
+
 - Optimal for: `WHERE organization_id = ? AND type = ? AND is_active = true`
 - Reduces index lookups for common query pattern
 - Can use left-prefixes for partial matches
 
 **Trade-offs:**
+
 - Significant redundancy with Priority 1 indexes
 - Higher storage overhead
 - Only worthwhile if this exact combination is frequent
@@ -374,11 +399,13 @@ Add only if query profiling shows this pattern is dominant. Otherwise, Priority 
 ```
 
 **Benefits:**
+
 - Enforces business rule: only one edge of each type between two nodes
 - Efficient for exact edge lookups
 - Prevents data integrity issues
 
 **Trade-offs:**
+
 - May limit flexibility if multiple edges of same type are valid
 - Existing 2-column index may be sufficient
 
@@ -393,17 +420,19 @@ Only add if business logic requires uniqueness constraint. Otherwise, existing `
 
 ```typescript
 // Requires raw SQL in migration:
-// CREATE INDEX idx_nodes_active_partial 
-// ON knowledge_graph_nodes (organization_id, type) 
+// CREATE INDEX idx_nodes_active_partial
+// ON knowledge_graph_nodes (organization_id, type)
 // WHERE is_active = true;
 ```
 
 **Benefits:**
+
 - Smaller index size (only active records)
 - Faster queries on active records
 - Reduced maintenance overhead
 
 **Trade-offs:**
+
 - Doesn't help queries that include soft-deleted records
 - PostgreSQL-specific feature
 - More complex migration management
@@ -417,18 +446,20 @@ Consider if soft-deleted records accumulate significantly and active record quer
 
 ```typescript
 // Requires raw SQL in migration:
-// CREATE INDEX idx_nodes_properties_gin 
+// CREATE INDEX idx_nodes_properties_gin
 // ON knowledge_graph_nodes USING GIN (properties);
-// CREATE INDEX idx_edges_properties_gin 
+// CREATE INDEX idx_edges_properties_gin
 // ON knowledge_graph_edges USING GIN (properties);
 ```
 
 **Benefits:**
+
 - Efficient for: `WHERE properties @> '{"key": "value"}'`
 - Enables flexible property queries
 - Supports complex JSON containment queries
 
 **Trade-offs:**
+
 - Large index size
 - Slower updates
 - May not be needed if properties are only metadata
@@ -443,7 +474,7 @@ Add only if property-based querying becomes a core feature.
 ```typescript
 // Requires raw SQL in migration:
 // ALTER TABLE knowledge_graph_nodes ADD COLUMN name_tsv tsvector;
-// CREATE INDEX idx_nodes_name_fts 
+// CREATE INDEX idx_nodes_name_fts
 // ON knowledge_graph_nodes USING GIN (name_tsv);
 // CREATE TRIGGER tsvectorupdate BEFORE INSERT OR UPDATE
 // ON knowledge_graph_nodes FOR EACH ROW EXECUTE FUNCTION
@@ -451,11 +482,13 @@ Add only if property-based querying becomes a core feature.
 ```
 
 **Benefits:**
+
 - Efficient full-text search on node names
 - Supports fuzzy matching, stemming
 - Better than LIKE patterns for search
 
 **Trade-offs:**
+
 - Complex setup with triggers
 - Additional column and maintenance
 - May be overkill for simple name lookups
@@ -470,18 +503,21 @@ Add only if implementing search features. Use ILIKE for simple patterns initiall
 Add the following indexes to both entity files:
 
 **Node Entity Updates:**
+
 ```typescript
 @Index(['organizationId', 'type'])
 @Index(['organizationId', 'isActive'])
 ```
 
 **Edge Entity Updates:**
+
 ```typescript
 @Index(['organizationId', 'type'])
 @Index(['organizationId', 'isActive'])
 ```
 
 **Impact:**
+
 - Improves multi-tenancy query performance
 - Enables efficient soft-delete filtering
 - Minimal storage overhead
@@ -490,6 +526,7 @@ Add the following indexes to both entity files:
 ### Phase 2: Use-Case Specific (As Needed)
 
 Monitor query patterns and add:
+
 - GIN index on tags (if tag searches become common)
 - JSONB GIN indexes (if property querying is needed)
 - Additional composite indexes based on actual query logs
@@ -497,6 +534,7 @@ Monitor query patterns and add:
 ### Phase 3: Advanced Optimizations (Future)
 
 Consider after performance profiling:
+
 - Partial indexes for active records
 - Full-text search on node names
 - Additional covering indexes based on analytics
@@ -506,6 +544,7 @@ Consider after performance profiling:
 ### Index Monitoring
 
 1. **Track index usage:**
+
    ```sql
    SELECT schemaname, tablename, indexname, idx_scan, idx_tup_read, idx_tup_fetch
    FROM pg_stat_user_indexes
@@ -514,6 +553,7 @@ Consider after performance profiling:
    ```
 
 2. **Identify unused indexes:**
+
    ```sql
    SELECT schemaname, tablename, indexname
    FROM pg_stat_user_indexes
@@ -539,10 +579,12 @@ Consider after performance profiling:
 ### Before Optimization
 
 **Typical Query:** Find all active tasks for an organization
+
 ```sql
-SELECT * FROM knowledge_graph_nodes 
+SELECT * FROM knowledge_graph_nodes
 WHERE organization_id = ? AND type = 'task' AND is_active = true;
 ```
+
 - Uses: Single-column organization_id index
 - Then: Filters type and is_active in memory
 - Rows scanned: All nodes for organization
@@ -550,6 +592,7 @@ WHERE organization_id = ? AND type = 'task' AND is_active = true;
 ### After Phase 1 Optimization
 
 **Same Query:**
+
 - Uses: Composite `[organization_id, type]` index
 - Then: Filters is_active from smaller result set
 - Rows scanned: Only tasks for organization
