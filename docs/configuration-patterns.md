@@ -97,10 +97,11 @@ ConfigModule.forRoot({
   isGlobal: true,
   load: [configuration],
   envFilePath: ['../../.env.local', '../../.env'],
-})
+});
 ```
 
 **Key points:**
+
 - `isGlobal: true` - Makes ConfigService available to all modules without re-importing
 - `load: [configuration]` - Loads the configuration factory
 - `envFilePath` - Specifies environment file locations (monorepo root)
@@ -112,10 +113,11 @@ TypeOrmModule.forRootAsync({
   imports: [ConfigModule],
   useFactory: (configService: ConfigService) => databaseConfig(configService),
   inject: [ConfigService],
-})
+});
 ```
 
 **Pattern: `forRootAsync` with factory function**
+
 - Allows dependency injection of ConfigService
 - Defers configuration until runtime
 - Enables dynamic configuration based on environment
@@ -129,6 +131,7 @@ TypeOrmModule.forRootAsync({
 ```
 
 **Pattern: Spread operator with conditional array**
+
 - Allows runtime toggling of modules
 - Useful for testing or feature flags
 
@@ -171,9 +174,7 @@ Modules are organized into three categories:
 
 ```typescript
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Node, Edge]),
-  ],
+  imports: [TypeOrmModule.forFeature([Node, Edge])],
   controllers: [KnowledgeGraphController],
   providers: [KnowledgeGraphService],
   exports: [KnowledgeGraphService],
@@ -182,6 +183,7 @@ export class KnowledgeGraphModule {}
 ```
 
 **Pattern characteristics:**
+
 - Imports entities via `TypeOrmModule.forFeature()`
 - Declares controllers and providers
 - Exports services needed by other modules
@@ -206,6 +208,7 @@ export class PromptComposerModule {}
 ```
 
 **Pattern characteristics:**
+
 - Imports other feature modules for service dependencies
 - Clear dependency hierarchy
 - Service exports enable cross-module communication
@@ -224,6 +227,7 @@ export class PostgresListenerModule {}
 ```
 
 **When to use `@Global()`:**
+
 - Infrastructure services needed everywhere
 - Event buses or message brokers
 - Shared utilities that shouldn't be re-imported
@@ -252,6 +256,7 @@ export class DddProvidersModule {}
 ```
 
 **Pattern characteristics:**
+
 - Uses string tokens for interface-based injection
 - Imports concrete implementation modules
 - Re-exports as abstraction tokens
@@ -286,9 +291,9 @@ export const databaseConfig = (
     entities: [__dirname + '/../**/*.entity.{ts,js}'],
     migrations: [__dirname + '/../database/migrations/*.{ts,js}'],
 
-    synchronize: false,           // Always use migrations
-    migrationsRun: isTest,        // Auto-run in tests
-    dropSchema: false,            // Preserve data
+    synchronize: false, // Always use migrations
+    migrationsRun: isTest, // Auto-run in tests
+    dropSchema: false, // Preserve data
     logging: !isProduction && !isTest,
     ssl: isProduction ? { rejectUnauthorized: false } : false,
 
@@ -323,6 +328,7 @@ export default new DataSource({
 ```
 
 **Usage:**
+
 - Migration generation: `npm run migration:generate`
 - Migration execution: `npm run migration:run`
 
@@ -358,6 +364,7 @@ export class Node extends BaseEntity {
 ```
 
 **Conventions:**
+
 - Extend `BaseEntity` for common fields (id, createdAt, updatedAt)
 - Use explicit table names: `@Entity('table_name')`
 - Add indexes for frequently queried fields
@@ -375,6 +382,7 @@ Location: `.env.example` (template), `.env.local` / `.env` (runtime)
 #### Environment Detection
 
 The application determines its environment via `NODE_ENV`:
+
 - `test` - Testing environment (Jest)
 - `production` - Production deployment
 - `development` - Default development environment
@@ -433,6 +441,7 @@ ENCRYPTION_KEY=your_32_byte_hex_key
 #### Environment-Specific Behavior
 
 **Test Environment:**
+
 - Uses mock API keys: `test-key-not-used`
 - Auto-runs migrations: `migrationsRun: true`
 - Uses isolated schemas: `hollon_test_worker_1`, `hollon_test_worker_2`, etc.
@@ -440,12 +449,14 @@ ENCRYPTION_KEY=your_32_byte_hex_key
 - Disables TypeORM logging
 
 **Production Environment:**
+
 - Requires real API keys
 - Enables SSL for database: `ssl: { rejectUnauthorized: false }`
 - Info-level logging: `level: 'info'`
 - No TypeORM query logging
 
 **Development Environment:**
+
 - Uses environment variables or defaults
 - Debug-level logging: `level: 'debug'`
 - Enables TypeORM query logging
