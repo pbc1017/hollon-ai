@@ -814,7 +814,6 @@ export class ConnectedComponentsQueryDto extends BaseGraphQueryDto {
   minComponentSize?: number = 2;
 }
 
-
 /**
  * ==========================================
  * RESPONSE DTOs (for API responses)

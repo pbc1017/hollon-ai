@@ -2,7 +2,7 @@
  * Knowledge Graph Interfaces
  *
  * Barrel export for all knowledge graph interfaces, enums, and types.
- * 
+ *
  * Includes:
  * - Core data structures (IGraphNode, IGraphEdge)
  * - Graph operations (IGraphService, IGraphQuery, IGraphTraversalOptions)
