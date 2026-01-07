@@ -633,9 +633,7 @@ export class KnowledgeExtractionService {
    * // Result: { conversation: 150, document: 75, insight: 30, task: 45 }
    * ```
    */
-  async countByType(
-    organizationId: string,
-  ): Promise<Record<string, number>> {
+  async countByType(organizationId: string): Promise<Record<string, number>> {
     const result = await this.knowledgeItemRepository
       .createQueryBuilder('ki')
       .select('ki.type', 'type')
@@ -931,10 +929,7 @@ export class KnowledgeExtractionService {
   ): Promise<Array<{ period: string; count: number }>> {
     const query = this.knowledgeItemRepository
       .createQueryBuilder('ki')
-      .select(
-        `DATE_TRUNC('${interval}', ki.extracted_at)::date`,
-        'period',
-      )
+      .select(`DATE_TRUNC('${interval}', ki.extracted_at)::date`, 'period')
       .addSelect('COUNT(*)', 'count')
       .where('ki.organization_id = :organizationId', { organizationId });
 
