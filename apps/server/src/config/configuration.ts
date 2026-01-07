@@ -83,5 +83,60 @@ export default () => {
     cors: {
       origin: process.env.CORS_ORIGIN || '*',
     },
+
+    vectorSearch: {
+      enabled:
+        process.env.VECTOR_SEARCH_ENABLED === 'true' || (!isTest && !isProd),
+      embedding: {
+        provider: process.env.VECTOR_EMBEDDING_PROVIDER || 'openai',
+        model: process.env.VECTOR_EMBEDDING_MODEL,
+        dimensions: process.env.VECTOR_EMBEDDING_DIMENSIONS
+          ? parseInt(process.env.VECTOR_EMBEDDING_DIMENSIONS, 10)
+          : undefined,
+        apiKey: process.env.VECTOR_EMBEDDING_API_KEY,
+        batchSize: process.env.VECTOR_EMBEDDING_BATCH_SIZE
+          ? parseInt(process.env.VECTOR_EMBEDDING_BATCH_SIZE, 10)
+          : undefined,
+        maxRetries: process.env.VECTOR_EMBEDDING_MAX_RETRIES
+          ? parseInt(process.env.VECTOR_EMBEDDING_MAX_RETRIES, 10)
+          : undefined,
+        timeoutMs: process.env.VECTOR_EMBEDDING_TIMEOUT_MS
+          ? parseInt(process.env.VECTOR_EMBEDDING_TIMEOUT_MS, 10)
+          : undefined,
+      },
+      search: {
+        defaultMetric: process.env.VECTOR_SEARCH_DEFAULT_METRIC,
+        defaultMinSimilarity: process.env.VECTOR_SEARCH_DEFAULT_MIN_SIMILARITY
+          ? parseFloat(process.env.VECTOR_SEARCH_DEFAULT_MIN_SIMILARITY)
+          : undefined,
+        defaultLimit: process.env.VECTOR_SEARCH_DEFAULT_LIMIT
+          ? parseInt(process.env.VECTOR_SEARCH_DEFAULT_LIMIT, 10)
+          : undefined,
+        maxLimit: process.env.VECTOR_SEARCH_MAX_LIMIT
+          ? parseInt(process.env.VECTOR_SEARCH_MAX_LIMIT, 10)
+          : undefined,
+        includeScoresByDefault:
+          process.env.VECTOR_SEARCH_INCLUDE_SCORES_BY_DEFAULT === 'true',
+      },
+      index: {
+        name: process.env.VECTOR_INDEX_NAME,
+        autoCreate: process.env.VECTOR_INDEX_AUTO_CREATE === 'true',
+        lists: process.env.VECTOR_INDEX_LISTS
+          ? parseInt(process.env.VECTOR_INDEX_LISTS, 10)
+          : undefined,
+        probes: process.env.VECTOR_INDEX_PROBES
+          ? parseInt(process.env.VECTOR_INDEX_PROBES, 10)
+          : undefined,
+      },
+      performance: {
+        enableCache: process.env.VECTOR_PERFORMANCE_ENABLE_CACHE === 'true',
+        cacheTtlSeconds: process.env.VECTOR_PERFORMANCE_CACHE_TTL_SECONDS
+          ? parseInt(process.env.VECTOR_PERFORMANCE_CACHE_TTL_SECONDS, 10)
+          : undefined,
+        poolSize: process.env.VECTOR_PERFORMANCE_POOL_SIZE
+          ? parseInt(process.env.VECTOR_PERFORMANCE_POOL_SIZE, 10)
+          : undefined,
+      },
+    },
   };
 };
