@@ -14,16 +14,16 @@ export enum EdgeType {
 }
 
 @Entity('graph_edges')
-@Index(['organizationId', 'edgeType'])
-@Index(['sourceNodeId', 'targetNodeId'])
+@Index('IDX_graph_edges_organization_edge_type', ['organizationId', 'edgeType'])
+@Index('IDX_graph_edges_source_target', ['sourceNodeId', 'targetNodeId'])
 export class GraphEdge extends BaseEntity {
-  @Column({ name: 'organization_id' })
+  @Column({ name: 'organization_id', type: 'uuid' })
   organizationId: string;
 
-  @Column({ name: 'source_node_id' })
+  @Column({ name: 'source_node_id', type: 'uuid' })
   sourceNodeId: string;
 
-  @Column({ name: 'target_node_id' })
+  @Column({ name: 'target_node_id', type: 'uuid' })
   targetNodeId: string;
 
   @Column({

@@ -13,10 +13,10 @@ export enum NodeType {
 }
 
 @Entity('graph_nodes')
-@Index(['organizationId', 'nodeType'])
-@Index(['organizationId', 'label'])
+@Index('IDX_graph_nodes_organization_node_type', ['organizationId', 'nodeType'])
+@Index('IDX_graph_nodes_organization_label', ['organizationId', 'label'])
 export class GraphNode extends BaseEntity {
-  @Column({ name: 'organization_id' })
+  @Column({ name: 'organization_id', type: 'uuid' })
   organizationId: string;
 
   @Column({
@@ -26,7 +26,7 @@ export class GraphNode extends BaseEntity {
   })
   nodeType: NodeType;
 
-  @Column({ length: 255 })
+  @Column({ type: 'varchar', length: 255 })
   label: string;
 
   @Column({ type: 'text', nullable: true })
