@@ -353,7 +353,9 @@ export class TaskPoolService {
       })
       .andWhere('task.assigned_hollon_id IS NULL')
       .andWhere('task.type != :teamEpic', { teamEpic: TaskType.TEAM_EPIC }) // Phase 4: Exclude team_epic
-      .andWhere('task.affected_files && ARRAY[:...workedFiles]::text[]', {
+      // Check if affected_files (jsonb array) has any overlap with workedFiles
+      // Using ?| operator: returns true if any array element matches
+      .andWhere('task.affected_files ?| ARRAY[:...workedFiles]', {
         workedFiles: Array.from(workedFiles),
       })
       .orderBy('task.priority', 'ASC')
