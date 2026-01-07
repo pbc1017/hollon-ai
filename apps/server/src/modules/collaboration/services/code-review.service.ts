@@ -17,6 +17,7 @@ import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
 import { Role } from '../../role/entities/role.entity';
 import { HollonService } from '../../hollon/hollon.service';
 import { MessageService } from '../../message/message.service';
+import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 import {
   MessageType,
   ParticipantType,
@@ -42,6 +43,7 @@ export class CodeReviewService implements ICodeReviewService {
     private readonly hollonService: HollonService,
     private readonly messageService: MessageService,
     private readonly moduleRef: ModuleRef,
+    private readonly brainProvider: BrainProviderService,
   ) {}
 
   /**
@@ -1921,29 +1923,147 @@ _Automated review by Hollon AI_`;
 
   /**
    * Fix #27 (Part 4): Resolve conflicts with Brain Provider
-   * TODO: Implement actual Brain Provider integration when available
+   *
+   * Uses Claude Code via Brain Provider to intelligently resolve merge conflicts
+   * based on task context. This is the merge-time conflict resolution.
    */
   private async resolveConflictsWithBrainProvider(
-    _task: Task,
+    task: Task,
     conflictFiles: string[],
-    _worktreePath: string,
+    worktreePath: string,
   ): Promise<boolean> {
     try {
       this.logger.log(
-        `TODO: Integrate Brain Provider to resolve conflicts in ${conflictFiles.length} file(s)`,
+        `Requesting Brain Provider to resolve conflicts in ${conflictFiles.length} file(s)`,
       );
 
-      // TODO: Implement Brain Provider conflict resolution similar to goal-automation.listener.ts
-      // For now, return false to indicate conflicts need manual resolution
-      this.logger.warn(
-        `Brain Provider integration not yet implemented in code-review.service.ts`,
+      // Read conflict markers from each file
+      const conflictContents: Array<{ file: string; content: string }> = [];
+      for (const file of conflictFiles) {
+        try {
+          const { stdout } = await execAsync(`cat "${file}"`, {
+            cwd: worktreePath,
+          });
+          conflictContents.push({ file, content: stdout });
+        } catch (error) {
+          this.logger.warn(
+            `Failed to read conflict file ${file}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
+        }
+      }
+
+      if (conflictContents.length === 0) {
+        this.logger.error('No conflict files could be read');
+        return false;
+      }
+
+      // Build prompt for Brain Provider
+      const prompt = this.buildConflictResolutionPrompt(task, conflictContents);
+
+      // Execute Brain Provider with conflict resolution task
+      const result = await this.brainProvider.executeWithTracking(
+        {
+          prompt,
+          context: {
+            workingDirectory: worktreePath,
+            taskId: task.id,
+          },
+          options: {
+            // Allow Brain to edit files to resolve conflicts
+            timeoutMs: 300000, // 5 minutes for conflict resolution
+          },
+        },
+        {
+          organizationId: task.organizationId,
+          taskId: task.id,
+        },
       );
-      return false;
+
+      if (!result.success) {
+        this.logger.error(
+          `Brain Provider failed to resolve conflicts: ${result.output}`,
+        );
+        return false;
+      }
+
+      this.logger.log(`Brain Provider resolved conflicts successfully`);
+
+      // Stage all resolved files
+      this.logger.log(`Staging resolved files...`);
+      for (const { file } of conflictContents) {
+        await execAsync(`git add "${file}"`, { cwd: worktreePath });
+      }
+
+      this.logger.log(`All conflict files staged and ready for merge commit`);
+      return true;
     } catch (error) {
       this.logger.error(
         `Failed to resolve conflicts with Brain Provider: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
       return false;
     }
+  }
+
+  /**
+   * Build conflict resolution prompt for Brain Provider
+   *
+   * Creates a detailed prompt with task context and conflict markers
+   * to help Claude Code intelligently resolve the conflicts.
+   */
+  private buildConflictResolutionPrompt(
+    task: Task,
+    conflictContents: Array<{ file: string; content: string }>,
+  ): string {
+    const conflictSections = conflictContents
+      .map(
+        ({ file, content }) => `
+## File: ${file}
+
+\`\`\`
+${content}
+\`\`\`
+`,
+      )
+      .join('\n');
+
+    return `
+# Merge Conflict Resolution Task
+
+You need to resolve merge conflicts in the following files for task: **${task.title}**
+
+## Task Context
+- **Description**: ${task.description || 'No description provided'}
+- **Type**: ${task.type}
+
+## Instructions
+
+1. **Analyze each conflict**:
+   - <<<<<<< HEAD marks the current branch changes
+   - ======= separates the two versions
+   - >>>>>>> marks the incoming changes from main branch
+
+2. **Resolve conflicts intelligently**:
+   - Keep changes that align with the task requirements
+   - Preserve important functionality from both sides when possible
+   - Remove conflict markers (<<<<<<, =======, >>>>>>>)
+   - Ensure the code is syntactically correct
+
+3. **Edit each file** to remove conflict markers and merge the changes properly
+
+## Files with Conflicts
+
+${conflictSections}
+
+## Your Task
+
+For each file above:
+1. Analyze the conflicting changes
+2. Determine the correct resolution based on the task context
+3. Edit the file to resolve conflicts
+4. Ensure all conflict markers are removed
+5. Verify the code is valid and functional
+
+Remember: The goal is to preserve the task's intended functionality while integrating any necessary changes from the main branch.
+`.trim();
   }
 }
