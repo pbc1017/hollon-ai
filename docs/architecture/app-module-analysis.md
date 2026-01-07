@@ -9,6 +9,7 @@ This document provides a comprehensive analysis of the current `app.module.ts` s
 ## Current app.module.ts Structure
 
 ### Location
+
 `apps/server/src/app.module.ts`
 
 ### Module Organization Pattern
@@ -80,18 +81,20 @@ ConfigModule.forRoot({
   isGlobal: true,
   load: [configuration],
   envFilePath: ['../../.env.local', '../../.env'],
-})
+});
 ```
 
 ### 2. Configuration Factory Pattern
 
 The application uses a configuration factory function (`configuration.ts`) that:
+
 - Reads environment variables
 - Provides type-safe configuration objects
 - Handles environment-specific defaults
 - Supports test mode overrides
 
 **Configuration Structure:**
+
 ```typescript
 {
   nodeEnv,           // development | production | test
@@ -114,10 +117,11 @@ TypeOrmModule.forRootAsync({
   imports: [ConfigModule],
   useFactory: (configService: ConfigService) => databaseConfig(configService),
   inject: [ConfigService],
-})
+});
 ```
 
 **Pattern breakdown:**
+
 - `imports: [ConfigModule]` - Explicitly import ConfigModule (though it's global)
 - `useFactory` - Factory function that receives injected dependencies
 - `inject: [ConfigService]` - Declares ConfigService as a dependency
@@ -128,7 +132,9 @@ TypeOrmModule.forRootAsync({
 The `databaseConfig` factory demonstrates proper ConfigService usage:
 
 ```typescript
-export const databaseConfig = (configService: ConfigService): TypeOrmModuleOptions => {
+export const databaseConfig = (
+  configService: ConfigService,
+): TypeOrmModuleOptions => {
   // Access nested configuration with type safety and defaults
   const isProduction = configService.get('nodeEnv') === 'production';
   const schema = configService.get<string>('database.schema', 'hollon');
@@ -145,6 +151,7 @@ export const databaseConfig = (configService: ConfigService): TypeOrmModuleOptio
 ```
 
 **Best practices observed:**
+
 - Use `configService.get<Type>('path.to.value', defaultValue)` for type safety
 - Access nested values using dot notation
 - Provide sensible defaults
@@ -155,17 +162,20 @@ export const databaseConfig = (configService: ConfigService): TypeOrmModuleOptio
 The configuration system handles different environments:
 
 **Test mode:**
+
 - Uses mock API keys
 - Auto-runs migrations
 - Uses isolated database schemas with worker IDs
 - Sets log level to 'error'
 
 **Production mode:**
+
 - Enables SSL for database
 - Sets log level to 'info'
 - Disables TypeORM logging
 
 **Development mode:**
+
 - Uses debug log level
 - Enables TypeORM logging
 - Uses local environment files
@@ -175,41 +185,50 @@ The configuration system handles different environments:
 From `.env.example`, the following configuration categories are available:
 
 **Database:**
+
 - DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
 - DATABASE_URL (alternative connection string)
 
 **Server:**
+
 - SERVER_PORT, SERVER_HOST
 - NODE_ENV
 
 **AI/Brain Providers:**
+
 - CLAUDE_CODE_PATH
 - BRAIN_TIMEOUT_MS
 - ANTHROPIC_API_KEY
 - OPENAI_API_KEY ← **Relevant for embeddings/vector search**
 
 **Cost Management:**
+
 - DEFAULT_DAILY_COST_LIMIT_CENTS
 - DEFAULT_MONTHLY_COST_LIMIT_CENTS
 - COST_ALERT_THRESHOLD_PERCENT
 
 **Logging:**
+
 - LOG_LEVEL, LOG_FORMAT
 
 **Security:**
+
 - JWT_SECRET, ENCRYPTION_KEY
 
 **CORS:**
+
 - CORS_ORIGIN
 
 ## VectorSearchModule Current State
 
 ### Module Location
+
 `apps/server/src/modules/vector-search/vector-search.module.ts`
 
 ### Current Implementation
 
 **Module structure:**
+
 ```typescript
 @Module({
   providers: [VectorSearchService],
@@ -219,19 +238,25 @@ export class VectorSearchModule {}
 ```
 
 **Service structure:**
+
 ```typescript
 @Injectable()
 export class VectorSearchService {
   // TODO: Methods are stubbed out
-  async searchSimilarVectors(query: string, limit: number): Promise<unknown[]>
-  async indexDocument(id: string, content: string, metadata: object): Promise<void>
-  async deleteDocument(id: string): Promise<void>
+  async searchSimilarVectors(query: string, limit: number): Promise<unknown[]>;
+  async indexDocument(
+    id: string,
+    content: string,
+    metadata: object,
+  ): Promise<void>;
+  async deleteDocument(id: string): Promise<void>;
 }
 ```
 
 ### Current Usage
 
 **VectorSearchModule is currently:**
+
 - ✅ Exists in the codebase
 - ✅ Exported by VectorSearchService
 - ✅ Imported by PromptComposerModule
@@ -239,6 +264,7 @@ export class VectorSearchService {
 - ❌ Service methods are not implemented (stub/TODO)
 
 **Dependency chain:**
+
 ```
 AppModule
   └── PromptComposerModule
@@ -251,11 +277,13 @@ AppModule
 ### Option 1: Keep Current Dependency Pattern (RECOMMENDED)
 
 **Rationale:**
+
 - VectorSearchModule is already properly integrated via PromptComposerModule
 - Following NestJS best practices: modules should only import what they directly use
 - VectorSearchModule doesn't need to be global unless other modules require it
 
 **When to add to AppModule:**
+
 - If other modules beyond PromptComposerModule need VectorSearchService
 - If it needs to be available application-wide as a global service
 - If it requires app-level configuration (e.g., database entities)
@@ -280,6 +308,7 @@ If VectorSearchModule needs to be added to AppModule, place it in the "Knowledge
 ```
 
 **Rationale for placement:**
+
 - Groups related AI/knowledge services together
 - Maintains dependency order (dependencies before dependents)
 - Follows existing organizational pattern
@@ -335,8 +364,8 @@ VECTOR_SIMILARITY_THRESHOLD=0.7
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      VectorEmbedding,  // hypothetical entity
-      Document,         // hypothetical entity
+      VectorEmbedding, // hypothetical entity
+      Document, // hypothetical entity
     ]),
   ],
   providers: [VectorSearchService],
@@ -358,7 +387,7 @@ VectorSearchModule.forRootAsync({
     dimensions: configService.get<number>('vectorSearch.dimensions'),
   }),
   inject: [ConfigService],
-})
+});
 ```
 
 ## Module Dependencies Analysis
