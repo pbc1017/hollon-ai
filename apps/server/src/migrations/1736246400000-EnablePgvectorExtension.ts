@@ -75,12 +75,12 @@ export class EnablePgvectorExtension1736246400000 implements MigrationInterface 
             'and ensure the extension is properly installed.',
         );
       }
-
-
     } catch (error) {
       // Re-throw with additional context for debugging
       if (error instanceof Error) {
-        throw new Error(`Failed to enable pgvector extension: ${error.message}`);
+        throw new Error(
+          `Failed to enable pgvector extension: ${error.message}`,
+        );
       }
       throw error;
     }
@@ -108,8 +108,6 @@ export class EnablePgvectorExtension1736246400000 implements MigrationInterface 
       // CASCADE option would drop all dependent objects, but we use RESTRICT
       // to fail safely if there are dependencies
       await queryRunner.query(`DROP EXTENSION IF EXISTS vector RESTRICT`);
-
-
     } catch (error) {
       // If the drop fails due to dependencies, provide helpful error message
       if (error instanceof Error && error.message.includes('depends on')) {
@@ -122,7 +120,9 @@ export class EnablePgvectorExtension1736246400000 implements MigrationInterface 
 
       // Re-throw with context
       if (error instanceof Error) {
-        throw new Error(`Failed to disable pgvector extension: ${error.message}`);
+        throw new Error(
+          `Failed to disable pgvector extension: ${error.message}`,
+        );
       }
       throw error;
     }
