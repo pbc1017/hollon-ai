@@ -1435,7 +1435,8 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
       this.logger.warn(
         `Failed to check mergeable status for ${prUrl}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
-      throw error;
+      // Return UNKNOWN instead of throwing - allows flow to continue to CI checks
+      return 'UNKNOWN';
     }
   }
 
