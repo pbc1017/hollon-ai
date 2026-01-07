@@ -60,6 +60,7 @@ describe('TaskPoolService', () => {
   describe('pullNextTask', () => {
     it('should return null when hollon not found', async () => {
       mockHollonRepo.findOne.mockResolvedValue(null);
+      mockTaskRepo.find.mockResolvedValueOnce([]); // in-progress tasks check
 
       const result = await service.pullNextTask('invalid-hollon');
 
@@ -84,6 +85,7 @@ describe('TaskPoolService', () => {
       };
 
       mockHollonRepo.findOne.mockResolvedValue(mockHollon);
+      mockTaskRepo.find.mockResolvedValueOnce([]); // in-progress tasks check
       mockTaskRepo.find.mockResolvedValueOnce([]); // locked files
       mockTaskRepo.find.mockResolvedValueOnce([]); // review ready tasks
       mockTaskRepo.find.mockResolvedValueOnce([mockTask]); // direct tasks
@@ -134,6 +136,7 @@ describe('TaskPoolService', () => {
 
       mockHollonRepo.findOne.mockResolvedValue(mockHollon);
       mockHollonRepo.find.mockResolvedValue([]); // team hollons
+      mockTaskRepo.find.mockResolvedValueOnce([]); // in-progress tasks check
       mockTaskRepo.find.mockResolvedValueOnce([lockedTask]); // locked files
       mockTaskRepo.find.mockResolvedValueOnce([conflictingTask]); // direct tasks
       mockTaskRepo.find.mockResolvedValue([]); // all other queries
@@ -154,7 +157,8 @@ describe('TaskPoolService', () => {
 
       mockHollonRepo.findOne.mockResolvedValue(mockHollon);
       mockHollonRepo.find.mockResolvedValue([]); // team hollons
-      mockTaskRepo.find.mockResolvedValue([]); // All finds return empty
+      mockTaskRepo.find.mockResolvedValueOnce([]); // in-progress tasks check
+      mockTaskRepo.find.mockResolvedValue([]); // All other finds return empty
 
       const result = await service.pullNextTask('hollon-1');
 
