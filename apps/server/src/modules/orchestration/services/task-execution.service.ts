@@ -941,14 +941,34 @@ ${i + 1}. **${item.title}**
     task: Task,
   ): Promise<string> {
     // Phase 3.12: Reuse existing worktree if already set (subtasks from temporary hollon)
-    // Fix #11: Verify inherited path actually exists on disk
+    // Fix #11 & #22: Verify inherited path exists AND is a valid worktree (not main repo)
     if (task.workingDirectory) {
       const exists = await this.worktreeExists(task.workingDirectory);
       if (exists) {
-        this.logger.log(
-          `Reusing inherited worktree for subtask ${task.id.slice(0, 8)}: ${task.workingDirectory}`,
-        );
-        return task.workingDirectory;
+        // Fix #22: Validate it's actually a worktree path, not the main repository
+        // Get git root to validate against
+        let gitRoot: string;
+        try {
+          const { stdout } = await execAsync('git rev-parse --show-toplevel', {
+            cwd: project.workingDirectory,
+          });
+          gitRoot = stdout.trim();
+        } catch {
+          gitRoot = project.workingDirectory;
+        }
+
+        if (this.isValidWorktreePath(task.workingDirectory, gitRoot)) {
+          this.logger.log(
+            `Reusing inherited worktree for subtask ${task.id.slice(0, 8)}: ${task.workingDirectory}`,
+          );
+          return task.workingDirectory;
+        } else {
+          this.logger.error(
+            `CRITICAL FIX #22: task.workingDirectory points to main repository, not a worktree! ` +
+              `Path: ${task.workingDirectory}. Clearing and creating new worktree.`,
+          );
+          await this.taskRepo.update(task.id, { workingDirectory: null });
+        }
       } else {
         this.logger.warn(
           `Fix #11: Inherited worktree path does not exist: ${task.workingDirectory}. Clearing stale reference and creating new worktree.`,
@@ -959,7 +979,7 @@ ${i + 1}. **${item.title}**
 
     // Phase 4.1 Fix #1: If subtask has no worktree, check parent's worktree dynamically
     // This handles cases where subtask was created before parent started
-    // Fix #11: Verify parent's path exists on disk before inheriting
+    // Fix #11 & #22: Verify parent's path exists on disk AND is a valid worktree before inheriting
     if (task.parentTaskId) {
       const parentTask = await this.taskRepo.findOne({
         where: { id: task.parentTaskId },
@@ -969,14 +989,35 @@ ${i + 1}. **${item.title}**
           parentTask.workingDirectory,
         );
         if (parentExists) {
-          this.logger.log(
-            `Subtask ${task.id.slice(0, 8)} inheriting parent's worktree at execution time: ${parentTask.workingDirectory}`,
-          );
-          // Update task's workingDirectory for future reference
-          await this.taskRepo.update(task.id, {
-            workingDirectory: parentTask.workingDirectory,
-          });
-          return parentTask.workingDirectory;
+          // Fix #22: Validate parent's path is a worktree, not main repo
+          let gitRoot: string;
+          try {
+            const { stdout } = await execAsync(
+              'git rev-parse --show-toplevel',
+              {
+                cwd: project.workingDirectory,
+              },
+            );
+            gitRoot = stdout.trim();
+          } catch {
+            gitRoot = project.workingDirectory;
+          }
+
+          if (this.isValidWorktreePath(parentTask.workingDirectory, gitRoot)) {
+            this.logger.log(
+              `Subtask ${task.id.slice(0, 8)} inheriting parent's worktree at execution time: ${parentTask.workingDirectory}`,
+            );
+            // Update task's workingDirectory for future reference
+            await this.taskRepo.update(task.id, {
+              workingDirectory: parentTask.workingDirectory,
+            });
+            return parentTask.workingDirectory;
+          } else {
+            this.logger.error(
+              `CRITICAL FIX #22: Parent task's workingDirectory points to main repository! ` +
+                `Path: ${parentTask.workingDirectory}. Will create new worktree.`,
+            );
+          }
         } else {
           this.logger.warn(
             `Fix #11: Parent's worktree path does not exist: ${parentTask.workingDirectory}. Will create new worktree.`,
@@ -1276,6 +1317,22 @@ ${i + 1}. **${item.title}**
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Fix #22: Validate that a path is actually a worktree, not the main repository
+   * Worktree paths must be inside .git-worktrees/ directory
+   */
+  private isValidWorktreePath(worktreePath: string, gitRoot: string): boolean {
+    const normalizedPath = path.resolve(worktreePath);
+    const normalizedRoot = path.resolve(gitRoot);
+    const worktreesDir = path.join(normalizedRoot, '.git-worktrees');
+
+    // Path must be inside .git-worktrees/ directory, not the main repo
+    return (
+      normalizedPath.startsWith(worktreesDir) &&
+      normalizedPath !== normalizedRoot
+    );
   }
 
   /**
