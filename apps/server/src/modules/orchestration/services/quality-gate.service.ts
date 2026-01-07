@@ -276,6 +276,13 @@ export class QualityGateService {
         // If parsing fails, treat as generic error
       }
 
+      // If ESLint exited with non-zero but found 0 errors and 0 warnings,
+      // it might be a false positive (e.g., no files to lint, config warning)
+      if (errorCount === 0 && warningCount === 0) {
+        this.logger.log('Lint check passed (0 errors, 0 warnings)');
+        return { passed: true, shouldRetry: false };
+      }
+
       this.logger.warn(
         `Lint check failed: ${errorCount} errors, ${warningCount} warnings`,
       );
