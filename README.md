@@ -42,6 +42,129 @@ Hollon-AI는 여러 AI 에이전트가 조직 구조 안에서 자율적으로 �
 - **RAG (Retrieval-Augmented Generation)**: 문서 임베딩과 벡터 검색을 활용한 지식 기반 AI 응답
 - **지식 추출 및 저장**: AI가 수행한 태스크와 학습 내용을 벡터 형태로 저장하여 재사용
 
+## pgvector 통합
+
+Hollon-AI는 PostgreSQL의 pgvector 확장을 사용하여 벡터 유사도 검색 기능을 제공합니다. 이를 통해 시맨틱 검색, 지식 검색, AI 기반 추천 등의 고급 기능을 구현할 수 있습니다.
+
+### 개요
+
+pgvector는 PostgreSQL용 오픈소스 벡터 유사도 검색 확장으로, AI 임베딩 벡터를 저장하고 효율적으로 검색할 수 있게 해줍니다.
+
+**주요 이점**:
+
+- **통합된 데이터베이스**: 관계형 데이터와 벡터 데이터를 하나의 데이터베이스에서 관리
+- **고성능 검색**: HNSW 및 IVFFlat 인덱스를 통한 빠른 유사도 검색
+- **확장 가능**: 수백만 개의 벡터를 효율적으로 처리
+- **오픈소스**: MIT 라이선스로 무료 사용 가능
+
+### 주요 기능
+
+#### 1. 벡터 유사도 검색
+
+의미 기반 검색을 통해 키워드 매칭을 넘어선 지능형 검색을 제공합니다:
+
+- **시맨틱 검색**: 의미가 유사한 문서 및 콘텐츠 검색
+- **관계 발견**: 지식 그래프에서 관련 엔티티 및 개념 식별
+- **콘텐츠 중복 제거**: 벡터 유사도를 사용한 중복 콘텐츠 감지
+
+#### 2. 임베딩 저장
+
+다양한 차원의 AI 임베딩을 효율적으로 저장:
+
+- **고차원 벡터 지원**: 최대 2,000차원까지 지원
+- **다양한 임베딩 모델**: OpenAI, Cohere, 커스텀 모델 등
+- **메타데이터 통합**: 벡터와 관계형 데이터를 함께 저장
+
+#### 3. RAG (Retrieval-Augmented Generation)
+
+벡터 검색을 활용한 지식 기반 AI 응답 생성:
+
+- **문맥 검색**: 관련 문서 및 지식을 벡터 검색으로 찾기
+- **향상된 응답**: 검색된 컨텍스트를 바탕으로 정확한 AI 응답 생성
+- **지식 재사용**: 과거 태스크 및 학습 내용을 재활용
+
+### 사용 예시
+
+#### 문서 검색 예시
+
+```typescript
+// Document 엔티티에서 유사한 문서 검색
+const searchEmbedding = await generateEmbedding(query);
+
+const similarDocuments = await dataSource
+  .getRepository(Document)
+  .createQueryBuilder('doc')
+  .select(['doc.id', 'doc.title', 'doc.content'])
+  .addSelect(`doc.embedding <=> :embedding`, 'distance')
+  .setParameter('embedding', JSON.stringify(searchEmbedding))
+  .orderBy('distance', 'ASC')
+  .limit(10)
+  .getRawMany();
+```
+
+#### 지식 그래프 검색 예시
+
+```typescript
+// Knowledge Graph에서 관련 노드 찾기
+const relatedNodes = await entityManager.query(
+  `
+  SELECT id, name, type, embedding <-> $1::vector as distance
+  FROM graph_nodes
+  WHERE type = $2
+  ORDER BY distance
+  LIMIT 5
+  `,
+  [embedding, 'concept']
+);
+```
+
+### 전제 조건
+
+pgvector를 사용하기 위한 시스템 요구사항:
+
+- **PostgreSQL**: 16 이상 (현재 프로젝트는 PostgreSQL 16 사용)
+- **pgvector 확장**: 0.5.0 이상 (Docker 이미지에 포함)
+- **Docker**: 개발 환경에서 `pgvector/pgvector:pg16` 이미지 사용
+- **충분한 메모리**: 벡터 인덱스 빌드를 위한 적절한 RAM (최소 2GB 권장)
+
+### 설정
+
+프로젝트는 이미 pgvector가 설정되어 있습니다:
+
+1. **Docker 이미지**: `pgvector/pgvector:pg16` 사용 (확장 프리인스톨)
+2. **데이터베이스 마이그레이션**: InitialSchema 마이그레이션에서 pgvector 확장 활성화
+3. **엔티티 설정**: Document 및 Knowledge Graph 엔티티에 vector 컬럼 포함
+
+개발 환경에서 시작하기:
+
+```bash
+# Docker 서비스 시작 (PostgreSQL with pgvector)
+pnpm docker:up
+
+# 데이터베이스 마이그레이션 실행
+pnpm db:migrate
+```
+
+### 관련 문서
+
+pgvector 통합에 대한 자세한 내용:
+
+- [pgvector 마이그레이션 가이드](docs/migrations/pgvector-migration.md) - 설정 및 스키마 변경 상세
+- [pgvector 모범 사례](docs/pgvector-best-practices.md) - 최적화 및 인덱싱 전략
+- [pgvector TypeORM 통합](docs/pgvector-typeorm-integration.md) - TypeORM 패턴 및 사용법
+- [pgvector 공식 문서](https://github.com/pgvector/pgvector) - 확장 기능 및 API 레퍼런스
+
+### 성능 최적화
+
+프로덕션 환경에서 최적의 성능을 위한 권장사항:
+
+- **인덱스 사용**: 대량의 벡터 데이터에는 HNSW 또는 IVFFlat 인덱스 생성
+- **적절한 차원**: 임베딩 모델에 맞는 벡터 차원 사용 (예: OpenAI text-embedding-ada-002는 1536차원)
+- **배치 작업**: 대량의 벡터 삽입 시 배치 처리 사용
+- **메모리 설정**: PostgreSQL의 `shared_buffers` 및 `work_mem` 적절히 조정
+
+자세한 성능 튜닝 가이드는 [pgvector 모범 사례](docs/pgvector-best-practices.md)를 참조하세요.
+
 ## 빠른 시작
 
 ### 필수 요구사항
