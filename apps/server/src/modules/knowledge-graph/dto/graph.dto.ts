@@ -813,3 +813,266 @@ export class ConnectedComponentsQueryDto extends BaseGraphQueryDto {
   @Min(2)
   minComponentSize?: number = 2;
 }
+
+
+/**
+ * ==========================================
+ * RESPONSE DTOs (for API responses)
+ * ==========================================
+ */
+
+/**
+ * Node Response DTO
+ *
+ * Returned when a single node is fetched.
+ */
+export class NodeResponseDto {
+  id: string;
+  name: string;
+  type: NodeType;
+  description?: string | null;
+  organizationId: string;
+  properties: Record<string, any>;
+  tags: string[];
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Edge Response DTO
+ *
+ * Returned when a single edge is fetched.
+ */
+export class EdgeResponseDto {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  type: RelationshipType;
+  organizationId: string;
+  weight: number;
+  properties: Record<string, any>;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  confidence?: number;
+}
+
+/**
+ * Paginated Nodes Response DTO
+ *
+ * Returned when querying multiple nodes with pagination.
+ */
+export class PaginatedNodesResponseDto {
+  items: NodeResponseDto[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
+/**
+ * Paginated Edges Response DTO
+ *
+ * Returned when querying multiple edges with pagination.
+ */
+export class PaginatedEdgesResponseDto {
+  items: EdgeResponseDto[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
+/**
+ * Graph Statistics Response DTO
+ *
+ * Returned when querying graph statistics.
+ */
+export class GraphStatisticsResponseDto {
+  totalNodes: number;
+  totalEdges: number;
+  nodesByType: Record<NodeType, number>;
+  edgesByType: Record<RelationshipType, number>;
+  averageNodeDegree: number;
+  graphDensity: number;
+  connectedComponentCount: number;
+}
+
+/**
+ * Node Degree Response DTO
+ *
+ * Contains degree information for a node.
+ */
+export class NodeDegreeResponseDto {
+  nodeId: string;
+  inDegree: number;
+  outDegree: number;
+  totalDegree: number;
+}
+
+/**
+ * Subgraph Response DTO
+ *
+ * Contains nodes and edges for a subgraph.
+ */
+export class SubgraphResponseDto {
+  nodes: NodeResponseDto[];
+  edges: EdgeResponseDto[];
+  rootNodeId: string;
+  depth: number;
+  totalNodes: number;
+  totalEdges: number;
+}
+
+/**
+ * Path Response DTO
+ *
+ * Contains a path of nodes between two points.
+ */
+export class PathResponseDto {
+  nodes: NodeResponseDto[];
+  edges: EdgeResponseDto[];
+  length: number;
+  totalWeight: number;
+}
+
+/**
+ * Bulk Operation Result Response DTO
+ *
+ * Results from bulk operations.
+ */
+export class BulkOperationResultDto<T> {
+  successful: T[];
+  failed: Array<{
+    index: number;
+    item: any;
+    error: string;
+  }>;
+  totalProcessed: number;
+  successCount: number;
+  failureCount: number;
+}
+
+/**
+ * Graph Integrity Report DTO
+ *
+ * Results of graph validation.
+ */
+export class GraphIntegrityReportDto {
+  valid: boolean;
+  errors: Array<{
+    type: string;
+    message: string;
+    details?: Record<string, any>;
+  }>;
+  warnings: Array<{
+    type: string;
+    message: string;
+    details?: Record<string, any>;
+  }>;
+  checkedAt: Date;
+  organizationId: string;
+}
+
+/**
+ * Duplicate Detection Result DTO
+ *
+ * Results of duplicate detection.
+ */
+export class DuplicateDetectionResultDto {
+  primaryNode: NodeResponseDto;
+  duplicates: NodeResponseDto[];
+  similarityScores: number[];
+  detectionMethod: string;
+  confidence: number;
+  suggestedStrategy: string;
+}
+
+/**
+ * Export Subgraph Response DTO
+ *
+ * Exported subgraph with metadata.
+ */
+export class ExportSubgraphResponseDto {
+  nodes: NodeResponseDto[];
+  edges: EdgeResponseDto[];
+  metadata: {
+    exportedAt: Date;
+    rootNodeId: string;
+    depth: number;
+    nodeCount: number;
+    edgeCount: number;
+  };
+}
+
+/**
+ * Import Result DTO
+ *
+ * Results of import operation.
+ */
+export class ImportResultDto {
+  importedNodeCount: number;
+  importedEdgeCount: number;
+  nodeIdMapping: Record<string, string>;
+  importedAt: Date;
+  organizationId: string;
+}
+
+/**
+ * Tag List Response DTO
+ *
+ * List of all tags in the graph.
+ */
+export class TagListResponseDto {
+  tags: string[];
+  totalCount: number;
+  organizationId: string;
+}
+
+/**
+ * Property Key Response DTO
+ *
+ * Information about property keys in the graph.
+ */
+export class PropertyKeyResponseDto {
+  propertyKey: string;
+  nodeCount: number;
+  edgeCount: number;
+  sampleValues: any[];
+}
+
+/**
+ * Update Operation Response DTO
+ *
+ * Response when recording an update operation.
+ */
+export class UpdateOperationResponseDto {
+  id: string;
+  type: UpdateOperationType;
+  timestamp: Date;
+  organizationId: string;
+  status: 'pending' | 'applied' | 'failed';
+  errorMessage?: string;
+}
+
+/**
+ * Health Check Response DTO
+ *
+ * Response from health check endpoint.
+ */
+export class HealthCheckResponseDto {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  timestamp: Date;
+  checks: {
+    database: boolean;
+    storage: boolean;
+    cache?: boolean;
+  };
+  uptime: number;
+  version: string;
+}

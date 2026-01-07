@@ -453,7 +453,7 @@ export interface IGraphPath {
  */
 export interface IGraphAnalytics {
   /** Node degree statistics */
-  nodeDegrees: Map<string, { inDegree: number; outDegree: number }>;
+  nodeDegrees: Record<string, { inDegree: number; outDegree: number }>;
   /** Most connected nodes */
   hubs: IGraphNode[];
   /** Isolated nodes (no connections) */
@@ -518,6 +518,78 @@ export interface IGraphConfiguration {
   enableAnalytics: boolean;
   /** Integration points with other modules */
   integrationPoints: IGraphIntegrationPoint[];
+}
+
+/**
+ * API Response Wrappers
+ */
+
+/**
+ * Standard API Response Wrapper Interface
+ *
+ * Wraps all API responses with metadata.
+ */
+export interface IApiResponse<T> {
+  /** Response status */
+  success: boolean;
+  /** HTTP status code */
+  statusCode: number;
+  /** Response message */
+  message: string;
+  /** Response data */
+  data?: T;
+  /** Error details if applicable */
+  error?: {
+    code: string;
+    message: string;
+    details?: Record<string, any>;
+  };
+  /** Timestamp of response */
+  timestamp: Date;
+}
+
+/**
+ * Paginated API Response Interface
+ *
+ * Wraps paginated responses.
+ */
+export interface IPaginatedResponse<T> {
+  /** Data items for current page */
+  items: T[];
+  /** Total number of items across all pages */
+  total: number;
+  /** Current page number */
+  page: number;
+  /** Items per page */
+  pageSize: number;
+  /** Total number of pages */
+  totalPages: number;
+  /** Has next page */
+  hasNextPage: boolean;
+  /** Has previous page */
+  hasPreviousPage: boolean;
+}
+
+/**
+ * Bulk Operation Result Interface
+ *
+ * Contains results of bulk operations.
+ */
+export interface IBulkOperationResult<T> {
+  /** Successfully processed items */
+  successful: T[];
+  /** Failed operations with error details */
+  failed: Array<{
+    index: number;
+    item: any;
+    error: string;
+  }>;
+  /** Total processed */
+  totalProcessed: number;
+  /** Number of successes */
+  successCount: number;
+  /** Number of failures */
+  failureCount: number;
 }
 
 /**
