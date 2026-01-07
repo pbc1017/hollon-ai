@@ -24,6 +24,7 @@ import {
 import { CreatePullRequestDto } from '../dto/create-pull-request.dto';
 import { ReviewSubmissionDto } from '../dto/review-submission.dto';
 import { ICodeReviewService } from '../domain/code-review-service.interface';
+import * as path from 'path';
 
 @Injectable()
 export class CodeReviewService implements ICodeReviewService {
@@ -202,7 +203,7 @@ export class CodeReviewService implements ICodeReviewService {
   async mergePullRequest(prId: string): Promise<void> {
     const pr = await this.prRepo.findOne({
       where: { id: prId },
-      relations: ['task'],
+      relations: ['task', 'task.assignedHollon'],
     });
 
     if (!pr) {
@@ -264,6 +265,93 @@ export class CodeReviewService implements ICodeReviewService {
           `Could not verify CI status: ${error instanceof Error ? error.message : 'Unknown'}`,
         );
         // Continue with merge if CI check command fails (might be no CI configured)
+      }
+    }
+
+    // Fix #27 (Part 4): Final mergeable check before merge (second timing point)
+    if (pr.prUrl && process.env.NODE_ENV !== 'test') {
+      this.logger.log(
+        `Performing final mergeable check before merge: ${pr.prUrl}`,
+      );
+
+      try {
+        const mergeableStatus = await this.checkPRMergeable(pr.prUrl);
+
+        if (mergeableStatus === 'CONFLICTING') {
+          this.logger.warn(
+            `PR #${pr.prNumber} has merge conflicts before merge, attempting auto-resolution...`,
+          );
+
+          // Attempt auto-conflict resolution with Brain Provider
+          const resolved = await this.autoResolveConflictsBeforeMerge(
+            pr.task,
+            pr,
+          );
+
+          if (!resolved) {
+            // Conflict resolution failed
+            this.logger.error(
+              `Failed to resolve merge conflicts for PR #${pr.prNumber} before merge`,
+            );
+
+            pr.status = PullRequestStatus.CHANGES_REQUESTED;
+            pr.reviewComments = pr.reviewComments
+              ? `${pr.reviewComments}\n\n[MERGE CONFLICT] Merge conflicts detected before merge. Automatic resolution failed. Please resolve manually.`
+              : '[MERGE CONFLICT] Merge conflicts detected before merge. Automatic resolution failed. Please resolve manually.';
+            await this.prRepo.save(pr);
+
+            pr.task.status = TaskStatus.READY;
+            await this.taskRepo.save(pr.task);
+
+            this.logger.log(
+              `PR ${prId} marked as CHANGES_REQUESTED, Task ${pr.taskId} back to READY for manual conflict resolution`,
+            );
+
+            throw new Error(
+              'Merge conflicts detected and automatic resolution failed. Manual intervention required.',
+            );
+          }
+
+          // Conflict resolution succeeded - request manager re-review
+          this.logger.log(
+            `✅ Conflicts resolved for PR #${pr.prNumber} before merge. Requesting manager re-review...`,
+          );
+
+          pr.status = PullRequestStatus.READY_FOR_REVIEW;
+          pr.reviewComments = pr.reviewComments
+            ? `${pr.reviewComments}\n\n[AUTO-RESOLVED] Merge conflicts were automatically resolved by Brain Provider before merge. Please review the resolution before approving.`
+            : '[AUTO-RESOLVED] Merge conflicts were automatically resolved by Brain Provider before merge. Please review the resolution before approving.';
+          await this.prRepo.save(pr);
+
+          // TODO: Send notification to manager when MessageService.sendNotification is available
+          this.logger.log(
+            `Manager notification: PR #${pr.prNumber} conflicts auto-resolved by Brain Provider`,
+          );
+
+          this.logger.log(
+            `PR ${prId} marked as READY_FOR_REVIEW for manager re-review after conflict resolution`,
+          );
+
+          throw new Error(
+            'Merge conflicts were automatically resolved. Manager re-review required before merge.',
+          );
+        }
+
+        this.logger.log(
+          `Final mergeable check passed for PR ${prId}: ${mergeableStatus}`,
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          (error.message.includes('Merge conflicts') ||
+            error.message.includes('Manager re-review'))
+        ) {
+          throw error; // Re-throw our custom errors
+        }
+        this.logger.warn(
+          `Could not verify mergeable status: ${error instanceof Error ? error.message : 'Unknown'}`,
+        );
+        // Continue with merge if mergeable check fails
       }
     }
 
@@ -585,7 +673,7 @@ export class CodeReviewService implements ICodeReviewService {
 
     // Clear any blocked reason since we're completing it
     if (parentTask.metadata) {
-      const metadata = parentTask.metadata as Record<string, any>;
+      const metadata = parentTask.metadata as Record<string, unknown>;
       delete metadata.blockedReason;
       delete metadata.escalatedAt;
       parentTask.metadata = metadata;
@@ -1596,6 +1684,266 @@ _Automated review by Hollon AI_`;
       } else {
         this.logger.warn(`Failed to cleanup worktree: ${err.message}`);
       }
+    }
+  }
+
+  /**
+   * Fix #27 (Part 4): Check PR mergeable status
+   */
+  private async checkPRMergeable(prUrl: string): Promise<string> {
+    try {
+      const { stdout } = await execAsync(
+        `gh pr view ${prUrl} --json mergeable,mergeStateStatus`,
+      );
+
+      const prStatus = JSON.parse(stdout.trim()) as {
+        mergeable: string;
+        mergeStateStatus: string;
+      };
+
+      // mergeable: MERGEABLE, CONFLICTING, UNKNOWN
+      // mergeStateStatus: CLEAN, DIRTY, UNSTABLE, UNKNOWN, etc.
+      const mergeable = prStatus.mergeable?.toUpperCase() || 'UNKNOWN';
+      const mergeStateStatus =
+        prStatus.mergeStateStatus?.toUpperCase() || 'UNKNOWN';
+
+      this.logger.debug(
+        `PR ${prUrl} mergeable: ${mergeable}, mergeStateStatus: ${mergeStateStatus}`,
+      );
+
+      // DIRTY or CONFLICTING means there are merge conflicts
+      if (mergeable === 'CONFLICTING' || mergeStateStatus === 'DIRTY') {
+        return 'CONFLICTING';
+      }
+
+      // MERGEABLE and CLEAN means no conflicts
+      if (mergeable === 'MERGEABLE' && mergeStateStatus === 'CLEAN') {
+        return 'MERGEABLE';
+      }
+
+      // Return the more specific state
+      return mergeStateStatus !== 'UNKNOWN' ? mergeStateStatus : mergeable;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to check mergeable status for ${prUrl}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Fix #27 (Part 4): Get conflicting files
+   */
+  private async getConflictingFiles(worktreePath: string): Promise<string[]> {
+    try {
+      const { stdout } = await execAsync(
+        `git diff --name-only --diff-filter=U`,
+        { cwd: worktreePath },
+      );
+      return stdout
+        .trim()
+        .split('\n')
+        .filter((file) => file.length > 0);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Fix #27 (Part 4): Auto-resolve merge conflicts before merge (second timing point)
+   */
+  private async autoResolveConflictsBeforeMerge(
+    task: Task,
+    pr: TaskPullRequest,
+  ): Promise<boolean> {
+    try {
+      this.logger.log(
+        `Attempting to resolve conflicts before merge for PR #${pr.prNumber}`,
+      );
+
+      // 1. Construct worktree path (similar to goal-automation.listener.ts logic)
+      let worktreePath = task.workingDirectory;
+      if (!worktreePath) {
+        if (!task.assignedHollonId) {
+          this.logger.error(
+            `Task ${task.id} has no assignedHollonId, cannot construct worktree path`,
+          );
+          return false;
+        }
+
+        const hollonShortId = task.assignedHollonId.split('-')[0];
+        const taskShortId = task.id.split('-')[0];
+        const gitRoot = await execAsync('git rev-parse --show-toplevel').then(
+          (r) => r.stdout.trim(),
+        );
+        worktreePath = path.join(
+          gitRoot,
+          '.git-worktrees',
+          `hollon-${hollonShortId}`,
+          `task-${taskShortId}`,
+        );
+
+        this.logger.warn(
+          `Task ${task.id} has no workingDirectory, constructed path: ${worktreePath}`,
+        );
+      }
+
+      // 2. Check if worktree exists, recreate if needed
+      let worktreeExists = false;
+      try {
+        await execAsync(`test -d "${worktreePath}"`);
+        worktreeExists = true;
+      } catch {
+        this.logger.warn(
+          `Worktree path ${worktreePath} does not exist, attempting to recreate...`,
+        );
+
+        try {
+          const { stdout: gitRootOutput } = await execAsync(
+            'git rev-parse --show-toplevel',
+            { cwd: path.dirname(worktreePath) },
+          );
+          const gitRoot = gitRootOutput.trim();
+          const branchName = pr.branchName;
+
+          if (!branchName) {
+            this.logger.error(
+              `PR #${pr.prNumber} has no branch name, cannot recreate worktree`,
+            );
+            return false;
+          }
+
+          await execAsync(`mkdir -p "${path.dirname(worktreePath)}"`);
+          await execAsync(
+            `git worktree add "${worktreePath}" "${branchName}"`,
+            { cwd: gitRoot },
+          );
+
+          this.logger.log(
+            `✅ Successfully recreated worktree at ${worktreePath}`,
+          );
+          worktreeExists = true;
+        } catch (recreateError) {
+          this.logger.error(
+            `Failed to recreate worktree: ${recreateError instanceof Error ? recreateError.message : 'Unknown error'}`,
+          );
+          return false;
+        }
+      }
+
+      if (!worktreeExists) {
+        this.logger.error(`Unable to establish worktree at ${worktreePath}`);
+        return false;
+      }
+
+      // 3. Fetch latest main and rebase
+      this.logger.log(`Fetching latest main branch...`);
+      await execAsync(`git fetch origin main`, { cwd: worktreePath });
+
+      this.logger.log(`Attempting rebase on origin/main...`);
+      try {
+        await execAsync(`git rebase origin/main`, { cwd: worktreePath });
+        this.logger.log(`✅ Rebase successful without conflicts`);
+
+        // Force push
+        await execAsync(`git push --force-with-lease`, { cwd: worktreePath });
+
+        this.logger.log(
+          `✅ Successfully resolved conflicts for PR #${pr.prNumber} before merge`,
+        );
+        return true;
+      } catch {
+        // Rebase failed - check for conflicts
+        const conflictFiles = await this.getConflictingFiles(worktreePath);
+
+        if (conflictFiles.length === 0) {
+          const { stdout: statusOutput } = await execAsync(`git status`, {
+            cwd: worktreePath,
+          });
+          this.logger.error(
+            `Rebase failed but no conflicts detected: ${statusOutput}`,
+          );
+          await execAsync(`git rebase --abort`, { cwd: worktreePath });
+          return false;
+        }
+
+        this.logger.log(
+          `Conflicts detected, calling Brain Provider to resolve...`,
+        );
+        this.logger.log(`Conflicting files: ${conflictFiles.join(', ')}`);
+
+        // Use Brain Provider to resolve conflicts (reusing same logic as goal-automation.listener.ts)
+        const resolved = await this.resolveConflictsWithBrainProvider(
+          task,
+          conflictFiles,
+          worktreePath,
+        );
+
+        if (!resolved) {
+          this.logger.error(
+            `Brain Provider failed to resolve conflicts - aborting rebase`,
+          );
+          await execAsync(`git rebase --abort`, { cwd: worktreePath });
+          return false;
+        }
+
+        // Conflicts resolved - continue rebase
+        this.logger.log(`Continuing rebase after conflict resolution...`);
+        await execAsync(`git rebase --continue`, { cwd: worktreePath });
+
+        // Force push
+        await execAsync(`git push --force-with-lease`, { cwd: worktreePath });
+
+        this.logger.log(
+          `✅ Successfully resolved conflicts and updated PR #${pr.prNumber} before merge`,
+        );
+        return true;
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to resolve conflicts before merge for PR #${pr.prNumber}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+
+      // Cleanup: abort any ongoing rebase
+      try {
+        if (task.workingDirectory) {
+          await execAsync(`git rebase --abort`, {
+            cwd: task.workingDirectory,
+          });
+        }
+      } catch {
+        // Ignore cleanup errors
+      }
+
+      return false;
+    }
+  }
+
+  /**
+   * Fix #27 (Part 4): Resolve conflicts with Brain Provider
+   * TODO: Implement actual Brain Provider integration when available
+   */
+  private async resolveConflictsWithBrainProvider(
+    _task: Task,
+    conflictFiles: string[],
+    _worktreePath: string,
+  ): Promise<boolean> {
+    try {
+      this.logger.log(
+        `TODO: Integrate Brain Provider to resolve conflicts in ${conflictFiles.length} file(s)`,
+      );
+
+      // TODO: Implement Brain Provider conflict resolution similar to goal-automation.listener.ts
+      // For now, return false to indicate conflicts need manual resolution
+      this.logger.warn(
+        `Brain Provider integration not yet implemented in code-review.service.ts`,
+      );
+      return false;
+    } catch (error) {
+      this.logger.error(
+        `Failed to resolve conflicts with Brain Provider: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      return false;
     }
   }
 }
