@@ -43,20 +43,28 @@ export class TaskPoolService {
 
     // Guard: Prevent pulling new tasks if hollon already has IN_PROGRESS tasks
     // This prevents task accumulation when Brain Provider hangs/timeouts
-    const inProgressCount = await this.taskRepo.count({
+    // Exception: delegated tasks (tasks with subtasks) don't count as "actively working"
+    // because the parent hollon is idle waiting for subtask completion
+    const inProgressTasks = await this.taskRepo.find({
       where: {
         assignedHollonId: hollonId,
         status: TaskStatus.IN_PROGRESS,
       },
+      relations: ['subtasks'],
     });
 
-    if (inProgressCount > 0) {
+    // Filter out delegated tasks (those with subtasks)
+    const activeInProgressTasks = inProgressTasks.filter(
+      (task) => !task.subtasks || task.subtasks.length === 0,
+    );
+
+    if (activeInProgressTasks.length > 0) {
       this.logger.warn(
-        `Hollon ${hollonId} already has ${inProgressCount} task(s) in progress - cannot pull new task`,
+        `Hollon ${hollonId} already has ${activeInProgressTasks.length} active task(s) in progress - cannot pull new task`,
       );
       return {
         task: null,
-        reason: `Already has ${inProgressCount} task(s) in progress`,
+        reason: `Already has ${activeInProgressTasks.length} active task(s) in progress`,
       };
     }
 
