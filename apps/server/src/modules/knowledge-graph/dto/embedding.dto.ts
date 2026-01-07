@@ -1,248 +1,608 @@
 import {
   IsString,
   IsOptional,
+  IsUUID,
   IsArray,
-  IsNumber,
   IsEnum,
+  IsNumber,
   IsInt,
   Min,
   Max,
+  IsNotEmpty,
   ArrayMinSize,
   ArrayMaxSize,
-  MaxLength,
+  IsObject,
   ValidateNested,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import {
+  EmbeddingSourceType,
+  EmbeddingModelType,
+} from '../../../entities/vector-embedding.entity';
 
 /**
- * Enum defining common embedding model providers
- */
-export enum EmbeddingProvider {
-  OPENAI = 'openai',
-  COHERE = 'cohere',
-  HUGGINGFACE = 'huggingface',
-  CUSTOM = 'custom',
-}
-
-/**
- * Enum defining normalization methods for embeddings
- */
-export enum NormalizationMethod {
-  /** L2 normalization (unit vector) */
-  L2 = 'l2',
-  /** Min-max normalization */
-  MIN_MAX = 'min_max',
-  /** No normalization */
-  NONE = 'none',
-}
-
-/**
- * DTO for embedding metadata
- * Contains information about the embedding model and generation process
- */
-export class EmbeddingMetadataDto {
-  @IsOptional()
-  @IsEnum(EmbeddingProvider)
-  provider?: EmbeddingProvider;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  modelName?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  modelVersion?: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(4096)
-  dimension?: number;
-
-  @IsOptional()
-  @IsEnum(NormalizationMethod)
-  normalization?: NormalizationMethod;
-
-  @IsOptional()
-  @Type(() => Date)
-  generatedAt?: Date;
-
-  @IsOptional()
-  additionalMetadata?: Record<string, any>;
-}
-
-/**
- * DTO for embedding vectors
- * Represents a single embedding with its vector data and metadata
+ * DTO for creating and managing vector embeddings
+ *
+ * Used for:
+ * - Storing pre-computed embeddings
+ * - Requesting embedding generation
+ * - Updating existing embeddings
+ *
+ * @example
+ * {
+ *   "embedding": [0.123, -0.456, 0.789, ...], // 1536 dimensions
+ *   "sourceType": "graph_node",
+ *   "sourceId": "123e4567-e89b-12d3-a456-426614174000",
+ *   "modelType": "openai_small_3",
+ *   "dimensions": 1536,
+ *   "content": "AI and machine learning concepts for knowledge representation",
+ *   "organizationId": "123e4567-e89b-12d3-a456-426614174000",
+ *   "metadata": {
+ *     "embeddingModelVersion": "text-embedding-3-small",
+ *     "tokenCount": 12
+ *   }
+ * }
  */
 export class EmbeddingDto {
   /**
-   * The embedding vector as an array of floating-point numbers
-   * Typical dimensions: 384, 768, 1536, 3072, 4096
+   * Vector embedding as array of numbers
+   *
+   * @validation
+   * - Required field
+   * - Must be array of numbers
+   * - Size must match declared dimensions field
+   * - Common sizes: 1024, 1536, 3072
+   *
+   * @constraints
+   * - Min size: 1024 (Cohere models)
+   * - Max size: 3072 (OpenAI large models)
+   * - Values typically in range [-1, 1] for normalized vectors
+   * - Storage: ~4 bytes per dimension (~6KB for 1536-d vector)
+   *
+   * @edgeCases
+   * - Empty arrays rejected
+   * - Non-numeric values rejected
+   * - Dimension mismatch with 'dimensions' field returns error
+   * - Unnormalized vectors accepted but may affect similarity scores
+   * - NaN or Infinity values should be rejected
+   *
+   * @format
+   * Stored as PostgreSQL vector type in database
+   * Format in DB: [0.1, 0.2, 0.3, ...]
+   * TypeORM represents as text, actual type set in migration
    */
   @IsArray()
   @IsNumber({}, { each: true })
-  @ArrayMinSize(1)
-  @ArrayMaxSize(4096)
-  vector: number[];
+  @ArrayMinSize(1024)
+  @ArrayMaxSize(3072)
+  embedding: number[];
 
   /**
-   * Dimension of the embedding vector
-   * Must match the length of the vector array
+   * Type of source entity that generated this embedding
+   *
+   * @validation
+   * - Required field
+   * - Must be valid EmbeddingSourceType enum value
+   *
+   * @constraints
+   * - Used for polymorphic relationships
+   * - Must correspond to actual entity type referenced by sourceId
+   *
+   * @edgeCases
+   * - Mismatched sourceType and sourceId leads to orphaned records
+   * - CUSTOM type requires careful documentation in metadata
+   *
+   * @values
+   * - DOCUMENT: Text documents, files, reports
+   * - TASK: Task descriptions, requirements
+   * - MESSAGE: Chat messages, communications
+   * - KNOWLEDGE_ITEM: Extracted knowledge entities
+   * - CODE_SNIPPET: Source code fragments
+   * - DECISION_LOG: Decision records, meeting notes
+   * - MEETING_RECORD: Meeting summaries, transcripts
+   * - GRAPH_NODE: Knowledge graph nodes (THIS MODULE)
+   * - CUSTOM: Custom entity types
    */
-  @Type(() => Number)
+  @IsEnum(EmbeddingSourceType)
+  sourceType: EmbeddingSourceType;
+
+  /**
+   * UUID of the source entity
+   *
+   * @validation
+   * - Required field
+   * - Must be valid UUID v4
+   *
+   * @constraints
+   * - Should reference existing entity of type specified in sourceType
+   * - Polymorphic reference (points to different tables)
+   *
+   * @edgeCases
+   * - Referential integrity not enforced at DB level (polymorphic)
+   * - Orphaned embeddings if source entity is deleted without CASCADE
+   * - Multiple embeddings for same source allowed (different models/versions)
+   */
+  @IsUUID()
+  sourceId: string;
+
+  /**
+   * Embedding model used for generation
+   *
+   * @validation
+   * - Required field
+   * - Must be valid EmbeddingModelType enum value
+   *
+   * @constraints
+   * - Must match actual model used to generate embedding
+   * - Critical for similarity search (don't mix different models)
+   *
+   * @edgeCases
+   * - Mixing embeddings from different models gives invalid similarity scores
+   * - CUSTOM type requires metadata.embeddingModelVersion for tracking
+   *
+   * @values
+   * - OPENAI_ADA_002: text-embedding-ada-002 (1536-d, legacy)
+   * - OPENAI_SMALL_3: text-embedding-3-small (1536-d, recommended)
+   * - OPENAI_LARGE_3: text-embedding-3-large (3072-d, highest quality)
+   * - COHERE_ENGLISH_V3: embed-english-v3.0 (1024-d)
+   * - CUSTOM: Custom or third-party models
+   *
+   * @defaultValue OPENAI_ADA_002
+   */
+  @IsEnum(EmbeddingModelType)
+  modelType: EmbeddingModelType;
+
+  /**
+   * Number of dimensions in the embedding vector
+   *
+   * @validation
+   * - Required field
+   * - Must be positive integer
+   * - Must match embedding array length
+   *
+   * @constraints
+   * - Common values: 1024, 1536, 3072
+   * - Must match database vector column size
+   * - Must match modelType's expected dimensions
+   *
+   * @edgeCases
+   * - Mismatch with embedding.length returns validation error
+   * - Mismatch with DB vector column size causes DB error
+   * - Mismatch with model's output size indicates data corruption
+   *
+   * @modelDimensions
+   * - OpenAI ada-002: 1536
+   * - OpenAI small-3: 1536
+   * - OpenAI large-3: 3072
+   * - Cohere english-v3: 1024
+   */
   @IsInt()
   @Min(1)
   @Max(4096)
-  dimension: number;
+  dimensions: number;
 
   /**
-   * Optional text that was embedded to generate this vector
+   * Original text content that was embedded
+   *
+   * @validation
+   * - Optional field
+   * - Must be non-empty string if provided
+   *
+   * @constraints
+   * - Stored for reference and debugging
+   * - Not used for search (use embedding vector instead)
+   * - May be truncated if very long (model token limits)
+   *
+   * @edgeCases
+   * - Null/undefined allowed (content may be stored elsewhere)
+   * - Very long content may exceed text column limits
+   * - Should match the text that generated the embedding
+   * - Empty strings converted to null
+   *
+   * @storage
+   * Stored as PostgreSQL TEXT type (unlimited length)
+   * Consider storing elsewhere if content is very large
    */
   @IsOptional()
   @IsString()
-  sourceText?: string;
+  @IsNotEmpty()
+  content?: string | null;
 
   /**
-   * Optional identifier for the source document/node
+   * Organization ID for multi-tenant isolation
+   *
+   * @validation
+   * - Required field
+   * - Must be valid UUID v4
+   *
+   * @constraints
+   * - Must reference existing organization
+   * - All embeddings scoped to organization
+   * - CASCADE delete on organization removal
+   *
+   * @edgeCases
+   * - Non-existent organization ID causes FK constraint error
+   * - Ensures data isolation between tenants
+   */
+  @IsUUID()
+  organizationId: string;
+
+  /**
+   * Optional project association
+   *
+   * @validation
+   * - Optional UUID
+   *
+   * @constraints
+   * - Must reference existing project if provided
+   * - Enables project-scoped searches
+   * - CASCADE delete on project removal
+   *
+   * @edgeCases
+   * - Null/undefined means "not associated with specific project"
+   * - Non-existent project ID causes FK constraint error
+   * - Project must belong to same organization
    */
   @IsOptional()
-  @IsString()
-  sourceId?: string;
+  @IsUUID()
+  projectId?: string | null;
 
   /**
-   * Metadata about the embedding model and generation process
+   * Optional team association
+   *
+   * @validation
+   * - Optional UUID
+   *
+   * @constraints
+   * - Must reference existing team if provided
+   * - Enables team-scoped searches
+   * - CASCADE delete on team removal
+   *
+   * @edgeCases
+   * - Null/undefined means "not associated with specific team"
+   * - Non-existent team ID causes FK constraint error
+   * - Team must belong to same organization
+   */
+  @IsOptional()
+  @IsUUID()
+  teamId?: string | null;
+
+  /**
+   * Optional hollon (AI agent) association
+   *
+   * @validation
+   * - Optional UUID
+   *
+   * @constraints
+   * - Must reference existing hollon if provided
+   * - Tracks which agent generated the embedding
+   * - SET NULL on hollon deletion (preserve embedding)
+   *
+   * @edgeCases
+   * - Null/undefined means "not generated by specific agent"
+   * - Non-existent hollon ID causes FK constraint error
+   * - Useful for tracking agent-generated embeddings
+   */
+  @IsOptional()
+  @IsUUID()
+  hollonId?: string | null;
+
+  /**
+   * Flexible metadata for embedding-specific information
+   *
+   * @validation
+   * - Optional object
+   * - Nested properties validated if provided
+   *
+   * @constraints
+   * - Stored as JSONB in PostgreSQL
+   * - Flexible schema for model-specific data
+   *
+   * @edgeCases
+   * - Null/undefined allowed
+   * - Large metadata objects may impact performance
+   * - Avoid storing sensitive data in metadata
+   *
+   * @properties
+   * - embeddingModelVersion: Specific model version (e.g., "text-embedding-3-small")
+   * - processingTimestamp: ISO timestamp of embedding generation
+   * - chunkIndex: Index if content was chunked (0-based)
+   * - totalChunks: Total number of chunks for the source
+   * - tokenCount: Number of tokens in embedded content
+   * - sourceUrl: URL of original content source
+   * - language: Language code (e.g., "en", "ko")
+   * - quality: Quality score or confidence metric (0-1)
    */
   @IsOptional()
   @ValidateNested()
   @Type(() => EmbeddingMetadataDto)
-  metadata?: EmbeddingMetadataDto;
+  metadata?: EmbeddingMetadataDto | null;
 
   /**
-   * Whether the embedding vector is normalized
+   * Tags for categorization and filtering
+   *
+   * @validation
+   * - Optional array of strings
+   * - Each tag must be non-empty
+   *
+   * @constraints
+   * - Used for hybrid search (vector + tag filtering)
+   * - Case-sensitive
+   * - Max length per tag: 255 characters
+   *
+   * @edgeCases
+   * - Null/undefined means "no tags"
+   * - Empty array means "no tags"
+   * - Duplicate tags allowed but redundant
+   * - Very long tag arrays may impact index performance
+   *
+   * @examples
+   * - ["ai", "ml", "nlp"]
+   * - ["high-priority", "technical-debt"]
+   * - ["concept", "architecture"]
    */
   @IsOptional()
-  @IsEnum(NormalizationMethod)
-  normalization?: NormalizationMethod = NormalizationMethod.NONE;
-}
-
-/**
- * DTO for batch embedding operations
- * Used when generating or storing multiple embeddings at once
- */
-export class BatchEmbeddingDto {
-  /**
-   * Array of embeddings to process
-   */
   @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => EmbeddingDto)
-  @ArrayMinSize(1)
-  @ArrayMaxSize(100) // Limit batch size to prevent overwhelming the system
-  embeddings: EmbeddingDto[];
-
-  /**
-   * Optional batch identifier for tracking
-   */
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  batchId?: string;
-
-  /**
-   * Shared metadata that applies to all embeddings in the batch
-   */
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => EmbeddingMetadataDto)
-  sharedMetadata?: EmbeddingMetadataDto;
+  @IsString({ each: true })
+  @MaxLength(255, { each: true })
+  tags?: string[] | null;
 }
 
 /**
- * DTO for requesting embedding generation
- * Used when client requests the system to generate embeddings
+ * Metadata for embedding-specific information
+ */
+export class EmbeddingMetadataDto {
+  /**
+   * Specific version of the embedding model
+   *
+   * @validation
+   * - Optional string
+   *
+   * @examples
+   * - "text-embedding-3-small"
+   * - "text-embedding-3-large"
+   * - "embed-english-v3.0"
+   */
+  @IsOptional()
+  @IsString()
+  embeddingModelVersion?: string;
+
+  /**
+   * ISO timestamp of embedding generation
+   *
+   * @validation
+   * - Optional string in ISO 8601 format
+   *
+   * @example
+   * "2024-01-07T12:00:00Z"
+   */
+  @IsOptional()
+  @IsString()
+  processingTimestamp?: string;
+
+  /**
+   * Index if content was chunked (0-based)
+   *
+   * @validation
+   * - Optional non-negative integer
+   *
+   * @constraints
+   * - 0-based indexing
+   * - Must be < totalChunks if totalChunks is set
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  chunkIndex?: number;
+
+  /**
+   * Total number of chunks for the source
+   *
+   * @validation
+   * - Optional positive integer
+   *
+   * @constraints
+   * - Must be >= 1 if set
+   * - Should match number of embeddings for same source
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  totalChunks?: number;
+
+  /**
+   * Number of tokens in embedded content
+   *
+   * @validation
+   * - Optional positive integer
+   *
+   * @constraints
+   * - Model-specific token limits
+   * - OpenAI: ~8000 tokens max
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  tokenCount?: number;
+
+  /**
+   * URL of original content source
+   *
+   * @validation
+   * - Optional string
+   *
+   * @example
+   * "https://docs.example.com/page.html"
+   */
+  @IsOptional()
+  @IsString()
+  sourceUrl?: string;
+
+  /**
+   * Language code of embedded content
+   *
+   * @validation
+   * - Optional string (ISO 639-1 recommended)
+   *
+   * @examples
+   * - "en" (English)
+   * - "ko" (Korean)
+   * - "es" (Spanish)
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  language?: string;
+
+  /**
+   * Quality score or confidence metric
+   *
+   * @validation
+   * - Optional number between 0 and 1
+   *
+   * @constraints
+   * - 0.0 = lowest quality
+   * - 1.0 = highest quality
+   */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  quality?: number;
+
+  /**
+   * Additional custom properties
+   * Allows for model-specific or application-specific metadata
+   */
+  [key: string]: unknown;
+}
+
+/**
+ * DTO for requesting embedding generation from text
+ *
+ * @example
+ * {
+ *   "content": "AI and machine learning concepts",
+ *   "modelType": "openai_small_3",
+ *   "sourceType": "graph_node",
+ *   "sourceId": "123e4567-e89b-12d3-a456-426614174000",
+ *   "organizationId": "123e4567-e89b-12d3-a456-426614174000"
+ * }
  */
 export class GenerateEmbeddingDto {
   /**
-   * Text to be embedded
+   * Text content to generate embedding for
+   *
+   * @validation
+   * - Required field
+   * - Must be non-empty string
+   *
+   * @constraints
+   * - Token limits vary by model (~8000 tokens for OpenAI)
+   * - Very long text may be truncated
+   *
+   * @edgeCases
+   * - Empty strings rejected
+   * - Whitespace-only strings rejected
+   * - Special characters and unicode supported
    */
   @IsString()
-  text: string;
+  @IsNotEmpty()
+  content: string;
 
   /**
-   * Optional embedding provider to use
-   * If not specified, uses the default configured provider
+   * Embedding model to use for generation
+   *
+   * @validation
+   * - Optional (defaults to OPENAI_ADA_002)
+   * - Must be valid EmbeddingModelType enum value
+   *
+   * @defaultValue OPENAI_ADA_002
    */
   @IsOptional()
-  @IsEnum(EmbeddingProvider)
-  provider?: EmbeddingProvider;
+  @IsEnum(EmbeddingModelType)
+  modelType?: EmbeddingModelType = EmbeddingModelType.OPENAI_ADA_002;
 
   /**
-   * Optional model name to use
-   * If not specified, uses the default model for the provider
+   * Type of source entity
+   *
+   * @validation
+   * - Required field
+   * - Must be valid EmbeddingSourceType enum value
+   */
+  @IsEnum(EmbeddingSourceType)
+  sourceType: EmbeddingSourceType;
+
+  /**
+   * UUID of the source entity
+   *
+   * @validation
+   * - Required field
+   * - Must be valid UUID v4
+   */
+  @IsUUID()
+  sourceId: string;
+
+  /**
+   * Organization ID for multi-tenant isolation
+   *
+   * @validation
+   * - Required field
+   * - Must be valid UUID v4
+   */
+  @IsUUID()
+  organizationId: string;
+
+  /**
+   * Optional project association
+   *
+   * @validation
+   * - Optional UUID
    */
   @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  modelName?: string;
+  @IsUUID()
+  projectId?: string | null;
 
   /**
-   * Optional normalization method to apply
+   * Optional team association
+   *
+   * @validation
+   * - Optional UUID
    */
   @IsOptional()
-  @IsEnum(NormalizationMethod)
-  normalization?: NormalizationMethod = NormalizationMethod.L2;
+  @IsUUID()
+  teamId?: string | null;
 
   /**
-   * Optional source identifier for tracking
+   * Optional hollon (AI agent) association
+   *
+   * @validation
+   * - Optional UUID
    */
   @IsOptional()
-  @IsString()
-  sourceId?: string;
-}
+  @IsUUID()
+  hollonId?: string | null;
 
-/**
- * DTO for batch embedding generation requests
- */
-export class BatchGenerateEmbeddingDto {
   /**
-   * Array of texts to be embedded
+   * Optional tags for categorization
+   *
+   * @validation
+   * - Optional array of strings
    */
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  @ArrayMinSize(1)
-  @ArrayMaxSize(100)
-  texts: string[];
+  @MaxLength(255, { each: true })
+  tags?: string[] | null;
 
   /**
-   * Optional embedding provider to use
+   * Optional metadata
+   *
+   * @validation
+   * - Optional object
    */
   @IsOptional()
-  @IsEnum(EmbeddingProvider)
-  provider?: EmbeddingProvider;
-
-  /**
-   * Optional model name to use
-   */
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  modelName?: string;
-
-  /**
-   * Optional normalization method to apply
-   */
-  @IsOptional()
-  @IsEnum(NormalizationMethod)
-  normalization?: NormalizationMethod = NormalizationMethod.L2;
-
-  /**
-   * Optional batch identifier for tracking
-   */
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  batchId?: string;
+  @IsObject()
+  metadata?: Record<string, unknown> | null;
 }
