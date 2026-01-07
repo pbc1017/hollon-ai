@@ -1172,6 +1172,76 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
     }
   }
 
+  /**
+   * Issue #29: Orphaned PR Sync
+   *
+   * Detects tasks that have PR records but are not in IN_REVIEW status.
+   * This can happen if the process crashed between PR creation and status update,
+   * or if there was a network error during the transaction commit.
+   *
+   * Runs every 5 minutes as a safety net - the transaction fix should prevent
+   * most orphaned PRs, but this catches any edge cases.
+   */
+  @Cron('*/5 * * * *') // 5분마다
+  async syncOrphanedPRs(): Promise<void> {
+    try {
+      this.logger.debug('Issue #29: Checking for orphaned PRs...');
+
+      // Find tasks with PR records that are NOT in expected states
+      // Expected states for tasks with PRs: IN_REVIEW, READY_FOR_REVIEW, COMPLETED, BLOCKED
+      const orphanedPRs = await this.prRepo
+        .createQueryBuilder('pr')
+        .leftJoinAndSelect('pr.task', 'task')
+        .where('task.status NOT IN (:...expectedStatuses)', {
+          expectedStatuses: [
+            TaskStatus.IN_REVIEW,
+            TaskStatus.READY_FOR_REVIEW,
+            TaskStatus.COMPLETED,
+            TaskStatus.BLOCKED,
+          ],
+        })
+        .andWhere('task.id IS NOT NULL') // Ensure task exists
+        .getMany();
+
+      if (orphanedPRs.length === 0) {
+        this.logger.debug('No orphaned PRs found');
+        return;
+      }
+
+      this.logger.warn(
+        `Issue #29: Found ${orphanedPRs.length} orphaned PRs (tasks with PRs not in expected status)`,
+      );
+
+      for (const pr of orphanedPRs) {
+        const task = pr.task;
+        if (!task) continue;
+
+        this.logger.log(
+          `Issue #29: Syncing orphaned PR #${pr.prNumber} for task ${task.id.slice(0, 8)} (current status: ${task.status})`,
+        );
+
+        // Update task to IN_REVIEW so autoCheckPRCI can process it
+        await this.taskRepo.update(task.id, {
+          status: TaskStatus.IN_REVIEW,
+        });
+
+        this.logger.log(
+          `Issue #29: Task ${task.id.slice(0, 8)} transitioned from ${task.status} to IN_REVIEW`,
+        );
+      }
+
+      this.logger.log(
+        `Issue #29: Synced ${orphanedPRs.length} orphaned PRs to IN_REVIEW status`,
+      );
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Issue #29: Orphaned PR sync failed: ${err.message}`,
+        err.stack,
+      );
+    }
+  }
+
   @Cron('*/1 * * * *') // 1분마다
   async autoManagerReview(): Promise<void> {
     try {

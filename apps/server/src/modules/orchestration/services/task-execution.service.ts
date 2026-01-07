@@ -454,16 +454,9 @@ export class TaskExecutionService {
         this.logger.log(`PR created: ${prUrl}`);
 
         // Phase 4.2: Save PR to database immediately (for CI monitoring)
+        // Issue #29: savePRRecord -> codeReviewPort.createPullRequest now atomically
+        // saves PR record AND updates task status to IN_REVIEW in a transaction
         await this.savePRRecord(task, prUrl, hollonId, worktreePath);
-
-        // Phase 4: Set task to IN_REVIEW for asynchronous CI monitoring
-        // The autoCheckPRCI Cron will monitor CI status and handle failures
-        this.logger.log(
-          `Setting task ${taskId} to IN_REVIEW for CI monitoring by Cron`,
-        );
-        await this.taskRepo.update(taskId, {
-          status: TaskStatus.IN_REVIEW,
-        });
 
         this.logger.log(
           `Task ${taskId} is now IN_REVIEW - autoCheckPRCI Cron will monitor CI status`,
