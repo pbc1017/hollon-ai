@@ -48,6 +48,11 @@ describe('CodeReviewService', () => {
     send: jest.fn(),
   };
 
+  const mockBrainProviderService = {
+    analyzeTask: jest.fn(),
+    generateCode: jest.fn(),
+  };
+
   const mockTask: Partial<Task> = {
     id: 'task-123',
     title: 'Implement JWT Authentication',
@@ -123,9 +128,7 @@ describe('CodeReviewService', () => {
         },
         {
           provide: BrainProviderService,
-          useValue: {
-            generateCompletion: jest.fn(),
-          },
+          useValue: mockBrainProviderService,
         },
       ],
     }).compile();

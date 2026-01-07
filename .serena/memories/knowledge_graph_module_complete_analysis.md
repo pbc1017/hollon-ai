@@ -104,6 +104,7 @@ The module relies on the following infrastructure configured at the app level:
 - **KnowledgeGraphService** - Core business logic for graph operations
 
 **Planned Future Providers:**
+
 - GraphQueryService - Advanced graph query and pattern matching
 - GraphTraversalService - Specialized graph traversal algorithms
 - RelationshipInferenceService - ML-based relationship discovery
@@ -116,6 +117,7 @@ The module relies on the following infrastructure configured at the app level:
 - **KnowledgeGraphService** - Exposed to other modules
 
 **Integration Points:**
+
 - knowledge-extraction module (can leverage graph for data storage)
 - task module (can use graph for task relationships)
 - orchestration module (can query graph for decision-making)
@@ -126,25 +128,25 @@ The `KnowledgeGraphService` is the primary public interface of the module. It pr
 
 ### Node Operations
 
-| Method | Parameters | Returns | Description |
-|--------|-----------|---------|-------------|
-| `createNode()` | `CreateNodeDto` | `Promise<Node>` | Create a new graph node |
-| `findAllNodes()` | - | `Promise<Node[]>` | Retrieve all nodes |
-| `findAllNodesPaginated()` | `PaginationQueryDto` | `Promise<PaginatedResult>` | Retrieve nodes with pagination |
-| `findOneNode()` | `id: string` | `Promise<Node>` | Find node by UUID (includes relations) |
-| `updateNode()` | `id: string, UpdateNodeDto` | `Promise<Node>` | Update existing node |
-| `deleteNode()` | `id: string` | `Promise<void>` | Delete node (CASCADE deletes edges) |
+| Method                    | Parameters                  | Returns                    | Description                            |
+| ------------------------- | --------------------------- | -------------------------- | -------------------------------------- |
+| `createNode()`            | `CreateNodeDto`             | `Promise<Node>`            | Create a new graph node                |
+| `findAllNodes()`          | -                           | `Promise<Node[]>`          | Retrieve all nodes                     |
+| `findAllNodesPaginated()` | `PaginationQueryDto`        | `Promise<PaginatedResult>` | Retrieve nodes with pagination         |
+| `findOneNode()`           | `id: string`                | `Promise<Node>`            | Find node by UUID (includes relations) |
+| `updateNode()`            | `id: string, UpdateNodeDto` | `Promise<Node>`            | Update existing node                   |
+| `deleteNode()`            | `id: string`                | `Promise<void>`            | Delete node (CASCADE deletes edges)    |
 
 ### Edge Operations
 
-| Method | Parameters | Returns | Description |
-|--------|-----------|---------|-------------|
-| `createEdge()` | `CreateEdgeDto` | `Promise<Edge>` | Create a new graph edge |
-| `findAllEdges()` | - | `Promise<Edge[]>` | Retrieve all edges |
-| `findAllEdgesPaginated()` | `PaginationQueryDto` | `Promise<PaginatedResult>` | Retrieve edges with pagination |
-| `findOneEdge()` | `id: string` | `Promise<Edge>` | Find edge by UUID (includes source/target nodes) |
-| `updateEdge()` | `id: string, UpdateEdgeDto` | `Promise<Edge>` | Update existing edge |
-| `deleteEdge()` | `id: string` | `Promise<void>` | Delete edge |
+| Method                    | Parameters                  | Returns                    | Description                                      |
+| ------------------------- | --------------------------- | -------------------------- | ------------------------------------------------ |
+| `createEdge()`            | `CreateEdgeDto`             | `Promise<Edge>`            | Create a new graph edge                          |
+| `findAllEdges()`          | -                           | `Promise<Edge[]>`          | Retrieve all edges                               |
+| `findAllEdgesPaginated()` | `PaginationQueryDto`        | `Promise<PaginatedResult>` | Retrieve edges with pagination                   |
+| `findOneEdge()`           | `id: string`                | `Promise<Edge>`            | Find edge by UUID (includes source/target nodes) |
+| `updateEdge()`            | `id: string, UpdateEdgeDto` | `Promise<Edge>`            | Update existing edge                             |
+| `deleteEdge()`            | `id: string`                | `Promise<void>`            | Delete edge                                      |
 
 ### Service Features
 
@@ -168,7 +170,7 @@ The `KnowledgeGraphService` is the primary public interface of the module. It pr
   id: string (UUID, primary key)
   createdAt: Date
   updatedAt: Date
-  
+
   // Node-specific fields
   name: string (max 255 chars)
   type: NodeType (enum)
@@ -177,7 +179,7 @@ The `KnowledgeGraphService` is the primary public interface of the module. It pr
   properties: Record<string, any> (JSONB)
   tags: string[] (array)
   isActive: boolean
-  
+
   // Relations
   outgoingEdges: Edge[]
   incomingEdges: Edge[]
@@ -185,11 +187,13 @@ The `KnowledgeGraphService` is the primary public interface of the module. It pr
 ```
 
 **Indexes:**
+
 - `type`
 - `organizationId`
 - `createdAt`
 
 **NodeType Enum:**
+
 - PERSON, ORGANIZATION, TEAM, TASK, DOCUMENT, CODE, CONCEPT, GOAL, SKILL, TOOL, CUSTOM
 
 ### Edge Entity
@@ -204,7 +208,7 @@ The `KnowledgeGraphService` is the primary public interface of the module. It pr
   id: string (UUID, primary key)
   createdAt: Date
   updatedAt: Date
-  
+
   // Edge-specific fields
   sourceNodeId: string (UUID)
   targetNodeId: string (UUID)
@@ -213,7 +217,7 @@ The `KnowledgeGraphService` is the primary public interface of the module. It pr
   weight: number (float, default 1.0)
   properties: Record<string, any> (JSONB)
   isActive: boolean
-  
+
   // Relations
   sourceNode: Node (CASCADE delete)
   targetNode: Node (CASCADE delete)
@@ -221,6 +225,7 @@ The `KnowledgeGraphService` is the primary public interface of the module. It pr
 ```
 
 **Indexes:**
+
 - `type`
 - `[sourceNodeId, targetNodeId]` (composite)
 - `[sourceNodeId, type]` (composite)
@@ -229,6 +234,7 @@ The `KnowledgeGraphService` is the primary public interface of the module. It pr
 - `createdAt`
 
 **EdgeType Enum:**
+
 - CREATED_BY, BELONGS_TO, MANAGES, COLLABORATES_WITH, DEPENDS_ON, REFERENCES, IMPLEMENTS, DERIVES_FROM, RELATED_TO, CHILD_OF, PART_OF, CUSTOM
 
 ## Configuration Requirements
@@ -238,22 +244,26 @@ The `KnowledgeGraphService` is the primary public interface of the module. It pr
 The module does not directly consume environment variables. It inherits database configuration from the app-level setup.
 
 **Required (via AppModule):**
+
 - Database connection settings (host, port, username, password, database name)
 
 ### 2. TypeORM Configuration
 
 The module requires TypeORM to be configured at the application level with:
+
 - PostgreSQL driver
 - Entity auto-loading or explicit entity registration
 - Migration support for table creation
 
 **Tables Created:**
+
 - `knowledge_graph_nodes`
 - `knowledge_graph_edges`
 
 ### 3. Migration Requirements
 
 The module requires database migrations to create:
+
 - Node and Edge tables with proper schema
 - Indexes for performance optimization
 - Foreign key constraints for relationships
@@ -262,6 +272,7 @@ The module requires database migrations to create:
 ### 4. No Special Configuration
 
 The module uses standard NestJS patterns and does not require:
+
 - Custom configuration providers
 - Feature flags
 - External service connections
@@ -273,6 +284,7 @@ The module uses standard NestJS patterns and does not require:
 ### Current Integration
 
 **AppModule (apps/server/src/app.module.ts):**
+
 - Imports `KnowledgeGraphModule` as a feature module
 - No cross-module dependencies currently implemented
 
@@ -301,25 +313,30 @@ Based on the module's design and documentation:
 ## Module Design Patterns
 
 ### 1. Repository Pattern
+
 - Services use injected TypeORM repositories
 - Abstracts database operations from business logic
 
 ### 2. DTO Pattern
+
 - Input validation with class-validator
 - Type-safe data transfer objects
 - Separation of API contracts from entity models
 
 ### 3. Service Layer Pattern
+
 - Business logic encapsulated in services
 - Controllers delegate to services
 - Services exported for cross-module usage
 
 ### 4. Entity Relations
+
 - Bidirectional relationships (outgoing/incoming edges)
 - Cascade deletes for referential integrity
 - Lazy loading with explicit relation loading
 
 ### 5. Soft Delete Support
+
 - `isActive` flag on entities
 - Allows logical deletion without data loss
 
@@ -344,6 +361,7 @@ apps/server/src/modules/knowledge-graph/
 ## Testing Requirements
 
 Expected test files (to be created):
+
 - `knowledge-graph.service.spec.ts` - Unit tests for service
 - `knowledge-graph.controller.spec.ts` - Controller tests
 - `knowledge-graph.module.spec.ts` - Module configuration tests
@@ -354,12 +372,14 @@ Expected test files (to be created):
 As documented in the code:
 
 ### Service Layer
+
 - GraphQueryService - Advanced pattern matching
 - GraphTraversalService - Pathfinding algorithms
 - RelationshipInferenceService - ML-based discovery
 - GraphAnalyticsService - Metrics and analysis
 
 ### Features
+
 - Advanced graph queries (pattern matching, path finding)
 - Graph analytics (centrality, clustering, community detection)
 - ML-based relationship inference
@@ -369,6 +389,7 @@ As documented in the code:
 - Graph versioning and history
 
 ### API Enhancements
+
 - Filtering by type, organization, tags
 - Advanced sorting options
 - Query builder for complex graph queries
@@ -388,6 +409,7 @@ The `KnowledgeGraphModule` is a **self-contained, standalone module** with:
 - **Extensible design** ready for future enhancements
 
 The module can be used by other modules by:
+
 1. Importing `KnowledgeGraphModule` in their module's `imports` array
 2. Injecting `KnowledgeGraphService` in their services/controllers
 3. Using the service methods to manage graph data
