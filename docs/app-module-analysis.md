@@ -18,7 +18,7 @@ ConfigModule.forRoot({
   isGlobal: true,
   load: [configuration],
   envFilePath: ['../../.env.local', '../../.env'],
-})
+});
 ```
 
 **Key Characteristics:**
@@ -35,7 +35,7 @@ TypeOrmModule.forRootAsync({
   imports: [ConfigModule],
   useFactory: (configService: ConfigService) => databaseConfig(configService),
   inject: [ConfigService],
-})
+});
 ```
 
 **Pattern Used:**
@@ -61,7 +61,7 @@ TypeOrmModule.forRootAsync({
 #### PostgresListenerModule
 
 ```typescript
-PostgresListenerModule
+PostgresListenerModule;
 ```
 
 **Purpose:**
