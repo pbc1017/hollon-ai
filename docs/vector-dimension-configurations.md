@@ -9,6 +9,7 @@ The codebase uses **pgvector** extension for PostgreSQL to store and search vect
 ## 1. Database Schema
 
 ### Documents Table
+
 **File:** `apps/server/src/database/migrations/1733295000000-InitialSchema.ts`
 
 ```sql
@@ -16,6 +17,7 @@ The codebase uses **pgvector** extension for PostgreSQL to store and search vect
 ```
 
 **Details:**
+
 - Type: `vector(1536)`
 - Nullable: Yes (allows documents without embeddings)
 - Compatible models: OpenAI text-embedding-ada-002, text-embedding-3-small
@@ -29,22 +31,25 @@ The codebase uses **pgvector** extension for PostgreSQL to store and search vect
 ## 2. Entity Definitions
 
 ### VectorEmbedding Entity
+
 **File:** `apps/server/src/entities/vector-embedding.entity.ts`
 
 #### Enum: EmbeddingModelType
+
 Lines: 28-33
 
 ```typescript
 export enum EmbeddingModelType {
-  OPENAI_ADA_002 = 'openai_ada_002',       // 1536 dimensions
-  OPENAI_SMALL_3 = 'openai_small_3',       // 1536 dimensions
-  OPENAI_LARGE_3 = 'openai_large_3',       // 3072 dimensions
+  OPENAI_ADA_002 = 'openai_ada_002', // 1536 dimensions
+  OPENAI_SMALL_3 = 'openai_small_3', // 1536 dimensions
+  OPENAI_LARGE_3 = 'openai_large_3', // 3072 dimensions
   COHERE_ENGLISH_V3 = 'cohere_english_v3', // 1024 dimensions
   CUSTOM = 'custom',
 }
 ```
 
 #### Field: dimensions
+
 Line: 107-109
 
 ```typescript
@@ -58,6 +63,7 @@ dimensions: number;
 ```
 
 **Key Points:**
+
 - Stores the actual dimension count for each embedding
 - Must match the database vector column size
 - Variable per embedding record
@@ -65,6 +71,7 @@ dimensions: number;
 ---
 
 ### Document Entity
+
 **File:** `apps/server/src/modules/document/entities/document.entity.ts`
 
 Lines: 56-59
@@ -83,9 +90,11 @@ embedding: string;
 ## 3. Configuration Files
 
 ### Vector Search Configuration
+
 **File:** `apps/server/src/modules/vector-search/config/vector-search.config.ts`
 
 #### Provider Defaults
+
 Lines: 110-124
 
 ```typescript
@@ -106,6 +115,7 @@ const providerDefaults = {
 ```
 
 #### Configuration Factory
+
 Lines: 137-140
 
 ```typescript
@@ -120,6 +130,7 @@ dimensions: configService.get<number>(
 ---
 
 ### Application Configuration
+
 **File:** `apps/server/src/config/configuration.ts`
 
 Lines: 87-95
@@ -138,6 +149,7 @@ vectorSearch: {
 ```
 
 **Environment Variables:**
+
 - `VECTOR_SEARCH_ENABLED`: Enable/disable vector search
 - `VECTOR_EMBEDDING_PROVIDER`: Provider name (openai, anthropic, local)
 - `VECTOR_EMBEDDING_MODEL`: Model identifier
@@ -146,6 +158,7 @@ vectorSearch: {
 ---
 
 ### VectorSearchConfig Entity
+
 **File:** `apps/server/src/modules/vector-search/entities/vector-search-config.entity.ts`
 
 Lines: 44-49
@@ -165,6 +178,7 @@ dimensions: number;
 
 **Default Embedding Model:**
 Lines: 37-41
+
 ```typescript
 @Column({
   name: 'embedding_model',
@@ -179,9 +193,11 @@ embeddingModel: string;
 ## 4. Validation & DTOs
 
 ### EmbeddingDto
+
 **File:** `apps/server/src/modules/knowledge-graph/dto/embedding.dto.ts`
 
 #### Array Size Validation
+
 Lines: 77-79
 
 ```typescript
@@ -191,11 +207,13 @@ embedding: number[];
 ```
 
 **Constraints:**
+
 - Min size: 1024 (Cohere models)
 - Max size: 3072 (OpenAI large models)
 - Common sizes: 1024, 1536, 3072
 
 #### Dimension Field
+
 Lines: 183
 
 ```typescript
@@ -203,10 +221,12 @@ dimensions: number;
 ```
 
 **Validation:**
+
 - Must match embedding array length
 - Common values: 1024, 1536, 3072
 
 #### Model Dimensions Documentation
+
 Lines: 145-148
 
 ```typescript
@@ -221,6 +241,7 @@ Lines: 145-148
 ```
 
 Lines: 175-178
+
 ```typescript
 /**
  * @modelDimensions
@@ -234,6 +255,7 @@ Lines: 175-178
 ---
 
 ### SearchQueryDto
+
 **File:** `apps/server/src/modules/knowledge-graph/dto/search-query.dto.ts`
 
 Lines: 73, 76, 87-89
@@ -253,9 +275,11 @@ embedding?: number[];
 ## 5. Service Implementation
 
 ### VectorSearchConfigService
+
 **File:** `apps/server/src/modules/vector-search/services/vector-search-config.service.ts`
 
 #### Valid Dimensions Array
+
 Lines: 89-95
 
 ```typescript
@@ -269,6 +293,7 @@ if (!validDimensions.includes(config.dimensions)) {
 ```
 
 **Supported Dimensions:**
+
 - 1536 (OpenAI ada-002, small-3)
 - 3072 (OpenAI large-3)
 - 1024 (Cohere)
@@ -276,6 +301,7 @@ if (!validDimensions.includes(config.dimensions)) {
 - 256 (Compact models)
 
 #### Default Configuration
+
 Lines: 173-177
 
 ```typescript
@@ -319,11 +345,13 @@ const defaultConfig = this.configRepo.create({
 ## 7. Configuration Recommendations
 
 ### Current State
+
 - Primary dimension: **1536** (OpenAI text-embedding-3-small)
 - Database schema: Fixed at 1536 dimensions
 - Runtime: Configurable via environment variables and database configs
 
 ### Issues
+
 1. **Database Schema Inflexibility**: The `documents.embedding` column is hardcoded to `vector(1536)`, preventing use of models with different dimensions without schema migration
 2. **Mixed Configuration Sources**: Dimensions configured in multiple places (env vars, database, defaults)
 3. **Validation Mismatch**: Validation allows 1024-3072, but database only supports 1536
@@ -331,16 +359,19 @@ const defaultConfig = this.configRepo.create({
 ### Recommendations
 
 #### Short-term
+
 1. **Document the limitation** that the documents table only supports 1536-dimensional embeddings
 2. **Add validation** to prevent creating embeddings with incompatible dimensions for the documents table
 3. **Use VectorEmbedding table** for non-1536 dimensional embeddings (it stores dimensions per record)
 
 #### Medium-term
+
 1. **Create migration** to alter documents table or add multiple vector columns
 2. **Centralize dimension configuration** in a single source of truth
 3. **Add runtime checks** to ensure embedding dimensions match database schema
 
 #### Long-term
+
 1. **Implement dynamic vector columns** based on configuration
 2. **Support multiple embedding models** simultaneously with separate vector columns
 3. **Add dimension migration utility** to convert between different embedding sizes
@@ -369,17 +400,18 @@ OPENAI_API_KEY=sk-...
 
 ## 9. Model-Dimension Mapping
 
-| Provider | Model | Dimensions | Status | Notes |
-|----------|-------|------------|--------|-------|
-| OpenAI | text-embedding-ada-002 | 1536 | ✅ Supported | Legacy model |
-| OpenAI | text-embedding-3-small | 1536 | ✅ Supported | Recommended default |
-| OpenAI | text-embedding-3-large | 3072 | ⚠️ Partial | Supported in VectorEmbedding table only |
-| Cohere | embed-english-v3.0 | 1024 | ⚠️ Partial | Supported in VectorEmbedding table only |
-| Anthropic | claude-3-embedding | 1024 | ⚠️ Partial | Supported in VectorEmbedding table only |
-| Local | custom models | 768 | ⚠️ Partial | Supported in VectorEmbedding table only |
-| Custom | various | 256-3072 | ⚠️ Partial | Validation allows, but DB constraints apply |
+| Provider  | Model                  | Dimensions | Status       | Notes                                       |
+| --------- | ---------------------- | ---------- | ------------ | ------------------------------------------- |
+| OpenAI    | text-embedding-ada-002 | 1536       | ✅ Supported | Legacy model                                |
+| OpenAI    | text-embedding-3-small | 1536       | ✅ Supported | Recommended default                         |
+| OpenAI    | text-embedding-3-large | 3072       | ⚠️ Partial   | Supported in VectorEmbedding table only     |
+| Cohere    | embed-english-v3.0     | 1024       | ⚠️ Partial   | Supported in VectorEmbedding table only     |
+| Anthropic | claude-3-embedding     | 1024       | ⚠️ Partial   | Supported in VectorEmbedding table only     |
+| Local     | custom models          | 768        | ⚠️ Partial   | Supported in VectorEmbedding table only     |
+| Custom    | various                | 256-3072   | ⚠️ Partial   | Validation allows, but DB constraints apply |
 
 **Legend:**
+
 - ✅ Supported: Works with all tables including documents
 - ⚠️ Partial: Works with VectorEmbedding table but not documents table
 - ❌ Not Supported: Not available
@@ -403,6 +435,7 @@ Default cost per 1K tokens: **$0.0002** (text-embedding-3-small)
 ## 11. Files Containing Vector Configurations
 
 ### Core Files (High Priority)
+
 1. `apps/server/src/database/migrations/1733295000000-InitialSchema.ts` - **CRITICAL**
 2. `apps/server/src/entities/vector-embedding.entity.ts`
 3. `apps/server/src/modules/vector-search/entities/vector-search-config.entity.ts`
@@ -410,17 +443,21 @@ Default cost per 1K tokens: **$0.0002** (text-embedding-3-small)
 5. `apps/server/src/config/configuration.ts`
 
 ### Service Files
+
 6. `apps/server/src/modules/vector-search/services/vector-search-config.service.ts`
 7. `apps/server/src/modules/vector-search/vector-search.service.ts`
 
 ### DTO/Validation Files
+
 8. `apps/server/src/modules/knowledge-graph/dto/embedding.dto.ts`
 9. `apps/server/src/modules/knowledge-graph/dto/search-query.dto.ts`
 
 ### Other Entity Files
+
 10. `apps/server/src/modules/document/entities/document.entity.ts`
 
 ### Test Files
+
 11. `apps/server/test/schema-validation.test.ts`
 
 ---
@@ -430,20 +467,22 @@ Default cost per 1K tokens: **$0.0002** (text-embedding-3-small)
 To make vector dimensions fully configurable:
 
 1. **Create a constant file**
+
    ```typescript
    // src/common/constants/vector.constants.ts
    export const DEFAULT_VECTOR_DIMENSION = 1536;
    export const SUPPORTED_DIMENSIONS = [256, 768, 1024, 1536, 3072] as const;
-   export type VectorDimension = typeof SUPPORTED_DIMENSIONS[number];
+   export type VectorDimension = (typeof SUPPORTED_DIMENSIONS)[number];
    ```
 
 2. **Create a migration generator** for vector columns with configurable dimensions
 
 3. **Add table-specific dimension tracking**
+
    ```typescript
    // Map of table -> supported dimensions
    const TABLE_DIMENSIONS = {
-     documents: [1536],           // Currently fixed
+     documents: [1536], // Currently fixed
      vector_embeddings: [256, 768, 1024, 1536, 3072], // Flexible
    };
    ```
@@ -459,6 +498,7 @@ To make vector dimensions fully configurable:
 The codebase has **1536** as the primary vector dimension, with support for 1024, 3072, and 768 in the VectorEmbedding table. The most critical issue is the **hardcoded dimension in the documents table migration**, which should be addressed to support multiple embedding models.
 
 **Priority Actions:**
+
 1. ✅ Document current limitations (this document)
 2. 🔴 Address documents table dimension limitation
 3. 🟡 Centralize dimension configuration

@@ -5,12 +5,13 @@ This document provides a comprehensive inventory of all environment variables us
 ## Database Configuration
 
 ### PostgreSQL Connection
+
 - **DB_HOST**: Database host address (default: `localhost`)
 - **DB_PORT**: Database port number (default: `5432`)
 - **DB_NAME**: Database name (default: `hollon`)
 - **DB_USER**: Database username (default: `hollon`)
 - **DB_PASSWORD**: Database password (default: empty string)
-- **DATABASE_URL**: Full PostgreSQL connection URL (alternative to individual DB_* vars)
+- **DATABASE_URL**: Full PostgreSQL connection URL (alternative to individual DB\_\* vars)
   - Format: `postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}`
 - **DB_SCHEMA**: PostgreSQL schema name (default: `hollon`)
   - In test mode, defaults to `hollon_test`
@@ -19,23 +20,28 @@ This document provides a comprehensive inventory of all environment variables us
 ## AI Service Configuration
 
 ### Brain Provider - Claude Code
+
 - **CLAUDE_CODE_PATH**: Path to Claude Code CLI (default: `claude`)
 - **BRAIN_TIMEOUT_MS**: Timeout for brain execution in milliseconds (default: `1200000` = 20 minutes)
 
 ### Brain Provider - Anthropic API
+
 - **ANTHROPIC_API_KEY**: API key for Anthropic services (optional)
   - Used for Claude API integration
 
 ### Brain Provider - OpenAI API
+
 - **OPENAI_API_KEY**: API key for OpenAI services
   - Used for embeddings and other OpenAI features
 
 ## Vector Search Configuration
 
 ### Feature Control
+
 - **VECTOR_SEARCH_ENABLED**: Enable/disable vector search functionality (default: `true` in dev, `false` in test/prod)
 
 ### Embedding Provider Configuration
+
 - **VECTOR_EMBEDDING_PROVIDER**: Embedding provider selection (default: `openai`)
   - Supported values: `openai`, `anthropic`, `local`
 - **VECTOR_EMBEDDING_MODEL**: Model name/identifier for embeddings
@@ -53,6 +59,7 @@ This document provides a comprehensive inventory of all environment variables us
 - **VECTOR_EMBEDDING_TIMEOUT_MS**: Timeout for embedding requests in milliseconds (default: `30000`)
 
 ### Search Configuration
+
 - **VECTOR_SEARCH_DEFAULT_METRIC**: Default similarity metric for vector search (default: `cosine`)
   - Supported values: `cosine`, `euclidean`, `dot_product`, `inner_product`
 - **VECTOR_SEARCH_DEFAULT_MIN_SIMILARITY**: Default minimum similarity threshold, 0.0 to 1.0 (default: `0.7`)
@@ -61,12 +68,14 @@ This document provides a comprehensive inventory of all environment variables us
 - **VECTOR_SEARCH_INCLUDE_SCORES_BY_DEFAULT**: Include similarity scores in results by default (default: `true`)
 
 ### Index Configuration
+
 - **VECTOR_INDEX_NAME**: Name/identifier for the vector index (default: `vector_embeddings`)
 - **VECTOR_INDEX_AUTO_CREATE**: Create index if it doesn't exist (default: `true` in dev, `false` in prod)
 - **VECTOR_INDEX_LISTS**: Number of lists for IVF (Inverted File) index - pgvector specific (default: `100`)
 - **VECTOR_INDEX_PROBES**: Number of probes for search - pgvector specific (default: `10`)
 
 ### Performance Configuration
+
 - **VECTOR_PERFORMANCE_ENABLE_CACHE**: Enable caching for embeddings (default: `true` in prod, `false` otherwise)
 - **VECTOR_PERFORMANCE_CACHE_TTL_SECONDS**: Cache TTL in seconds (default: `3600`)
 - **VECTOR_PERFORMANCE_POOL_SIZE**: Connection pool size for vector operations (default: `10`)
