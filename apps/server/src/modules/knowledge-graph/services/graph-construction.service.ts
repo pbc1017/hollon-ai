@@ -44,17 +44,19 @@ export class GraphConstructionService {
 
     try {
       // Extract entities
-      const extractedEntities = await this.entityExtractionService.extractEntities(
-        rawData,
-        organizationId,
-      );
+      const extractedEntities =
+        await this.entityExtractionService.extractEntities(
+          rawData,
+          organizationId,
+        );
 
       // Validate entities
-      const validation = await this.entityExtractionService.validateEntities(
-        extractedEntities,
-      );
+      const validation =
+        await this.entityExtractionService.validateEntities(extractedEntities);
       if (!validation.valid) {
-        throw new BadRequestException(`Entity validation failed: ${validation.issues.join(', ')}`);
+        throw new BadRequestException(
+          `Entity validation failed: ${validation.issues.join(', ')}`,
+        );
       }
 
       // Create nodes
@@ -64,15 +66,18 @@ export class GraphConstructionService {
       }
 
       // Extract and create relationships
-      const relationships = await this.entityExtractionService.extractRelationships(
-        rawData,
-      );
+      const relationships =
+        await this.entityExtractionService.extractRelationships(rawData);
       for (const rel of relationships) {
         const sourceNode = nodes.find(
-          (n) => this.normalizeLabel(n.label) === this.normalizeLabel(rel.sourceLabel),
+          (n) =>
+            this.normalizeLabel(n.label) ===
+            this.normalizeLabel(rel.sourceLabel),
         );
         const targetNode = nodes.find(
-          (n) => this.normalizeLabel(n.label) === this.normalizeLabel(rel.targetLabel),
+          (n) =>
+            this.normalizeLabel(n.label) ===
+            this.normalizeLabel(rel.targetLabel),
         );
 
         if (sourceNode && targetNode) {
@@ -87,7 +92,9 @@ export class GraphConstructionService {
         }
       }
 
-      this.logger.log(`Graph built with ${nodes.length} nodes and ${edges.length} edges`);
+      this.logger.log(
+        `Graph built with ${nodes.length} nodes and ${edges.length} edges`,
+      );
       return { nodes, edges };
     } catch (error) {
       this.logger.error(`Error building graph: ${(error as Error).message}`);
@@ -123,12 +130,7 @@ export class GraphConstructionService {
    * @returns Created GraphEdge
    */
   async createEdge(edgeData: Partial<GraphEdge>): Promise<GraphEdge> {
-    const {
-      sourceNodeId,
-      targetNodeId,
-      organizationId,
-      edgeType,
-    } = edgeData;
+    const { sourceNodeId, targetNodeId, organizationId, edgeType } = edgeData;
 
     if (!sourceNodeId || !targetNodeId || !organizationId) {
       throw new BadRequestException(
@@ -151,7 +153,9 @@ export class GraphConstructionService {
       this.logger.warn(
         `Attempted to create self-loop edge on node ${sourceNodeId}`,
       );
-      throw new BadRequestException('Cannot create edges from a node to itself');
+      throw new BadRequestException(
+        'Cannot create edges from a node to itself',
+      );
     }
 
     const edge = this.graphEdgeRepository.create({
@@ -171,7 +175,13 @@ export class GraphConstructionService {
    * @param operation - Update operation to apply
    */
   async applyUpdate(operation: {
-    type: 'add_node' | 'update_node' | 'remove_node' | 'add_edge' | 'update_edge' | 'remove_edge';
+    type:
+      | 'add_node'
+      | 'update_node'
+      | 'remove_node'
+      | 'add_edge'
+      | 'update_edge'
+      | 'remove_edge';
     nodeData?: Partial<GraphNode>;
     edgeData?: Partial<GraphEdge>;
     nodeId?: string;
@@ -182,21 +192,30 @@ export class GraphConstructionService {
     switch (operation.type) {
       case 'add_node':
         if (!operation.nodeData) {
-          throw new BadRequestException('Node data is required for add_node operation');
+          throw new BadRequestException(
+            'Node data is required for add_node operation',
+          );
         }
         await this.createNode(operation.nodeData);
         break;
 
       case 'update_node':
         if (!operation.nodeId || !operation.nodeData) {
-          throw new BadRequestException('Node ID and data are required for update_node operation');
+          throw new BadRequestException(
+            'Node ID and data are required for update_node operation',
+          );
         }
-        await this.graphNodeRepository.update(operation.nodeId, operation.nodeData);
+        await this.graphNodeRepository.update(
+          operation.nodeId,
+          operation.nodeData,
+        );
         break;
 
       case 'remove_node':
         if (!operation.nodeId) {
-          throw new BadRequestException('Node ID is required for remove_node operation');
+          throw new BadRequestException(
+            'Node ID is required for remove_node operation',
+          );
         }
         // Remove associated edges first (CASCADE is handled by DB, but explicit is safer)
         await this.graphEdgeRepository.delete({
@@ -210,27 +229,38 @@ export class GraphConstructionService {
 
       case 'add_edge':
         if (!operation.edgeData) {
-          throw new BadRequestException('Edge data is required for add_edge operation');
+          throw new BadRequestException(
+            'Edge data is required for add_edge operation',
+          );
         }
         await this.createEdge(operation.edgeData);
         break;
 
       case 'update_edge':
         if (!operation.edgeId || !operation.edgeData) {
-          throw new BadRequestException('Edge ID and data are required for update_edge operation');
+          throw new BadRequestException(
+            'Edge ID and data are required for update_edge operation',
+          );
         }
-        await this.graphEdgeRepository.update(operation.edgeId, operation.edgeData);
+        await this.graphEdgeRepository.update(
+          operation.edgeId,
+          operation.edgeData,
+        );
         break;
 
       case 'remove_edge':
         if (!operation.edgeId) {
-          throw new BadRequestException('Edge ID is required for remove_edge operation');
+          throw new BadRequestException(
+            'Edge ID is required for remove_edge operation',
+          );
         }
         await this.graphEdgeRepository.delete(operation.edgeId);
         break;
 
       default:
-        throw new BadRequestException(`Unknown operation type: ${operation.type}`);
+        throw new BadRequestException(
+          `Unknown operation type: ${operation.type}`,
+        );
     }
   }
 
@@ -242,9 +272,7 @@ export class GraphConstructionService {
    * @param nodes - Nodes to analyze for relationships
    * @returns Array of identified relationships
    */
-  async identifyRelationships(
-    nodes: GraphNode[],
-  ): Promise<
+  async identifyRelationships(nodes: GraphNode[]): Promise<
     Array<{
       sourceNodeId: string;
       targetNodeId: string;
@@ -271,10 +299,11 @@ export class GraphConstructionService {
         const node1 = nodes[i];
         const node2 = nodes[j];
 
-        const similarity = this.entityExtractionService.calculateLabelSimilarity(
-          node1.label,
-          node2.label,
-        );
+        const similarity =
+          this.entityExtractionService.calculateLabelSimilarity(
+            node1.label,
+            node2.label,
+          );
 
         if (similarity > 0.6 && similarity < 1.0) {
           relationships.push({
@@ -469,11 +498,9 @@ export class GraphConstructionService {
       return sum + inDegree + outDegree;
     }, 0);
 
-    const averageNodeDegree =
-      nodes.length > 0 ? totalDegree / nodes.length : 0;
+    const averageNodeDegree = nodes.length > 0 ? totalDegree / nodes.length : 0;
     const possibleEdges = nodes.length * (nodes.length - 1);
-    const networkDensity =
-      possibleEdges > 0 ? edges.length / possibleEdges : 0;
+    const networkDensity = possibleEdges > 0 ? edges.length / possibleEdges : 0;
 
     return {
       nodeCount: nodes.length,

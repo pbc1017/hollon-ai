@@ -132,7 +132,9 @@ export class MergeService {
     organizationId: string,
     threshold: number = 0.8,
   ): Promise<DuplicateDetectionResult[]> {
-    this.logger.log(`Scanning for duplicates in organization ${organizationId}`);
+    this.logger.log(
+      `Scanning for duplicates in organization ${organizationId}`,
+    );
 
     const nodes = await this.graphNodeRepository.find({
       where: { organizationId },
@@ -169,7 +171,10 @@ export class MergeService {
    * @param node2 - Second node
    * @returns Similarity score (0-1)
    */
-  async calculateSimilarity(node1: GraphNode, node2: GraphNode): Promise<number> {
+  async calculateSimilarity(
+    node1: GraphNode,
+    node2: GraphNode,
+  ): Promise<number> {
     let score = 0;
     let signalCount = 0;
 
@@ -295,10 +300,7 @@ export class MergeService {
       duplicates.map(async (dup) => ({
         nodeId: dup.id,
         count: await this.graphEdgeRepository.count({
-          where: [
-            { sourceNodeId: dup.id },
-            { targetNodeId: dup.id },
-          ],
+          where: [{ sourceNodeId: dup.id }, { targetNodeId: dup.id }],
         }),
       })),
     );
@@ -348,9 +350,7 @@ export class MergeService {
     );
 
     if (duplicateNodeIds.includes(primaryNodeId)) {
-      throw new BadRequestException(
-        'Primary node cannot be in duplicate list',
-      );
+      throw new BadRequestException('Primary node cannot be in duplicate list');
     }
 
     const primaryNode = await this.graphNodeRepository.findOne({
@@ -362,7 +362,9 @@ export class MergeService {
     }
 
     const duplicateNodes = await this.graphNodeRepository.find({
-      where: { id: Array.isArray(duplicateNodeIds) ? undefined : duplicateNodeIds },
+      where: {
+        id: Array.isArray(duplicateNodeIds) ? undefined : duplicateNodeIds,
+      },
     });
 
     if (duplicateNodes.length !== duplicateNodeIds.length) {
@@ -479,10 +481,7 @@ export class MergeService {
           [primaryNode, ...duplicateNodes].map(async (node) => ({
             node,
             count: await this.graphEdgeRepository.count({
-              where: [
-                { sourceNodeId: node.id },
-                { targetNodeId: node.id },
-              ],
+              where: [{ sourceNodeId: node.id }, { targetNodeId: node.id }],
             }),
           })),
         );
@@ -544,7 +543,10 @@ export class MergeService {
         } else if (Array.isArray(merged[key]) && Array.isArray(value)) {
           // Merge arrays, removing duplicates
           merged[key] = Array.from(new Set([...merged[key], ...value]));
-        } else if (typeof merged[key] === 'object' && typeof value === 'object') {
+        } else if (
+          typeof merged[key] === 'object' &&
+          typeof value === 'object'
+        ) {
           // Recursively merge objects
           merged[key] = this.mergeProperties(merged[key], value);
         }

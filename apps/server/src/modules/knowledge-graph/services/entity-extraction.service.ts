@@ -44,10 +44,7 @@ export class EntityExtractionService {
     // Extract nested entities if present
     if (rawData.relatedEntities && Array.isArray(rawData.relatedEntities)) {
       for (const relatedData of rawData.relatedEntities) {
-        const relatedEntity = this.extractEntity(
-          relatedData,
-          organizationId,
-        );
+        const relatedEntity = this.extractEntity(relatedData, organizationId);
         if (relatedEntity) {
           entities.push(relatedEntity);
         }
@@ -187,19 +184,11 @@ export class EntityExtractionService {
    * @param data - Entity data
    * @returns SHA-256 hash string
    */
-  private computeContentHash(
-    label: string,
-    data: Record<string, any>,
-  ): string {
+  private computeContentHash(label: string, data: Record<string, any>): string {
     const contentParts = [label.toLowerCase()];
 
     // Include key properties in hash
-    const keyProperties = [
-      'description',
-      'externalId',
-      'externalType',
-      'type',
-    ];
+    const keyProperties = ['description', 'externalId', 'externalType', 'type'];
     for (const key of keyProperties) {
       if (data[key]) {
         contentParts.push(String(data[key]).toLowerCase());
@@ -218,9 +207,7 @@ export class EntityExtractionService {
    * @param data - Entity data that may contain relationship info
    * @returns Array of relationship definitions
    */
-  async extractRelationships(
-    data: Record<string, any>,
-  ): Promise<
+  async extractRelationships(data: Record<string, any>): Promise<
     Array<{
       sourceLabel: string;
       targetLabel: string;
@@ -305,10 +292,11 @@ export class EntityExtractionService {
         issues.push(`Entity ${i}: Organization ID is required`);
       }
 
-      if (!entity.nodeType || !Object.values(NodeType).includes(entity.nodeType)) {
-        issues.push(
-          `Entity ${i}: Invalid node type "${entity.nodeType}"`,
-        );
+      if (
+        !entity.nodeType ||
+        !Object.values(NodeType).includes(entity.nodeType)
+      ) {
+        issues.push(`Entity ${i}: Invalid node type "${entity.nodeType}"`);
       }
 
       if (entity.properties && typeof entity.properties !== 'object') {
