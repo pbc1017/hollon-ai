@@ -2,6 +2,17 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, QueryDeepPartialEntity } from 'typeorm';
 import { KnowledgeItem } from '../entities/knowledge-item.entity';
+import {
+  PaginationResult,
+  SearchFilters,
+  CountFilters,
+  TemporalDistribution,
+  DocumentParseOptions,
+  ParsedDocument,
+  TextExtractionOptions,
+  PreprocessOptions,
+  PreprocessedContent,
+} from '../interfaces';
 
 /**
  * Knowledge Extraction Service
@@ -467,12 +478,7 @@ export class KnowledgeExtractionService {
     organizationId: string,
     page: number = 1,
     limit: number = 10,
-  ): Promise<{
-    items: KnowledgeItem[];
-    total: number;
-    page: number;
-    limit: number;
-  }> {
+  ): Promise<PaginationResult<KnowledgeItem>> {
     const skip = (page - 1) * limit;
 
     const [items, total] = await this.knowledgeItemRepository.findAndCount({
@@ -770,17 +776,7 @@ export class KnowledgeExtractionService {
    * });
    * ```
    */
-  async searchWithFilters(filters: {
-    organizationId: string;
-    types?: string[];
-    searchTerm?: string;
-    startDate?: Date;
-    endDate?: Date;
-    limit?: number;
-    offset?: number;
-    orderBy?: 'extractedAt' | 'type' | 'createdAt';
-    orderDirection?: 'ASC' | 'DESC';
-  }): Promise<KnowledgeItem[]> {
+  async searchWithFilters(filters: SearchFilters): Promise<KnowledgeItem[]> {
     const {
       organizationId,
       types,
@@ -861,13 +857,7 @@ export class KnowledgeExtractionService {
    * });
    * ```
    */
-  async countWithFilters(filters: {
-    organizationId: string;
-    types?: string[];
-    searchTerm?: string;
-    startDate?: Date;
-    endDate?: Date;
-  }): Promise<number> {
+  async countWithFilters(filters: CountFilters): Promise<number> {
     const { organizationId, types, searchTerm, startDate, endDate } = filters;
 
     const query = this.knowledgeItemRepository
@@ -926,7 +916,7 @@ export class KnowledgeExtractionService {
     interval: 'day' | 'week' | 'month',
     startDate?: Date,
     endDate?: Date,
-  ): Promise<Array<{ period: string; count: number }>> {
+  ): Promise<TemporalDistribution[]> {
     const query = this.knowledgeItemRepository
       .createQueryBuilder('ki')
       .select(`DATE_TRUNC('${interval}', ki.extracted_at)::date`, 'period')
@@ -1053,28 +1043,8 @@ export class KnowledgeExtractionService {
    */
   async parseDocument(
     documentBuffer: Buffer,
-    options: {
-      mimeType: string;
-      extractMetadata?: boolean;
-      preserveFormatting?: boolean;
-      extractImages?: boolean;
-      extractTables?: boolean;
-    },
-  ): Promise<{
-    content: string;
-    metadata: {
-      title?: string;
-      author?: string;
-      creationDate?: Date;
-      pageCount?: number;
-      [key: string]: unknown;
-    };
-    structure?: {
-      headings?: Array<{ level: number; text: string; page?: number }>;
-      tables?: Array<{ page?: number; rows: string[][]; headers?: string[] }>;
-      images?: Array<{ page?: number; data: Buffer; mimeType: string }>;
-    };
-  }> {
+    options: DocumentParseOptions,
+  ): Promise<ParsedDocument> {
     // TODO: Validate input parameters
     if (!documentBuffer || documentBuffer.length === 0) {
       throw new Error('Document buffer cannot be empty');
@@ -1137,14 +1107,7 @@ export class KnowledgeExtractionService {
    */
   async extractText(
     documentBuffer: Buffer,
-    options: {
-      mimeType: string;
-      encoding?: string;
-      removeLineBreaks?: boolean;
-      normalizeWhitespace?: boolean;
-      preserveParagraphs?: boolean;
-      maxLength?: number;
-    },
+    options: TextExtractionOptions,
   ): Promise<string> {
     // TODO: Validate input parameters
     if (!documentBuffer || documentBuffer.length === 0) {
@@ -1213,19 +1176,8 @@ export class KnowledgeExtractionService {
    */
   async preprocessContent(
     content: string,
-    _options?: {
-      removeHtml?: boolean;
-      removeUrls?: boolean;
-      removeEmails?: boolean;
-      lowercaseText?: boolean;
-      removeStopwords?: boolean;
-      stemming?: boolean;
-      segmentSentences?: boolean;
-      segmentParagraphs?: boolean;
-      minWordLength?: number;
-      maxWordLength?: number;
-    },
-  ): Promise<string | { sentences?: string[]; paragraphs?: string[] }> {
+    _options?: PreprocessOptions,
+  ): Promise<string | PreprocessedContent> {
     // TODO: Validate input parameters
     if (!content || content.trim().length === 0) {
       throw new Error('Content cannot be empty');
