@@ -24,6 +24,9 @@ export enum EdgeType {
 @Index(['targetNodeId', 'type'])
 @Index(['organizationId'])
 @Index(['createdAt'])
+// Composite indexes for improved query performance
+@Index(['organizationId', 'type']) // Multi-tenancy + type filtering
+@Index(['organizationId', 'isActive']) // Multi-tenancy + soft delete filtering
 export class Edge extends BaseEntity {
   @Column({ name: 'source_node_id', type: 'uuid' })
   sourceNodeId: string;

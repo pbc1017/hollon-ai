@@ -20,6 +20,9 @@ export enum NodeType {
 @Index(['type'])
 @Index(['organizationId'])
 @Index(['createdAt'])
+// Composite indexes for improved query performance
+@Index(['organizationId', 'type']) // Multi-tenancy + type filtering
+@Index(['organizationId', 'isActive']) // Multi-tenancy + soft delete filtering
 export class Node extends BaseEntity {
   @Column({ length: 255 })
   name: string;
