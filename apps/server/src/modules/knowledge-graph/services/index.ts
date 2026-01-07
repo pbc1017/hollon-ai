@@ -1,3 +1,3 @@
-// Barrel export for knowledge-graph services
-// Additional services will be added here as the module grows
-// (e.g., GraphQueryService, GraphTraversalService, RelationshipInferenceService)
+export { EntityExtractionService } from './entity-extraction.service';
+export { GraphConstructionService } from './graph-construction.service';
+export { MergeService } from './merge.service';
