@@ -107,7 +107,7 @@ export class GoalAutomationListener {
             });
 
           if (projects.length > 0) {
-            const projectIds = projects.map((p: any) => p.id);
+            const projectIds = projects.map((p) => p.id);
 
             // Use query builder to check for team epics with IN operator
             const existingTeamEpics = await this.taskRepo
@@ -930,10 +930,33 @@ export class GoalAutomationListener {
             }
 
             if (hasFailedChecks) {
-              // CI 실패 - 재시도 로직 실행
+              // CI 실패 - 먼저 PR 브랜치가 뒤처져 있는지 확인
               this.logger.warn(
                 `CI checks failed for PR #${pr.prNumber}, initiating retry logic`,
               );
+
+              // Check if PR branch is behind main
+              const isBehind = await this.checkIfPRBehindMain(pr);
+
+              if (isBehind) {
+                this.logger.log(
+                  `PR #${pr.prNumber} is behind main, attempting to update branch...`,
+                );
+
+                const updated = await this.updatePRBranch(task, pr);
+
+                if (updated) {
+                  // 업데이트 성공 - CI 재실행 대기
+                  this.logger.log(
+                    `✅ PR #${pr.prNumber} branch updated, waiting for CI re-run...`,
+                  );
+                  continue; // 다음 cron cycle에서 CI 재확인
+                } else {
+                  this.logger.warn(
+                    `Failed to update PR #${pr.prNumber} branch, proceeding with normal retry logic`,
+                  );
+                }
+              }
 
               // Get task metadata
               const metadata = (task.metadata || {}) as Record<string, unknown>;
@@ -1843,5 +1866,218 @@ ${conflictSections}
 
 After resolving all conflicts, the files will be automatically staged for commit.
 `;
+  }
+
+  /**
+   * Check if PR branch is behind the base branch (main)
+   * @returns true if PR branch is behind, false otherwise
+   */
+  private async checkIfPRBehindMain(pr: TaskPullRequest): Promise<boolean> {
+    try {
+      // Get PR info from GitHub
+      const { stdout } = await execAsync(
+        `gh pr view ${pr.prUrl} --json baseRefName,headRefName`,
+      );
+
+      const prInfo = JSON.parse(stdout.trim()) as {
+        baseRefName: string; // main
+        headRefName: string; // feature-branch
+      };
+
+      // Check how many commits the PR branch is behind
+      const { stdout: behindCommits } = await execAsync(
+        `git log ${prInfo.headRefName}..origin/${prInfo.baseRefName} --oneline | wc -l`,
+      );
+
+      const commitCount = parseInt(behindCommits.trim());
+
+      if (commitCount > 0) {
+        this.logger.log(
+          `PR #${pr.prNumber} is ${commitCount} commit(s) behind ${prInfo.baseRefName}`,
+        );
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to check if PR is behind: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Update PR branch with latest changes from base branch (main)
+   * Automatically merges base branch into PR branch to resolve outdated code
+   * @returns true if update was successful, false otherwise
+   */
+  private async updatePRBranch(
+    task: Task,
+    pr: TaskPullRequest,
+  ): Promise<boolean> {
+    try {
+      this.logger.log(`Updating PR #${pr.prNumber} branch with latest main...`);
+
+      // 1. Worktree 경로 확인 (autoResolveConflicts와 동일 로직)
+      let worktreePath = task.workingDirectory;
+      if (!worktreePath) {
+        // Construct worktree path from task and hollon IDs
+        if (!task.assignedHollonId) {
+          this.logger.error(
+            `Task ${task.id} has no assignedHollonId, cannot construct worktree path`,
+          );
+          return false;
+        }
+
+        const hollonShortId = task.assignedHollonId.split('-')[0];
+        const taskShortId = task.id.split('-')[0];
+        const gitRoot = await execAsync('git rev-parse --show-toplevel').then(
+          (r) => r.stdout.trim(),
+        );
+        worktreePath = path.join(
+          gitRoot,
+          '.git-worktrees',
+          `hollon-${hollonShortId}`,
+          `task-${taskShortId}`,
+        );
+
+        this.logger.warn(
+          `Task ${task.id} has no workingDirectory, constructed path: ${worktreePath}`,
+        );
+      }
+
+      // 2. Worktree 경로 존재 확인 (없으면 재생성)
+      let worktreeExists = false;
+      try {
+        await execAsync(`test -d "${worktreePath}"`);
+        worktreeExists = true;
+        this.logger.log(`[Branch Update] Worktree exists at ${worktreePath}`);
+      } catch {
+        this.logger.warn(
+          `[Branch Update] Worktree path ${worktreePath} does not exist, attempting to recreate...`,
+        );
+
+        // Recreate worktree
+        try {
+          const { stdout: gitRootOutput } = await execAsync(
+            'git rev-parse --show-toplevel',
+            { cwd: path.dirname(worktreePath) },
+          );
+          const gitRoot = gitRootOutput.trim();
+          const branchName = pr.branchName;
+
+          if (!branchName) {
+            this.logger.error(
+              `PR #${pr.prNumber} has no branch name, cannot recreate worktree`,
+            );
+            return false;
+          }
+
+          // Validate branch exists
+          this.logger.log(
+            `[Branch Update] Validating branch ${branchName} exists...`,
+          );
+          try {
+            await execAsync(`git rev-parse --verify "${branchName}"`, {
+              cwd: gitRoot,
+            });
+            this.logger.log(`[Branch Update] Branch ${branchName} validated`);
+          } catch (branchError) {
+            this.logger.error(
+              `[Branch Update] Branch ${branchName} does not exist: ${branchError instanceof Error ? branchError.message : 'Unknown error'}`,
+            );
+            return false;
+          }
+
+          // Create worktree directory
+          await execAsync(`mkdir -p "${path.dirname(worktreePath)}"`);
+          this.logger.log(
+            `[Branch Update] Created parent directory: ${path.dirname(worktreePath)}`,
+          );
+
+          // Add worktree for the branch
+          this.logger.log(
+            `[Branch Update] Creating worktree at ${worktreePath} for branch ${branchName}`,
+          );
+          await execAsync(
+            `git worktree add "${worktreePath}" "${branchName}"`,
+            { cwd: gitRoot },
+          );
+
+          this.logger.log(
+            `[Branch Update] ✅ Successfully recreated worktree for PR #${pr.prNumber}`,
+          );
+          worktreeExists = true;
+
+          // Update task.workingDirectory in database
+          await this.taskRepo.update(task.id, {
+            workingDirectory: worktreePath,
+          });
+          this.logger.log(
+            `[Branch Update] Updated task.workingDirectory in database`,
+          );
+        } catch (recreateError) {
+          this.logger.error(
+            `[Branch Update] Failed to recreate worktree: ${recreateError instanceof Error ? recreateError.message : 'Unknown error'}`,
+          );
+          return false;
+        }
+      }
+
+      if (!worktreeExists) {
+        this.logger.error(
+          `[Branch Update] Unable to establish worktree at ${worktreePath}`,
+        );
+        return false;
+      }
+
+      // 3. Fetch latest main branch
+      this.logger.log(`[Branch Update] Fetching latest main branch...`);
+      await execAsync(`git fetch origin main`, { cwd: worktreePath });
+
+      // 4. Merge main into PR branch
+      this.logger.log(`[Branch Update] Merging origin/main into PR branch...`);
+      try {
+        await execAsync(`git merge origin/main --no-edit`, {
+          cwd: worktreePath,
+        });
+        this.logger.log(
+          `[Branch Update] ✅ Successfully merged main into PR branch`,
+        );
+      } catch {
+        // Merge conflict 발생 - autoResolveConflicts 호출
+        this.logger.warn(
+          `[Branch Update] Merge conflicts detected during update, attempting resolution...`,
+        );
+        const resolved = await this.autoResolveConflicts(task, pr);
+
+        if (!resolved) {
+          this.logger.error(
+            `[Branch Update] Failed to resolve conflicts during branch update`,
+          );
+          return false;
+        }
+
+        this.logger.log(
+          `[Branch Update] ✅ Conflicts resolved during branch update`,
+        );
+      }
+
+      // 5. Push updated branch
+      this.logger.log(`[Branch Update] Pushing updated branch...`);
+      await execAsync(`git push`, { cwd: worktreePath });
+
+      this.logger.log(
+        `✅ PR #${pr.prNumber} branch updated with latest main, CI will re-run automatically`,
+      );
+
+      return true;
+    } catch (error) {
+      this.logger.error(
+        `Failed to update PR branch: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      return false;
+    }
   }
 }
