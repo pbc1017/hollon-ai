@@ -169,10 +169,7 @@ export const vectorSearchConfig = (
         'vectorSearch.search.defaultLimit',
         10,
       ),
-      maxLimit: configService.get<number>(
-        'vectorSearch.search.maxLimit',
-        100,
-      ),
+      maxLimit: configService.get<number>('vectorSearch.search.maxLimit', 100),
       includeScoresByDefault: configService.get<boolean>(
         'vectorSearch.search.includeScoresByDefault',
         true,
