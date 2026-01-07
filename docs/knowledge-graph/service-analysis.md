@@ -9,6 +9,7 @@ The `KnowledgeGraphService` is the core business logic service for the Knowledge
 ## Current Status
 
 The service is in its **initial scaffolding phase** with:
+
 - Basic dependency injection setup
 - Two placeholder methods (findAllNodes, findAllEdges)
 - No business logic implementation yet
@@ -34,24 +35,27 @@ export class KnowledgeGraphService {
 ```
 
 **Injected Repositories**:
+
 - `nodeRepository`: TypeORM Repository<Node> - manages graph nodes (entities/concepts)
 - `edgeRepository`: TypeORM Repository<Edge> - manages graph edges (relationships between nodes)
 
 ### Current Methods
 
 #### `findAllNodes(): Promise<Node[]>`
+
 - **Purpose**: Retrieve all nodes from the knowledge graph
 - **Status**: Basic implementation using `nodeRepository.find()`
-- **Issues**: 
+- **Issues**:
   - No filtering by organizationId (security concern)
   - No pagination
   - No soft-delete filtering (isActive)
   - Marked as placeholder
 
 #### `findAllEdges(): Promise<Edge[]>`
+
 - **Purpose**: Retrieve all edges from the knowledge graph
 - **Status**: Basic implementation using `edgeRepository.find()`
-- **Issues**: 
+- **Issues**:
   - Same concerns as findAllNodes
   - No relationship filtering
   - Marked as placeholder
@@ -63,6 +67,7 @@ export class KnowledgeGraphService {
 **Purpose**: Represents entities/concepts in the knowledge graph
 
 **Fields**:
+
 - `id` (uuid, PK): Unique identifier
 - `name` (string, 255): Node name
 - `type` (enum): Node classification (person, organization, team, task, document, code, concept, goal, skill, tool, custom)
@@ -75,10 +80,12 @@ export class KnowledgeGraphService {
 - `updatedAt` (timestamp): Last update timestamp
 
 **Relationships**:
+
 - `outgoingEdges`: One-to-many with Edge (where this node is the source)
 - `incomingEdges`: One-to-many with Edge (where this node is the target)
 
 **Indexes**:
+
 - type
 - organizationId
 - createdAt
@@ -88,6 +95,7 @@ export class KnowledgeGraphService {
 **Purpose**: Represents relationships between nodes
 
 **Fields**:
+
 - `id` (uuid, PK): Unique identifier
 - `sourceNodeId` (uuid): Source node reference
 - `targetNodeId` (uuid): Target node reference
@@ -100,10 +108,12 @@ export class KnowledgeGraphService {
 - `updatedAt` (timestamp): Last update timestamp
 
 **Relationships**:
+
 - `sourceNode`: Many-to-one with Node (cascade delete)
 - `targetNode`: Many-to-one with Node (cascade delete)
 
 **Indexes**:
+
 - type
 - sourceNodeId + targetNodeId (composite)
 - sourceNodeId + type (composite)
@@ -116,12 +126,15 @@ export class KnowledgeGraphService {
 ### KnowledgeGraphModule Configuration
 
 **Imports**:
+
 - `TypeOrmModule.forFeature([Node, Edge])`: Enables repository injection
 
 **Controllers**:
+
 - `KnowledgeGraphController`: HTTP endpoints (currently empty placeholder)
 
 **Providers**:
+
 - `KnowledgeGraphService`: Core business logic (current focus)
 - Future providers noted in comments:
   - GraphQueryService: Advanced queries and pattern matching
@@ -130,11 +143,13 @@ export class KnowledgeGraphService {
   - GraphAnalyticsService: Graph metrics and analysis
 
 **Exports**:
+
 - `KnowledgeGraphService`: Exposes service to other modules
 
 ### Inter-Module Dependencies
 
 The service is designed to be used by other modules:
+
 - knowledge-extraction module
 - task module
 - orchestration module
@@ -146,6 +161,7 @@ Currently, no other modules are importing KnowledgeGraphService yet.
 Based on the module documentation and data model, the service's intended responsibilities include:
 
 ### Core CRUD Operations
+
 1. **Node Management**
    - Create, read, update, delete nodes
    - Filter nodes by type, organization, tags
@@ -158,6 +174,7 @@ Based on the module documentation and data model, the service's intended respons
    - Soft delete support
 
 ### Graph Queries
+
 3. **Traversal Operations**
    - Find neighbors (incoming/outgoing)
    - Path finding between nodes
@@ -170,6 +187,7 @@ Based on the module documentation and data model, the service's intended respons
    - Subgraph queries
 
 ### Advanced Features
+
 5. **Graph Analytics**
    - Degree centrality
    - Betweenness centrality
@@ -246,6 +264,7 @@ Based on the module documentation and data model, the service's intended respons
 ## Testing Strategy
 
 ### Current State
+
 - No tests exist yet
 
 ### Recommended Test Coverage
@@ -299,7 +318,7 @@ Based on module comments and typical graph database needs:
 - **Service**: `apps/server/src/modules/knowledge-graph/knowledge-graph.service.ts`
 - **Module**: `apps/server/src/modules/knowledge-graph/knowledge-graph.module.ts`
 - **Controller**: `apps/server/src/modules/knowledge-graph/knowledge-graph.controller.ts`
-- **Entities**: 
+- **Entities**:
   - `apps/server/src/modules/knowledge-graph/entities/node.entity.ts`
   - `apps/server/src/modules/knowledge-graph/entities/edge.entity.ts`
 - **Base Entity**: `apps/server/src/common/entities/base.entity.ts`
@@ -307,11 +326,13 @@ Based on module comments and typical graph database needs:
 ## Conclusion
 
 The KnowledgeGraphService is currently in a minimal scaffolding state with a solid foundation:
+
 - Well-designed entity models with appropriate types and relationships
 - Proper module integration following NestJS conventions
 - Clear roadmap for future enhancements
 
 **Next Steps**:
+
 1. Implement core CRUD operations with organization scoping
 2. Create DTOs for input validation
 3. Add comprehensive tests
