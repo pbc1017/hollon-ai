@@ -9,23 +9,24 @@
 
 ## Fixes Applied
 
-| Commit  | Fix  | Description                                                                                         |
-| ------- | ---- | --------------------------------------------------------------------------------------------------- |
-| ea4b167 | #1   | Subtasks inherit parent's worktree at execution time (not creation time)                            |
-| ea4b167 | #2   | Worktrees created at git root (`hollon-ai/.git-worktrees/`), not `apps/server/`                     |
-| ea4b167 | #3   | CI retry fetches actual logs via `gh run view --log-failed`                                         |
-| ea4b167 | #4   | Retry limit increased from 3 to 5                                                                   |
-| ea4b167 | #5   | After 5 retries: task → BLOCKED for manager intervention                                            |
-| d4ebd7e | #2.1 | Use `git rev-parse --show-toplevel` to detect actual git root (fixes `apps/` vs `hollon-ai/` issue) |
-| 58838a3 | #11  | 3-layer worktree protection: cleanup all tasks, verify path exists, fail if cwd missing             |
-| c184767 | #12  | Use `os.tmpdir()` + `disallowedTools` for analysis-only Brain Provider calls                        |
-| 1d93145 | #13  | Reuse existing PR during CI retry instead of failing with "already exists" error                    |
-| 7eb8bf3 | #14  | Normalize CI state comparison to lowercase (gh CLI returns uppercase SUCCESS/FAILURE)               |
-| N/A     | #22  | Add parent-child unblock logic to PR merge workflow (replaced by Fix #25)                           |
-| N/A     | #23  | Remove --auto flag from gh pr merge (requires branch protection rules)                              |
-| 0a3c12d | #24  | Auto-resolve merge conflicts: check mergeable before CI, rebase + force push                        |
-| 199536e | #25  | Auto-complete Team Epic when all children complete (during PR merge, not cron)                      |
-| TBD     | #27  | Brain Provider merge conflict auto-resolution + pre-commit worktree validation                      |
+| Commit  | Fix   | Description                                                                                         |
+| ------- | ----- | --------------------------------------------------------------------------------------------------- |
+| ea4b167 | #1    | Subtasks inherit parent's worktree at execution time (not creation time)                            |
+| ea4b167 | #2    | Worktrees created at git root (`hollon-ai/.git-worktrees/`), not `apps/server/`                     |
+| ea4b167 | #3    | CI retry fetches actual logs via `gh run view --log-failed`                                         |
+| ea4b167 | #4    | Retry limit increased from 3 to 5                                                                   |
+| ea4b167 | #5    | After 5 retries: task → BLOCKED for manager intervention                                            |
+| d4ebd7e | #2.1  | Use `git rev-parse --show-toplevel` to detect actual git root (fixes `apps/` vs `hollon-ai/` issue) |
+| 58838a3 | #11   | 3-layer worktree protection: cleanup all tasks, verify path exists, fail if cwd missing             |
+| c184767 | #12   | Use `os.tmpdir()` + `disallowedTools` for analysis-only Brain Provider calls                        |
+| 1d93145 | #13   | Reuse existing PR during CI retry instead of failing with "already exists" error                    |
+| 7eb8bf3 | #14   | Normalize CI state comparison to lowercase (gh CLI returns uppercase SUCCESS/FAILURE)               |
+| N/A     | #22   | Add parent-child unblock logic to PR merge workflow (replaced by Fix #25)                           |
+| N/A     | #23   | Remove --auto flag from gh pr merge (requires branch protection rules)                              |
+| 0a3c12d | #24   | Auto-resolve merge conflicts: check mergeable before CI, rebase + force push                        |
+| 199536e | #25   | Auto-complete Team Epic when all children complete (during PR merge, not cron)                      |
+| ceaad88 | #27.3 | Construct worktree path from task/hollon IDs when workingDirectory missing                          |
+| 0c5412b | #27.4 | Merge-time conflict detection + manager re-review on success (second timing point)                  |
 
 ---
 
@@ -764,8 +765,176 @@ chmod +x .husky/pre-commit
    - Main 브랜치는 경고만 표시 (수동 작업 허용)
    - 워크트리 격리 강화
 
-**상태**: ✅ 구현 완료, 커밋 대기 중
+#### Part 3: Worktree Path Construction Fix
+
+**파일**: `apps/server/src/modules/goal/listeners/goal-automation.listener.ts`
+
+**문제점**:
+
+- 일부 태스크의 `workingDirectory` 메타데이터가 손실되거나 설정되지 않음
+- 워크트리 경로를 찾을 수 없어서 conflict resolution 실패
+
+**해결** (commit ceaad88):
+
+```typescript
+// If workingDirectory is not set, construct it from task and hollon IDs
+if (!worktreePath) {
+  if (!task.assignedHollonId) {
+    this.logger.error(
+      `Task ${task.id} has no workingDirectory and no assigned hollon`,
+    );
+    return false;
+  }
+
+  const hollonShortId = task.assignedHollonId.split('-')[0];
+  const taskShortId = task.id.split('-')[0];
+  const gitRoot = await execAsync('git rev-parse --show-toplevel').then((r) =>
+    r.stdout.trim(),
+  );
+  worktreePath = path.join(
+    gitRoot,
+    '.git-worktrees',
+    `hollon-${hollonShortId}`,
+    `task-${taskShortId}`,
+  );
+
+  this.logger.log(
+    `Fix #27 (part 3): Constructed worktree path from IDs: ${worktreePath}`,
+  );
+}
+```
+
+#### Part 4: Merge-Time Conflict Detection and Manager Re-Review
+
+**파일**: `apps/server/src/modules/collaboration/services/code-review.service.ts`
+
+**배경**:
+
+- Part 1의 Brain Provider conflict resolution은 PR 생성 직후 (CI 실행 전)에만 작동
+- Main 브랜치가 업데이트되면서 PR 머지 직전에 새로운 conflict 발생 가능
+- **사용자 요구사항**: 자동 해결 성공 시에도 바로 머지하지 말고 매니저 리뷰 받기
+
+**구현** (commit 0c5412b):
+
+**1. Merge-time conflict detection** (mergePullRequest lines 244-321):
+
+```typescript
+// Fix #27 (Part 4): Final mergeable check before merge (second timing point)
+if (pr.prUrl && process.env.NODE_ENV !== 'test') {
+  this.logger.log(`Performing final mergeable check before merge: ${pr.prUrl}`);
+
+  try {
+    const mergeableStatus = await this.checkPRMergeable(pr.prUrl);
+
+    if (mergeableStatus === 'CONFLICTING') {
+      this.logger.warn(
+        `PR #${pr.prNumber} has merge conflicts before merge, attempting auto-resolution...`,
+      );
+
+      // Attempt auto-conflict resolution with Brain Provider
+      const resolved = await this.autoResolveConflictsBeforeMerge(pr.task, pr);
+
+      if (!resolved) {
+        // Conflict resolution failed - request manual intervention
+        pr.status = PullRequestStatus.CHANGES_REQUESTED;
+        pr.reviewComments =
+          '[MERGE CONFLICT] Merge conflicts detected before merge. Automatic resolution failed.';
+        await this.prRepo.save(pr);
+
+        pr.task.status = TaskStatus.READY;
+        await this.taskRepo.save(pr.task);
+
+        throw new Error(
+          'Merge conflicts detected and automatic resolution failed.',
+        );
+      }
+
+      // Conflict resolution succeeded - request manager re-review (user requirement!)
+      this.logger.log(
+        `✅ Conflicts resolved for PR #${pr.prNumber} before merge. Requesting manager re-review...`,
+      );
+
+      pr.status = PullRequestStatus.READY_FOR_REVIEW;
+      pr.reviewComments =
+        '[AUTO-RESOLVED] Merge conflicts were automatically resolved by Brain Provider before merge. Please review the resolution before approving.';
+      await this.prRepo.save(pr);
+
+      throw new Error(
+        'Merge conflicts were automatically resolved. Manager re-review required before merge.',
+      );
+    }
+  } catch (error) {
+    // Re-throw our custom errors, log other errors
+    if (error instanceof Error && error.message.includes('Merge conflicts')) {
+      throw error;
+    }
+    this.logger.warn(`Could not verify mergeable status: ${error}`);
+  }
+}
+```
+
+**2. Helper methods**:
+
+```typescript
+// Check if PR is mergeable using gh CLI
+private async checkPRMergeable(prUrl: string): Promise<string> {
+  const { stdout } = await execAsync(
+    `gh pr view ${prUrl} --json mergeable,mergeStateStatus`,
+  );
+  const prStatus = JSON.parse(stdout.trim());
+
+  if (prStatus.mergeable === 'CONFLICTING' || prStatus.mergeStateStatus === 'DIRTY') {
+    return 'CONFLICTING';
+  }
+
+  return 'MERGEABLE';
+}
+
+// Get list of conflicting files
+private async getConflictingFiles(worktreePath: string): Promise<string[]> {
+  const { stdout } = await execAsync(
+    `git diff --name-only --diff-filter=U`,
+    { cwd: worktreePath },
+  );
+  return stdout.trim().split('\n').filter((file) => file.length > 0);
+}
+
+// Attempt to auto-resolve conflicts before merge
+private async autoResolveConflictsBeforeMerge(
+  task: Task,
+  pr: TaskPullRequest,
+): Promise<boolean> {
+  // 1. Construct or retrieve worktree path (same logic as Part 3)
+  // 2. Recreate worktree if needed
+  // 3. Fetch latest main and rebase
+  // 4. Detect conflicts
+  // 5. Call Brain Provider (TODO - placeholder for now)
+  // 6. Return true if resolved, false otherwise
+
+  // Currently returns false (Brain Provider integration pending)
+  return false;
+}
+```
+
+**타이밍 포인트 비교**:
+
+| Timing Point | Location           | When                     | Purpose                               |
+| ------------ | ------------------ | ------------------------ | ------------------------------------- |
+| **Timing 1** | `autoCheckPRCI`    | PR 생성 직후, CI 실행 전 | 초기 conflict 방지                    |
+| **Timing 2** | `mergePullRequest` | CI 통과 후, 머지 직전    | Main 업데이트로 인한 새 conflict 방지 |
+
+**핵심 차이점**:
+
+- Timing 1: 자동 해결 후 CI 재실행
+- Timing 2: 자동 해결 후 **매니저 리뷰 요청** (바로 머지하지 않음)
+
+**상태**: ✅ Part 3-4 구현 완료 (ceaad88, 0c5412b)
+
+**미구현 사항**:
+
+- Brain Provider integration in `code-review.service.ts` (placeholder method `resolveConflictsWithBrainProvider` returns false)
+- 실제 conflict resolution은 수동 개입 필요
 
 ---
 
-**Last Updated**: 2026-01-07T01:00:00+09:00
+**Last Updated**: 2026-01-07T01:17:00+09:00
