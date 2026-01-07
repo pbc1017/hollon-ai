@@ -1619,13 +1619,41 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
       this.logger.log(`Fetching latest main branch...`);
       await execAsync(`git fetch origin main`, { cwd: worktreePath });
 
-      // 4. Rebase on main
+      // 4. Check for uncommitted changes and stash if needed (Fix: Handle uncommitted changes before rebase)
+      const { stdout: statusCheck } = await execAsync(
+        `git status --porcelain`,
+        { cwd: worktreePath },
+      );
+      const hasUncommittedChanges = statusCheck.trim().length > 0;
+
+      if (hasUncommittedChanges) {
+        this.logger.log(`Found uncommitted changes, stashing before rebase...`);
+        await execAsync(
+          `git stash push -m "autoCheckPRCI: temp stash for rebase"`,
+          { cwd: worktreePath },
+        );
+      }
+
+      // 5. Rebase on main
       this.logger.log(`Attempting rebase on origin/main...`);
       try {
         await execAsync(`git rebase origin/main`, { cwd: worktreePath });
         this.logger.log(`✅ Rebase successful without conflicts`);
 
-        // 5. Force push (since rebase rewrites history)
+        // 6. Restore stashed changes if we stashed
+        if (hasUncommittedChanges) {
+          this.logger.log(`Restoring stashed changes...`);
+          try {
+            await execAsync(`git stash pop`, { cwd: worktreePath });
+          } catch (stashPopError) {
+            this.logger.warn(
+              `Failed to pop stash (may have conflicts): ${stashPopError instanceof Error ? stashPopError.message : 'Unknown error'}`,
+            );
+            // Continue anyway - the rebase succeeded
+          }
+        }
+
+        // 7. Force push (since rebase rewrites history)
         this.logger.log(`Force pushing resolved changes...`);
         await execAsync(`git push --force-with-lease`, { cwd: worktreePath });
 
