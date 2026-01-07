@@ -47,6 +47,17 @@ export class Edge extends BaseEntity {
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
+  /**
+   * Vector embedding for semantic search on relationships
+   * Stored as text type in TypeScript, actual vector type set in migration
+   * Enables finding similar relationships based on their properties and context
+   *
+   * Note: The actual database column type is vector(1536) for pgvector
+   * Format in database: [0.1, 0.2, 0.3, ...]
+   */
+  @Column({ type: 'text', nullable: true })
+  embedding: string | null;
+
   // Relations
   @ManyToOne(() => Node, (node) => node.outgoingEdges, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'source_node_id' })
