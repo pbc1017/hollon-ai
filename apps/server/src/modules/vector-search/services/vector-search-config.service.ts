@@ -101,7 +101,8 @@ export class VectorSearchConfigService {
 
     // Validate search config
     if (config.searchConfig) {
-      const { similarityThreshold, defaultLimit, maxLimit } = config.searchConfig;
+      const { similarityThreshold, defaultLimit, maxLimit } =
+        config.searchConfig;
 
       if (
         similarityThreshold !== undefined &&
@@ -125,9 +126,7 @@ export class VectorSearchConfigService {
         maxLimit !== undefined &&
         defaultLimit > maxLimit
       ) {
-        throw new BadRequestException(
-          'Default limit cannot exceed max limit',
-        );
+        throw new BadRequestException('Default limit cannot exceed max limit');
       }
     }
 
@@ -145,9 +144,7 @@ export class VectorSearchConfigService {
    * @param organizationId - UUID of the organization
    * @returns Vector search configuration
    */
-  async getOrCreateConfig(
-    organizationId: string,
-  ): Promise<VectorSearchConfig> {
+  async getOrCreateConfig(organizationId: string): Promise<VectorSearchConfig> {
     try {
       return await this.getConfig(organizationId);
     } catch (error) {

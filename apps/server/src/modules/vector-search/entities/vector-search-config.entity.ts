@@ -33,7 +33,11 @@ export class VectorSearchConfig extends BaseEntity {
    * Embedding model name
    * Examples: 'text-embedding-ada-002', 'text-embedding-3-small', 'text-embedding-3-large'
    */
-  @Column({ name: 'embedding_model', length: 100, default: 'text-embedding-3-small' })
+  @Column({
+    name: 'embedding_model',
+    length: 100,
+    default: 'text-embedding-3-small',
+  })
   embeddingModel: string;
 
   /**
