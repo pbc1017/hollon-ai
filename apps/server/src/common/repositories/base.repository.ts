@@ -7,6 +7,7 @@ import {
   DataSource,
   InsertResult,
   UpdateResult,
+  QueryDeepPartialEntity,
 } from 'typeorm';
 import { Logger } from '@nestjs/common';
 
@@ -19,6 +20,7 @@ export class BaseRepository<
 > extends Repository<Entity> {
   protected readonly logger: Logger;
   private readonly DEFAULT_CHUNK_SIZE = 500;
+  private readonly dataSource: DataSource;
 
   constructor(
     target: new () => Entity,
@@ -27,6 +29,7 @@ export class BaseRepository<
   ) {
     super(target, dataSource.createEntityManager(queryRunner));
     this.logger = new Logger(this.constructor.name);
+    this.dataSource = dataSource;
   }
 
   /**
@@ -53,7 +56,7 @@ export class BaseRepository<
       return [];
     }
 
-    const queryRunner = this.manager.connection.createQueryRunner();
+    const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
@@ -65,7 +68,7 @@ export class BaseRepository<
         const chunk = entities.slice(i, i + chunkSize);
         const result: InsertResult = await queryRunner.manager.insert(
           this.target,
-          chunk,
+          chunk as QueryDeepPartialEntity<Entity>[],
         );
 
         const chunkIds = result.identifiers.map(
@@ -112,7 +115,7 @@ export class BaseRepository<
       return { identifiers: [], generatedMaps: [], raw: [] };
     }
 
-    const queryRunner = this.manager.connection.createQueryRunner();
+    const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
@@ -122,7 +125,10 @@ export class BaseRepository<
 
       for (let i = 0; i < entities.length; i += chunkSize) {
         const chunk = entities.slice(i, i + chunkSize);
-        const result = await queryRunner.manager.insert(this.target, chunk);
+        const result = await queryRunner.manager.insert(
+          this.target,
+          chunk as QueryDeepPartialEntity<Entity>[],
+        );
 
         allIdentifiers.push(...result.identifiers);
         allGeneratedMaps.push(...result.generatedMaps);
@@ -173,7 +179,7 @@ export class BaseRepository<
     partialEntity: DeepPartial<Entity>,
     chunkSize: number = this.DEFAULT_CHUNK_SIZE,
   ): Promise<UpdateResult> {
-    const queryRunner = this.manager.connection.createQueryRunner();
+    const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
@@ -191,14 +197,12 @@ export class BaseRepository<
       // Update in chunks
       for (let i = 0; i < entities.length; i += chunkSize) {
         const chunk = entities.slice(i, i + chunkSize);
-        const ids = chunk.map(
-          (entity: Entity & { id: string | number }) => entity.id,
-        );
+        const ids = chunk.map((entity) => (entity as any).id);
 
         const result = await queryRunner.manager.update(
           this.target,
           ids,
-          partialEntity,
+          partialEntity as QueryDeepPartialEntity<Entity>,
         );
 
         totalAffected += result.affected || 0;
@@ -245,7 +249,7 @@ export class BaseRepository<
       return [];
     }
 
-    const queryRunner = this.manager.connection.createQueryRunner();
+    const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
@@ -299,7 +303,7 @@ export class BaseRepository<
       queryRunner: QueryRunner,
     ) => Promise<T>,
   ): Promise<T> {
-    const queryRunner = this.manager.connection.createQueryRunner();
+    const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
@@ -307,7 +311,7 @@ export class BaseRepository<
       // Create a repository instance that uses this transaction
       const transactionalRepo = new BaseRepository(
         this.target as new () => Entity,
-        this.manager.connection,
+        this.dataSource,
         queryRunner,
       );
 

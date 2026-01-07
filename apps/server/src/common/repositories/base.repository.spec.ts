@@ -21,10 +21,20 @@ describe('BaseRepository', () => {
     manager: {} as EntityManager,
   };
 
-  const mockDataSource = {
+  const mockDataSource: any = {
     createQueryRunner: jest.fn(() => mockQueryRunner),
-    createEntityManager: jest.fn(),
+    createEntityManager: jest.fn((_qr?: any): any => ({
+      connection: null,
+    })),
+    getMetadata: jest.fn(() => ({
+      name: 'TestEntity',
+    })),
   };
+
+  // Set up circular reference after initialization
+  mockDataSource.createEntityManager = jest.fn((_qr?: any): any => ({
+    connection: mockDataSource,
+  }));
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -412,7 +422,7 @@ describe('BaseRepository', () => {
         generatedMaps: [],
       });
 
-      const result = await repository.withTransaction(async (repo, qr) => {
+      const result = await repository.withTransaction(async (_repo, qr) => {
         await qr.manager.insert(TestEntity, [{ name: 'New 1', value: 1 }]);
         await qr.manager.update(TestEntity, '1', { value: 100 });
         return { inserted: 1, updated: 1 };

@@ -14,6 +14,7 @@ describe('TaskPoolService', () => {
     update: jest.fn(),
     query: jest.fn(),
     createQueryBuilder: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
   };
 
   const mockHollonRepo = {
