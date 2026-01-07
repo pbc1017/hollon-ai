@@ -1,21 +1,12 @@
 import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Node } from './node.entity';
+import { RelationshipType } from '../../../knowledge/enums/relationship-type.enum';
 
-export enum EdgeType {
-  CREATED_BY = 'created_by',
-  BELONGS_TO = 'belongs_to',
-  MANAGES = 'manages',
-  COLLABORATES_WITH = 'collaborates_with',
-  DEPENDS_ON = 'depends_on',
-  REFERENCES = 'references',
-  IMPLEMENTS = 'implements',
-  DERIVES_FROM = 'derives_from',
-  RELATED_TO = 'related_to',
-  CHILD_OF = 'child_of',
-  PART_OF = 'part_of',
-  CUSTOM = 'custom',
-}
+/**
+ * @deprecated Use RelationshipType instead. This alias is kept for backward compatibility.
+ */
+export const EdgeType = RelationshipType;
 
 @Entity('knowledge_graph_edges')
 @Index(['type'])
@@ -36,10 +27,10 @@ export class Edge extends BaseEntity {
 
   @Column({
     type: 'enum',
-    enum: EdgeType,
-    default: EdgeType.RELATED_TO,
+    enum: RelationshipType,
+    default: RelationshipType.RELATES_TO,
   })
-  type: EdgeType;
+  type: RelationshipType;
 
   @Column({ name: 'organization_id', type: 'uuid' })
   organizationId: string;
