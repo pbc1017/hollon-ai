@@ -535,6 +535,473 @@ export class KnowledgeExtractionService {
    * // Result: ['conversation', 'document', 'insight', 'task']
    * ```
    */
+  /**
+   * Find knowledge items by type within a date range
+   *
+   * Combines type filtering with temporal constraints for targeted queries.
+   * Optimizes performance by leveraging both the type and extractedAt indexes.
+   *
+   * @param organizationId - UUID of the organization
+   * @param type - Knowledge type to filter by
+   * @param startDate - Start of date range (inclusive)
+   * @param endDate - End of date range (inclusive)
+   *
+   * @returns Promise resolving to array of knowledge items matching type and date criteria,
+   *          ordered by extractedAt DESC
+   *
+   * @performance Uses indexes on type and extractedAt for optimized query
+   *
+   * @example
+   * ```typescript
+   * const recentConversations = await service.findByTypeAndDateRange(
+   *   'org-123',
+   *   'conversation',
+   *   new Date('2024-01-01'),
+   *   new Date('2024-01-31')
+   * );
+   * ```
+   */
+  async findByTypeAndDateRange(
+    organizationId: string,
+    type: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<KnowledgeItem[]> {
+    return this.knowledgeItemRepository
+      .createQueryBuilder('ki')
+      .where('ki.organization_id = :organizationId', { organizationId })
+      .andWhere('ki.type = :type', { type })
+      .andWhere('ki.extracted_at >= :startDate', { startDate })
+      .andWhere('ki.extracted_at <= :endDate', { endDate })
+      .orderBy('ki.extracted_at', 'DESC')
+      .getMany();
+  }
+
+  /**
+   * Find knowledge items by multiple types
+   *
+   * Retrieves knowledge items matching any of the specified types.
+   * Useful for querying related content categories (e.g., 'conversation', 'insight').
+   *
+   * @param organizationId - UUID of the organization
+   * @param types - Array of knowledge types to include
+   *
+   * @returns Promise resolving to array of knowledge items matching any of the types,
+   *          ordered by extractedAt DESC
+   *
+   * @performance Uses index on type with IN operator for optimized filtering
+   *
+   * @example
+   * ```typescript
+   * const interactiveContent = await service.findByTypes(
+   *   'org-123',
+   *   ['conversation', 'task', 'insight']
+   * );
+   * ```
+   */
+  async findByTypes(
+    organizationId: string,
+    types: string[],
+  ): Promise<KnowledgeItem[]> {
+    if (types.length === 0) {
+      return [];
+    }
+
+    return this.knowledgeItemRepository
+      .createQueryBuilder('ki')
+      .where('ki.organization_id = :organizationId', { organizationId })
+      .andWhere('ki.type IN (:...types)', { types })
+      .orderBy('ki.extracted_at', 'DESC')
+      .getMany();
+  }
+
+  /**
+   * Count knowledge items by type
+   *
+   * Returns the count of knowledge items for each type within an organization.
+   * Useful for analytics dashboards and understanding content distribution.
+   *
+   * @param organizationId - UUID of the organization
+   *
+   * @returns Promise resolving to record mapping types to their counts
+   *
+   * @performance Uses index on type with grouped aggregation
+   *
+   * @example
+   * ```typescript
+   * const typeCounts = await service.countByType('org-123');
+   * // Result: { conversation: 150, document: 75, insight: 30, task: 45 }
+   * ```
+   */
+  async countByType(
+    organizationId: string,
+  ): Promise<Record<string, number>> {
+    const result = await this.knowledgeItemRepository
+      .createQueryBuilder('ki')
+      .select('ki.type', 'type')
+      .addSelect('COUNT(*)', 'count')
+      .where('ki.organization_id = :organizationId', { organizationId })
+      .groupBy('ki.type')
+      .getRawMany();
+
+    return result.reduce(
+      (acc, row) => {
+        acc[row.type] = parseInt(row.count, 10);
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+  }
+
+  /**
+   * Find knowledge items extracted after a specific date
+   *
+   * Retrieves all knowledge items extracted after the specified date.
+   * Optimized for incremental synchronization and real-time updates.
+   *
+   * @param organizationId - UUID of the organization
+   * @param afterDate - Date threshold (exclusive)
+   * @param limit - Optional maximum number of items to return
+   *
+   * @returns Promise resolving to array of knowledge items extracted after the date,
+   *          ordered by extractedAt ASC (chronological)
+   *
+   * @performance Uses index on extractedAt for efficient range scan
+   *
+   * @example
+   * ```typescript
+   * const newItems = await service.findExtractedAfter(
+   *   'org-123',
+   *   lastSyncDate,
+   *   100
+   * );
+   * ```
+   */
+  async findExtractedAfter(
+    organizationId: string,
+    afterDate: Date,
+    limit?: number,
+  ): Promise<KnowledgeItem[]> {
+    const query = this.knowledgeItemRepository
+      .createQueryBuilder('ki')
+      .where('ki.organization_id = :organizationId', { organizationId })
+      .andWhere('ki.extracted_at > :afterDate', { afterDate })
+      .orderBy('ki.extracted_at', 'ASC');
+
+    if (limit) {
+      query.take(limit);
+    }
+
+    return query.getMany();
+  }
+
+  /**
+   * Find knowledge items extracted before a specific date
+   *
+   * Retrieves all knowledge items extracted before the specified date.
+   * Useful for historical analysis and archival operations.
+   *
+   * @param organizationId - UUID of the organization
+   * @param beforeDate - Date threshold (exclusive)
+   * @param limit - Optional maximum number of items to return
+   *
+   * @returns Promise resolving to array of knowledge items extracted before the date,
+   *          ordered by extractedAt DESC
+   *
+   * @performance Uses index on extractedAt for efficient range scan
+   *
+   * @example
+   * ```typescript
+   * const oldItems = await service.findExtractedBefore(
+   *   'org-123',
+   *   archiveDate,
+   *   1000
+   * );
+   * ```
+   */
+  async findExtractedBefore(
+    organizationId: string,
+    beforeDate: Date,
+    limit?: number,
+  ): Promise<KnowledgeItem[]> {
+    const query = this.knowledgeItemRepository
+      .createQueryBuilder('ki')
+      .where('ki.organization_id = :organizationId', { organizationId })
+      .andWhere('ki.extracted_at < :beforeDate', { beforeDate })
+      .orderBy('ki.extracted_at', 'DESC');
+
+    if (limit) {
+      query.take(limit);
+    }
+
+    return query.getMany();
+  }
+
+  /**
+   * Search with advanced filters
+   *
+   * Flexible query builder that allows combining multiple filter criteria.
+   * Provides a unified interface for complex search scenarios with optimal index usage.
+   *
+   * @param filters - Search filter configuration
+   * @param filters.organizationId - UUID of the organization (required)
+   * @param filters.types - Optional array of types to include
+   * @param filters.searchTerm - Optional content search term (case-insensitive)
+   * @param filters.startDate - Optional start of date range (inclusive)
+   * @param filters.endDate - Optional end of date range (inclusive)
+   * @param filters.limit - Optional maximum number of results
+   * @param filters.offset - Optional number of results to skip (for pagination)
+   * @param filters.orderBy - Optional sort field (default: 'extractedAt')
+   * @param filters.orderDirection - Optional sort direction (default: 'DESC')
+   *
+   * @returns Promise resolving to array of knowledge items matching all criteria
+   *
+   * @performance
+   * - Leverages indexes on organizationId, type, and extractedAt
+   * - Conditionally builds query to avoid unnecessary clauses
+   * - Supports efficient pagination with offset/limit
+   *
+   * @example
+   * ```typescript
+   * const results = await service.searchWithFilters({
+   *   organizationId: 'org-123',
+   *   types: ['conversation', 'insight'],
+   *   searchTerm: 'deployment',
+   *   startDate: new Date('2024-01-01'),
+   *   limit: 20
+   * });
+   * ```
+   */
+  async searchWithFilters(filters: {
+    organizationId: string;
+    types?: string[];
+    searchTerm?: string;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+    offset?: number;
+    orderBy?: 'extractedAt' | 'type' | 'createdAt';
+    orderDirection?: 'ASC' | 'DESC';
+  }): Promise<KnowledgeItem[]> {
+    const {
+      organizationId,
+      types,
+      searchTerm,
+      startDate,
+      endDate,
+      limit,
+      offset,
+      orderBy = 'extractedAt',
+      orderDirection = 'DESC',
+    } = filters;
+
+    const query = this.knowledgeItemRepository
+      .createQueryBuilder('ki')
+      .where('ki.organization_id = :organizationId', { organizationId });
+
+    if (types && types.length > 0) {
+      query.andWhere('ki.type IN (:...types)', { types });
+    }
+
+    if (searchTerm) {
+      query.andWhere('ki.content ILIKE :searchTerm', {
+        searchTerm: `%${searchTerm}%`,
+      });
+    }
+
+    if (startDate) {
+      query.andWhere('ki.extracted_at >= :startDate', { startDate });
+    }
+
+    if (endDate) {
+      query.andWhere('ki.extracted_at <= :endDate', { endDate });
+    }
+
+    // Apply ordering based on the specified field
+    if (orderBy === 'extractedAt') {
+      query.orderBy('ki.extracted_at', orderDirection);
+    } else if (orderBy === 'type') {
+      query.orderBy('ki.type', orderDirection);
+    } else if (orderBy === 'createdAt') {
+      query.orderBy('ki.created_at', orderDirection);
+    }
+
+    if (offset) {
+      query.skip(offset);
+    }
+
+    if (limit) {
+      query.take(limit);
+    }
+
+    return query.getMany();
+  }
+
+  /**
+   * Count knowledge items with filters
+   *
+   * Returns the count of knowledge items matching the specified filter criteria.
+   * Useful for pagination and analytics when combined with searchWithFilters.
+   *
+   * @param filters - Filter configuration (same as searchWithFilters)
+   * @param filters.organizationId - UUID of the organization (required)
+   * @param filters.types - Optional array of types to include
+   * @param filters.searchTerm - Optional content search term
+   * @param filters.startDate - Optional start of date range
+   * @param filters.endDate - Optional end of date range
+   *
+   * @returns Promise resolving to count of matching items
+   *
+   * @performance Uses same index optimization as searchWithFilters
+   *
+   * @example
+   * ```typescript
+   * const total = await service.countWithFilters({
+   *   organizationId: 'org-123',
+   *   types: ['conversation'],
+   *   startDate: new Date('2024-01-01')
+   * });
+   * ```
+   */
+  async countWithFilters(filters: {
+    organizationId: string;
+    types?: string[];
+    searchTerm?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<number> {
+    const { organizationId, types, searchTerm, startDate, endDate } = filters;
+
+    const query = this.knowledgeItemRepository
+      .createQueryBuilder('ki')
+      .where('ki.organization_id = :organizationId', { organizationId });
+
+    if (types && types.length > 0) {
+      query.andWhere('ki.type IN (:...types)', { types });
+    }
+
+    if (searchTerm) {
+      query.andWhere('ki.content ILIKE :searchTerm', {
+        searchTerm: `%${searchTerm}%`,
+      });
+    }
+
+    if (startDate) {
+      query.andWhere('ki.extracted_at >= :startDate', { startDate });
+    }
+
+    if (endDate) {
+      query.andWhere('ki.extracted_at <= :endDate', { endDate });
+    }
+
+    return query.getCount();
+  }
+
+  /**
+   * Get temporal distribution of knowledge items
+   *
+   * Analyzes the temporal distribution of knowledge items, grouping by a specified
+   * time interval (day, week, month). Useful for trend analysis and visualizations.
+   *
+   * @param organizationId - UUID of the organization
+   * @param interval - Time interval for grouping ('day' | 'week' | 'month')
+   * @param startDate - Optional start date for the analysis period
+   * @param endDate - Optional end date for the analysis period
+   *
+   * @returns Promise resolving to array of time buckets with counts
+   *
+   * @performance Uses index on extractedAt with date_trunc for efficient aggregation
+   *
+   * @example
+   * ```typescript
+   * const distribution = await service.getTemporalDistribution(
+   *   'org-123',
+   *   'week',
+   *   new Date('2024-01-01'),
+   *   new Date('2024-12-31')
+   * );
+   * // Result: [{ period: '2024-01-01', count: 45 }, ...]
+   * ```
+   */
+  async getTemporalDistribution(
+    organizationId: string,
+    interval: 'day' | 'week' | 'month',
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<Array<{ period: string; count: number }>> {
+    const query = this.knowledgeItemRepository
+      .createQueryBuilder('ki')
+      .select(
+        `DATE_TRUNC('${interval}', ki.extracted_at)::date`,
+        'period',
+      )
+      .addSelect('COUNT(*)', 'count')
+      .where('ki.organization_id = :organizationId', { organizationId });
+
+    if (startDate) {
+      query.andWhere('ki.extracted_at >= :startDate', { startDate });
+    }
+
+    if (endDate) {
+      query.andWhere('ki.extracted_at <= :endDate', { endDate });
+    }
+
+    query.groupBy('period').orderBy('period', 'ASC');
+
+    const result = await query.getRawMany();
+
+    return result.map((row) => ({
+      period: row.period,
+      count: parseInt(row.count, 10),
+    }));
+  }
+
+  /**
+   * Find knowledge items by metadata query
+   *
+   * Searches knowledge items based on JSONB metadata field values.
+   * Supports PostgreSQL JSONB operators for flexible metadata querying.
+   *
+   * @param organizationId - UUID of the organization
+   * @param metadataQuery - JSONB query using PostgreSQL operators
+   * @param limit - Optional maximum number of results
+   *
+   * @returns Promise resolving to array of matching knowledge items
+   *
+   * @performance
+   * - Uses JSONB containment operator for efficient queries
+   * - Consider adding GIN index on metadata column for large-scale usage
+   *
+   * @example
+   * ```typescript
+   * // Find items with specific metadata property
+   * const items = await service.findByMetadata(
+   *   'org-123',
+   *   { source: 'slack' },
+   *   50
+   * );
+   * ```
+   */
+  async findByMetadata(
+    organizationId: string,
+    metadataQuery: Record<string, unknown>,
+    limit?: number,
+  ): Promise<KnowledgeItem[]> {
+    const query = this.knowledgeItemRepository
+      .createQueryBuilder('ki')
+      .where('ki.organization_id = :organizationId', { organizationId })
+      .andWhere('ki.metadata @> :metadataQuery', {
+        metadataQuery: JSON.stringify(metadataQuery),
+      })
+      .orderBy('ki.extracted_at', 'DESC');
+
+    if (limit) {
+      query.take(limit);
+    }
+
+    return query.getMany();
+  }
+
   async getUniqueTypes(organizationId: string): Promise<string[]> {
     const result = await this.knowledgeItemRepository
       .createQueryBuilder('ki')
