@@ -768,8 +768,8 @@ export class GoalAutomationListener {
     try {
       this.logger.debug('Checking CI status for PRs...');
 
-      // IN_REVIEW 상태이면서 PR이 있는 Task 찾기
-      const tasksWithPRs = await this.taskRepo
+      // Fix #28: IN_REVIEW + BLOCKED (merge conflict) 상태의 Task 모두 처리
+      const inReviewTasks = await this.taskRepo
         .createQueryBuilder('task')
         .where('task.status = :status', { status: TaskStatus.IN_REVIEW })
         .leftJoinAndSelect('task.assignedHollon', 'hollon')
@@ -777,10 +777,31 @@ export class GoalAutomationListener {
         .take(5) // 한 번에 최대 5개까지 처리
         .getMany();
 
+      // Fix #28: BLOCKED 상태 중 merge conflict 때문에 blocked된 태스크 재시도
+      const blockedConflictTasks = await this.taskRepo
+        .createQueryBuilder('task')
+        .where('task.status = :status', { status: TaskStatus.BLOCKED })
+        .andWhere('task.metadata::text LIKE :conflictPattern', {
+          conflictPattern: '%Merge conflicts%',
+        })
+        .leftJoinAndSelect('task.assignedHollon', 'hollon')
+        .leftJoinAndSelect('task.project', 'project')
+        .take(5) // 한 번에 최대 5개까지 처리
+        .getMany();
+
+      // 두 리스트 합치기
+      const tasksWithPRs = [...inReviewTasks, ...blockedConflictTasks];
+
       if (tasksWithPRs.length === 0) {
-        this.logger.debug('No tasks with PRs in IN_REVIEW status');
+        this.logger.debug(
+          'No tasks with PRs in IN_REVIEW or BLOCKED (conflict) status',
+        );
         return;
       }
+
+      this.logger.log(
+        `Found ${inReviewTasks.length} IN_REVIEW tasks and ${blockedConflictTasks.length} BLOCKED (conflict) tasks to process`,
+      );
 
       // 각 Task의 PR 찾기
       for (const task of tasksWithPRs) {
