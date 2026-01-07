@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { promisify } from 'util';
 import { exec } from 'child_process';
 import { existsSync } from 'fs';
@@ -44,36 +44,46 @@ export class CodeReviewService implements ICodeReviewService {
     private readonly messageService: MessageService,
     private readonly moduleRef: ModuleRef,
     private readonly brainProvider: BrainProviderService,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
    * PR 생성 및 Task 연결
+   * Issue #29: 트랜잭션으로 PR 저장 + Task 상태 업데이트를 원자적으로 처리
    */
   async createPullRequest(dto: CreatePullRequestDto): Promise<TaskPullRequest> {
     this.logger.log(`Creating PR for task ${dto.taskId}: PR #${dto.prNumber}`);
 
-    // Task 존재 확인
+    // Task 존재 확인 (트랜잭션 외부에서 빠른 검증)
     const task = await this.taskRepo.findOne({ where: { id: dto.taskId } });
     if (!task) {
       throw new NotFoundException(`Task ${dto.taskId} not found`);
     }
 
-    // PR 생성
-    const pr = await this.prRepo.save({
-      taskId: dto.taskId,
-      prNumber: dto.prNumber,
-      prUrl: dto.prUrl,
-      repository: dto.repository,
-      branchName: dto.branchName || null,
-      authorHollonId: dto.authorHollonId || null,
-      status: PullRequestStatus.DRAFT,
+    // Issue #29: PR 저장 + Task 상태 업데이트를 트랜잭션으로 원자적 처리
+    const pr = await this.dataSource.transaction(async (manager) => {
+      // PR 생성
+      const prRepository = manager.getRepository(TaskPullRequest);
+      const newPr = await prRepository.save({
+        taskId: dto.taskId,
+        prNumber: dto.prNumber,
+        prUrl: dto.prUrl,
+        repository: dto.repository,
+        branchName: dto.branchName || null,
+        authorHollonId: dto.authorHollonId || null,
+        status: PullRequestStatus.DRAFT,
+      });
+
+      // Task 상태 업데이트 (IN_REVIEW로)
+      const taskRepository = manager.getRepository(Task);
+      await taskRepository.update(dto.taskId, {
+        status: TaskStatus.IN_REVIEW,
+      });
+
+      return newPr;
     });
 
-    // Task 상태 업데이트 (IN_REVIEW로)
-    task.status = TaskStatus.IN_REVIEW;
-    await this.taskRepo.save(task);
-
-    this.logger.log(`PR created: ${pr.id}`);
+    this.logger.log(`PR created: ${pr.id} (transaction committed)`);
     return pr;
   }
 

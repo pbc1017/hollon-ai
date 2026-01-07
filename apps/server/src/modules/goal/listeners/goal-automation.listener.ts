@@ -1172,6 +1172,76 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
     }
   }
 
+  /**
+   * Issue #29: Orphaned PR Sync
+   *
+   * Detects tasks that have PR records but are not in IN_REVIEW status.
+   * This can happen if the process crashed between PR creation and status update,
+   * or if there was a network error during the transaction commit.
+   *
+   * Runs every 5 minutes as a safety net - the transaction fix should prevent
+   * most orphaned PRs, but this catches any edge cases.
+   */
+  @Cron('*/5 * * * *') // 5분마다
+  async syncOrphanedPRs(): Promise<void> {
+    try {
+      this.logger.debug('Issue #29: Checking for orphaned PRs...');
+
+      // Find tasks with PR records that are NOT in expected states
+      // Expected states for tasks with PRs: IN_REVIEW, READY_FOR_REVIEW, COMPLETED, BLOCKED
+      const orphanedPRs = await this.prRepo
+        .createQueryBuilder('pr')
+        .leftJoinAndSelect('pr.task', 'task')
+        .where('task.status NOT IN (:...expectedStatuses)', {
+          expectedStatuses: [
+            TaskStatus.IN_REVIEW,
+            TaskStatus.READY_FOR_REVIEW,
+            TaskStatus.COMPLETED,
+            TaskStatus.BLOCKED,
+          ],
+        })
+        .andWhere('task.id IS NOT NULL') // Ensure task exists
+        .getMany();
+
+      if (orphanedPRs.length === 0) {
+        this.logger.debug('No orphaned PRs found');
+        return;
+      }
+
+      this.logger.warn(
+        `Issue #29: Found ${orphanedPRs.length} orphaned PRs (tasks with PRs not in expected status)`,
+      );
+
+      for (const pr of orphanedPRs) {
+        const task = pr.task;
+        if (!task) continue;
+
+        this.logger.log(
+          `Issue #29: Syncing orphaned PR #${pr.prNumber} for task ${task.id.slice(0, 8)} (current status: ${task.status})`,
+        );
+
+        // Update task to IN_REVIEW so autoCheckPRCI can process it
+        await this.taskRepo.update(task.id, {
+          status: TaskStatus.IN_REVIEW,
+        });
+
+        this.logger.log(
+          `Issue #29: Task ${task.id.slice(0, 8)} transitioned from ${task.status} to IN_REVIEW`,
+        );
+      }
+
+      this.logger.log(
+        `Issue #29: Synced ${orphanedPRs.length} orphaned PRs to IN_REVIEW status`,
+      );
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(
+        `Issue #29: Orphaned PR sync failed: ${err.message}`,
+        err.stack,
+      );
+    }
+  }
+
   @Cron('*/1 * * * *') // 1분마다
   async autoManagerReview(): Promise<void> {
     try {
@@ -1619,13 +1689,41 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
       this.logger.log(`Fetching latest main branch...`);
       await execAsync(`git fetch origin main`, { cwd: worktreePath });
 
-      // 4. Rebase on main
+      // 4. Check for uncommitted changes and stash if needed (Fix: Handle uncommitted changes before rebase)
+      const { stdout: statusCheck } = await execAsync(
+        `git status --porcelain`,
+        { cwd: worktreePath },
+      );
+      const hasUncommittedChanges = statusCheck.trim().length > 0;
+
+      if (hasUncommittedChanges) {
+        this.logger.log(`Found uncommitted changes, stashing before rebase...`);
+        await execAsync(
+          `git stash push -m "autoCheckPRCI: temp stash for rebase"`,
+          { cwd: worktreePath },
+        );
+      }
+
+      // 5. Rebase on main
       this.logger.log(`Attempting rebase on origin/main...`);
       try {
         await execAsync(`git rebase origin/main`, { cwd: worktreePath });
         this.logger.log(`✅ Rebase successful without conflicts`);
 
-        // 5. Force push (since rebase rewrites history)
+        // 6. Restore stashed changes if we stashed
+        if (hasUncommittedChanges) {
+          this.logger.log(`Restoring stashed changes...`);
+          try {
+            await execAsync(`git stash pop`, { cwd: worktreePath });
+          } catch (stashPopError) {
+            this.logger.warn(
+              `Failed to pop stash (may have conflicts): ${stashPopError instanceof Error ? stashPopError.message : 'Unknown error'}`,
+            );
+            // Continue anyway - the rebase succeeded
+          }
+        }
+
+        // 7. Force push (since rebase rewrites history)
         this.logger.log(`Force pushing resolved changes...`);
         await execAsync(`git push --force-with-lease`, { cwd: worktreePath });
 
