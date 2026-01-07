@@ -12,6 +12,7 @@ import { Hollon, HollonStatus } from '../../hollon/entities/hollon.entity';
 import { Role } from '../../role/entities/role.entity';
 import { HollonService } from '../../hollon/hollon.service';
 import { MessageService } from '../../message/message.service';
+import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 import { MessageType } from '../../message/entities/message.entity';
 import { CreatePullRequestDto } from '../dto/create-pull-request.dto';
 import { ReviewSubmissionDto } from '../dto/review-submission.dto';
@@ -119,6 +120,13 @@ describe('CodeReviewService', () => {
         {
           provide: MessageService,
           useValue: mockMessageService,
+        },
+        {
+          provide: BrainProviderService,
+          useValue: {
+            getProvider: jest.fn(),
+            getBrainProvider: jest.fn(),
+          },
         },
       ],
     }).compile();
