@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ConfigService } from '@nestjs/config';
 import { VectorEmbedding } from '../../entities/vector-embedding.entity';
 import {
   EmbeddingSourceType,
@@ -67,7 +66,6 @@ export class VectorSearchService {
   constructor(
     @InjectRepository(VectorEmbedding)
     private readonly embeddingRepo: Repository<VectorEmbedding>,
-    private readonly configService: ConfigService,
     private readonly vectorConfigService: VectorSearchConfigService,
   ) {}
 
@@ -145,8 +143,7 @@ export class VectorSearchService {
     );
 
     // Apply limit
-    const limit =
-      options.limit ?? config.searchConfig.defaultLimit ?? 10;
+    const limit = options.limit ?? config.searchConfig.defaultLimit ?? 10;
     qb.orderBy('similarity', 'DESC').limit(limit);
 
     // Execute query
@@ -254,9 +251,8 @@ export class VectorSearchService {
     }
 
     // Get configuration
-    const config = await this.vectorConfigService.getOrCreateConfig(
-      organizationId,
-    );
+    const config =
+      await this.vectorConfigService.getOrCreateConfig(organizationId);
 
     // Generate new embedding
     const embeddingVector = await this.generateEmbedding(content, config);
@@ -333,7 +329,7 @@ export class VectorSearchService {
    * @private
    */
   private async generateOpenAIEmbedding(
-    text: string,
+    _text: string,
     config: VectorSearchConfig,
   ): Promise<number[]> {
     // TODO: Implement actual OpenAI API call
@@ -363,8 +359,11 @@ export class VectorSearchService {
     if (config.embeddingModel.includes('ada-002')) {
       return EmbeddingModelType.OPENAI_ADA_002;
     }
-    if (config.embeddingModel.includes('text-embedding-3')) {
-      return EmbeddingModelType.OPENAI_TEXT_EMBEDDING_3_SMALL;
+    if (config.embeddingModel.includes('text-embedding-3-small')) {
+      return EmbeddingModelType.OPENAI_SMALL_3;
+    }
+    if (config.embeddingModel.includes('text-embedding-3-large')) {
+      return EmbeddingModelType.OPENAI_LARGE_3;
     }
 
     // Default to ada-002
@@ -410,16 +409,10 @@ export class VectorSearchService {
       const batch = documents.slice(i, i + batchSize);
 
       const batchPromises = batch.map((doc) =>
-        this.indexDocument(
-          doc.id,
-          doc.content,
-          sourceType,
-          doc.metadata,
-          {
-            ...options,
-            tags: doc.tags,
-          },
-        ),
+        this.indexDocument(doc.id, doc.content, sourceType, doc.metadata, {
+          ...options,
+          tags: doc.tags,
+        }),
       );
 
       const batchResults = await Promise.all(batchPromises);
