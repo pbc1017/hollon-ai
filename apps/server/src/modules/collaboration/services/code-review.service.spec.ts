@@ -141,9 +141,9 @@ describe('CodeReviewService', () => {
         {
           provide: DataSource,
           useValue: {
-            transaction: jest.fn((callback) =>
-              callback({
-                getRepository: (entity: any) => {
+            transaction: jest.fn((callback) => {
+              const mockManager = {
+                getRepository: jest.fn((entity) => {
                   if (entity === TaskPullRequest) {
                     return mockPRRepository;
                   }
@@ -151,9 +151,32 @@ describe('CodeReviewService', () => {
                     return mockTaskRepository;
                   }
                   return {};
-                },
-              }),
-            ),
+                }),
+                save: jest.fn(),
+                update: jest.fn(),
+              };
+              return callback(mockManager);
+            }),
+            createQueryRunner: jest.fn(() => ({
+              connect: jest.fn(),
+              startTransaction: jest.fn(),
+              commitTransaction: jest.fn(),
+              rollbackTransaction: jest.fn(),
+              release: jest.fn(),
+              manager: {
+                getRepository: jest.fn((entity) => {
+                  if (entity === TaskPullRequest) {
+                    return mockPRRepository;
+                  }
+                  if (entity === Task) {
+                    return mockTaskRepository;
+                  }
+                  return {};
+                }),
+                save: jest.fn(),
+                update: jest.fn(),
+              },
+            })),
           },
         },
       ],
@@ -185,7 +208,7 @@ describe('CodeReviewService', () => {
         ...createDto,
         status: PullRequestStatus.DRAFT,
       });
-      mockTaskRepository.update.mockResolvedValue({});
+      mockTaskRepository.update.mockResolvedValue({ affected: 1 });
 
       const result = await service.createPullRequest(createDto);
 
