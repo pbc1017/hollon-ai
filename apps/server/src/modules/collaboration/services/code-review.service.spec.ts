@@ -18,7 +18,6 @@ import { BrainProviderService } from '../../brain-provider/brain-provider.servic
 import { MessageType } from '../../message/entities/message.entity';
 import { CreatePullRequestDto } from '../dto/create-pull-request.dto';
 import { ReviewSubmissionDto } from '../dto/review-submission.dto';
-import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 
 describe('CodeReviewService', () => {
   let service: CodeReviewService;
@@ -126,7 +125,6 @@ describe('CodeReviewService', () => {
           useValue: mockMessageService,
         },
         {
-<<<<<<< HEAD
           provide: ModuleRef,
           useValue: {
             get: jest.fn(),
@@ -156,11 +154,6 @@ describe('CodeReviewService', () => {
                 },
               }),
             ),
-=======
-          provide: BrainProviderService,
-          useValue: {
-            generateResponse: jest.fn(),
->>>>>>> 206a263 (fix: Remove invalid Index option and add missing test dependency)
           },
         },
       ],

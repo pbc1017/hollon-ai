@@ -20,17 +20,7 @@ export enum NodeType {
 @Index(['type'])
 @Index(['organizationId'])
 @Index(['createdAt'])
-<<<<<<< HEAD
-<<<<<<< HEAD
-// Composite indexes for improved query performance
-@Index(['organizationId', 'type']) // Multi-tenancy + type filtering
-@Index(['organizationId', 'isActive']) // Multi-tenancy + soft delete filtering
-=======
-@Index('idx_node_properties', ['properties'], { synchronize: false }) // GIN index for JSONB, created in migration
->>>>>>> cbccbea (feat: Enhance knowledge graph entities with pgvector support)
-=======
 // Note: GIN index on properties JSONB column is created manually in migration
->>>>>>> 206a263 (fix: Remove invalid Index option and add missing test dependency)
 export class Node extends BaseEntity {
   @Column({ length: 255 })
   name: string;
