@@ -51,7 +51,7 @@ export class DeduplicationService {
       }
 
       const similarities: Array<{
-        itemId: string;
+        id: string;
         content: string;
         similarity: number;
       }> = [];
@@ -68,7 +68,7 @@ export class DeduplicationService {
 
         if (similarity >= similarityThreshold) {
           similarities.push({
-            itemId: compareItem.id,
+            id: compareItem.id,
             content: compareItem.content,
             similarity,
           });
