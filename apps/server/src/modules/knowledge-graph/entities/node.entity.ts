@@ -20,9 +20,7 @@ export enum NodeType {
 @Index(['type'])
 @Index(['organizationId'])
 @Index(['createdAt'])
-// Composite indexes for improved query performance
-@Index(['organizationId', 'type']) // Multi-tenancy + type filtering
-@Index(['organizationId', 'isActive']) // Multi-tenancy + soft delete filtering
+// Note: GIN index on properties JSONB column is created manually in migration
 export class Node extends BaseEntity {
   @Column({ length: 255 })
   name: string;
@@ -51,6 +49,17 @@ export class Node extends BaseEntity {
   // For soft delete pattern
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
+
+  /**
+   * Vector embedding for semantic search and similarity matching
+   * Stored as text type in TypeScript, actual vector type set in migration
+   * This enables semantic search across graph nodes based on their content
+   *
+   * Note: The actual database column type is vector(1536) for pgvector
+   * Format in database: [0.1, 0.2, 0.3, ...]
+   */
+  @Column({ type: 'text', nullable: true })
+  embedding: string | null;
 
   // Relations - outgoing edges (this node is the source)
   @OneToMany(() => Edge, (edge) => edge.sourceNode)
