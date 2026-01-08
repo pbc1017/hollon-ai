@@ -48,6 +48,9 @@ describe('TaskAnalyzerService', () => {
     blockedUntil: null,
     reviewCount: 0, // Phase 3.10
     lastReviewedAt: null, // Phase 3.10
+    needsPlanning: false, // Phase 4.2
+    planningTaskId: null, // Phase 4.2
+    planDocumentPath: null, // Phase 4.2
     storyPoints: 0,
     blockedReason: null,
     createdAt: new Date(),

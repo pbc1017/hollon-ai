@@ -424,6 +424,7 @@ Please provide the decomposition in JSON format only, no additional text.`;
         if (teamTasks.length === 0) continue;
 
         // Create Team Task (Level 0) - TEAM_EPIC
+        // Phase 4.2: Team Epics need planning before decomposition
         const teamTask = this.taskRepo.create({
           organizationId: goal.organizationId,
           projectId: savedProject.id,
@@ -434,6 +435,7 @@ Please provide the decomposition in JSON format only, no additional text.`;
           status: TaskStatus.PENDING,
           assignedTeamId: team.id,
           depth: 0, // Level 0
+          needsPlanning: true, // Phase 4.2: Requires planning before decomposition
         });
 
         const savedTeamTask = await this.taskRepo.save(teamTask);

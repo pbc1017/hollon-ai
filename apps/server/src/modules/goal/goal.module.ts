@@ -18,6 +18,7 @@ import { BrainProviderModule } from '../brain-provider/brain-provider.module';
 import { TaskModule } from '../task/task.module';
 import { OrchestrationModule } from '../orchestration/orchestration.module';
 import { CollaborationModule } from '../collaboration/collaboration.module';
+import { PlanningModule } from '../planning/planning.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { CollaborationModule } from '../collaboration/collaboration.module';
     TaskModule,
     forwardRef(() => OrchestrationModule), // For TaskExecutionService
     forwardRef(() => CollaborationModule), // Fix #37: For CodeReviewService.requestReview()
+    forwardRef(() => PlanningModule), // Phase 4.2: Planning Workflow
   ],
   controllers: [GoalController],
   providers: [

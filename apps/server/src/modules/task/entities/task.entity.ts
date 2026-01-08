@@ -189,6 +189,16 @@ export class Task extends BaseEntity {
   @Column({ name: 'last_reviewed_at', type: 'timestamp', nullable: true })
   lastReviewedAt?: Date | null;
 
+  // ✅ Phase 4.2: Planning Workflow
+  @Column({ name: 'needs_planning', default: false })
+  needsPlanning: boolean;
+
+  @Column({ name: 'planning_task_id', type: 'uuid', nullable: true })
+  planningTaskId: string | null;
+
+  @Column({ name: 'plan_document_path', type: 'text', nullable: true })
+  planDocumentPath: string | null;
+
   // ✅ Phase 3.12: Task-specific worktree path
   @Column({ name: 'working_directory', type: 'text', nullable: true })
   workingDirectory?: string | null;
