@@ -9,6 +9,8 @@ import {
 import { VectorSearchConfigService } from './services/vector-search-config.service';
 import { VectorSearchConfig } from './entities/vector-search-config.entity';
 
+import { ConfigService } from '@nestjs/config';
+
 /**
  * Search result interface
  */
@@ -46,11 +48,39 @@ export interface VectorSearchOptions {
 }
 
 /**
+ * Embedding provider interface for extensibility
+ */
+interface EmbeddingProvider {
+  /**
+   * Generate embeddings for text
+   * @param text Input text to embed
+   * @param apiKey API key for the provider
+   * @returns Promise resolving to embedding vector
+   */
+  generateEmbedding(text: string, apiKey: string): Promise<number[]>;
+
+  /**
+   * Batch generate embeddings for multiple texts
+   * @param texts Array of texts to embed
+   * @param apiKey API key for the provider
+   * @returns Promise resolving to array of embedding vectors
+   */
+  batchGenerateEmbeddings(texts: string[], apiKey: string): Promise<number[][]>;
+}
+
+/**
  * VectorSearchService
  *
  * Core service for vector search and embedding operations.
  * Integrates with OpenAI (or other providers) for embedding generation
  * and pgvector for efficient similarity search.
+ *
+ * Architecture:
+ * - Service uses dependency injection pattern
+ * - Configuration loaded from environment via ConfigService
+ * - Supports multiple embedding providers via plugin interface
+ * - Multi-tenant support with organization isolation
+ * - Repository pattern for database access
  *
  * Key features:
  * - Generate embeddings for text content
@@ -58,16 +88,39 @@ export interface VectorSearchOptions {
  * - Index and manage vector embeddings in PostgreSQL with pgvector
  * - Support multi-tenant isolation and scoped searches
  * - Configurable via VectorSearchConfig entity
+ * - Extensible provider interface
  */
 @Injectable()
 export class VectorSearchService {
   private readonly logger = new Logger(VectorSearchService.name);
+  private embeddingProviders: Map<string, EmbeddingProvider>;
 
   constructor(
     @InjectRepository(VectorEmbedding)
     private readonly embeddingRepo: Repository<VectorEmbedding>,
     private readonly vectorConfigService: VectorSearchConfigService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.embeddingProviders = new Map();
+    this.initializeProviders();
+  }
+
+  /**
+   * Initialize embedding providers based on configuration
+   * @private
+   */
+  private initializeProviders(): void {
+    // Initialize OpenAI provider
+    this.embeddingProviders.set('openai', {
+      generateEmbedding: (text: string, apiKey: string) =>
+        this.generateOpenAIEmbedding(text, apiKey),
+      batchGenerateEmbeddings: (texts: string[], apiKey: string) =>
+        this.batchGenerateOpenAIEmbeddings(texts, apiKey),
+    });
+
+    // Additional providers can be registered here
+    this.logger.debug('Embedding providers initialized');
+  }
 
   /**
    * Search for similar vectors based on a query string
@@ -83,6 +136,11 @@ export class VectorSearchService {
     query: string,
     options: VectorSearchOptions = {},
   ): Promise<VectorSearchResult[]> {
+    // Validate inputs
+    if (!query || query.trim().length === 0) {
+      throw new Error('Search query cannot be empty');
+    }
+
     // Get configuration
     const config = options.organizationId
       ? await this.vectorConfigService.getOrCreateConfig(options.organizationId)
@@ -135,7 +193,7 @@ export class VectorSearchService {
     // Apply similarity threshold
     const threshold =
       options.similarityThreshold ??
-      config.searchConfig.similarityThreshold ??
+      config.searchConfig?.similarityThreshold ??
       0.7;
     qb.andWhere(
       `1 - (embedding.embedding <=> '[${queryEmbedding.join(',')}]') >= :threshold`,
@@ -143,7 +201,7 @@ export class VectorSearchService {
     );
 
     // Apply limit
-    const limit = options.limit ?? config.searchConfig.defaultLimit ?? 10;
+    const limit = options.limit ?? config.searchConfig?.defaultLimit ?? 10;
     qb.orderBy('similarity', 'DESC').limit(limit);
 
     // Execute query
@@ -184,6 +242,11 @@ export class VectorSearchService {
       tags?: string[];
     },
   ): Promise<VectorEmbedding> {
+    // Validate inputs
+    if (!id || !content || !options.organizationId) {
+      throw new Error('Missing required parameters for document indexing');
+    }
+
     // Get configuration
     const config = await this.vectorConfigService.getOrCreateConfig(
       options.organizationId,
@@ -235,6 +298,11 @@ export class VectorSearchService {
     content: string,
     organizationId: string,
   ): Promise<VectorEmbedding> {
+    // Validate inputs
+    if (!id || !content || !organizationId) {
+      throw new Error('Missing required parameters for document update');
+    }
+
     // Find existing embedding
     const existing = await this.embeddingRepo.findOne({
       where: {
@@ -284,6 +352,10 @@ export class VectorSearchService {
     sourceType: EmbeddingSourceType,
     organizationId: string,
   ): Promise<void> {
+    if (!id || !sourceType || !organizationId) {
+      throw new Error('Missing required parameters for document deletion');
+    }
+
     await this.embeddingRepo.delete({
       sourceId: id,
       sourceType,
@@ -306,41 +378,79 @@ export class VectorSearchService {
     text: string,
     config: VectorSearchConfig,
   ): Promise<number[]> {
-    // TODO: Implement actual API call to embedding provider
-    // For now, return a placeholder implementation
+    // Validate configuration
+    if (!config.provider) {
+      throw new Error('Embedding provider not configured');
+    }
+
+    if (!config.config?.apiKey) {
+      throw new Error('API key not configured for embedding provider');
+    }
 
     this.logger.debug(
       `Generating embedding for text (${text.length} chars) using ${config.embeddingModel}`,
     );
 
-    if (config.provider === 'openai') {
-      return await this.generateOpenAIEmbedding(text, config);
+    const provider = this.embeddingProviders.get(config.provider);
+    if (!provider) {
+      throw new Error(`Unsupported provider: ${config.provider}`);
     }
 
-    throw new Error(`Unsupported provider: ${config.provider}`);
+    try {
+      return await provider.generateEmbedding(text, config.config.apiKey);
+    } catch (error) {
+      this.logger.error(
+        `Failed to generate embedding: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    }
   }
 
   /**
    * Generate embedding using OpenAI API
    *
    * @param text - Text to embed
-   * @param config - Configuration with API key and model
+   * @param apiKey - OpenAI API key
    * @returns Embedding vector
    * @private
    */
   private async generateOpenAIEmbedding(
     _text: string,
-    config: VectorSearchConfig,
+    _apiKey: string,
   ): Promise<number[]> {
     // TODO: Implement actual OpenAI API call
     // This is a placeholder that should be implemented when integrating with OpenAI SDK
+    // See: https://platform.openai.com/docs/api-reference/embeddings
 
     this.logger.warn(
       'OpenAI embedding generation not yet implemented - returning placeholder',
     );
 
-    // Return placeholder vector of correct dimensions
-    return new Array(config.dimensions).fill(0);
+    // Return placeholder vector of correct dimensions (1536 for text-embedding-3-small)
+    return new Array(1536).fill(0);
+  }
+
+  /**
+   * Batch generate embeddings using OpenAI API
+   *
+   * @param texts - Array of texts to embed
+   * @param apiKey - OpenAI API key
+   * @returns Array of embedding vectors
+   * @private
+   */
+  private async batchGenerateOpenAIEmbeddings(
+    _texts: string[],
+    _apiKey: string,
+  ): Promise<number[][]> {
+    // TODO: Implement actual batch OpenAI API call
+    // This should handle multiple texts efficiently
+
+    this.logger.warn(
+      'OpenAI batch embedding generation not yet implemented - returning placeholders',
+    );
+
+    // Return array of placeholder vectors
+    return _texts.map(() => new Array(1536).fill(0));
   }
 
   /**
@@ -353,17 +463,16 @@ export class VectorSearchService {
   private getModelTypeFromConfig(
     config: VectorSearchConfig,
   ): EmbeddingModelType {
-    if (config.embeddingModel.includes('openai')) {
-      return EmbeddingModelType.OPENAI_ADA_002;
+    const model = config.embeddingModel.toLowerCase();
+
+    if (model.includes('text-embedding-3-large')) {
+      return EmbeddingModelType.OPENAI_LARGE_3;
     }
-    if (config.embeddingModel.includes('ada-002')) {
-      return EmbeddingModelType.OPENAI_ADA_002;
-    }
-    if (config.embeddingModel.includes('text-embedding-3-small')) {
+    if (model.includes('text-embedding-3-small')) {
       return EmbeddingModelType.OPENAI_SMALL_3;
     }
-    if (config.embeddingModel.includes('text-embedding-3-large')) {
-      return EmbeddingModelType.OPENAI_LARGE_3;
+    if (model.includes('ada-002') || model.includes('ada')) {
+      return EmbeddingModelType.OPENAI_ADA_002;
     }
 
     // Default to ada-002
@@ -395,6 +504,11 @@ export class VectorSearchService {
       hollonId?: string;
     },
   ): Promise<VectorEmbedding[]> {
+    // Validate inputs
+    if (!documents || documents.length === 0) {
+      throw new Error('Documents array cannot be empty');
+    }
+
     const results: VectorEmbedding[] = [];
 
     // Get configuration
@@ -402,7 +516,7 @@ export class VectorSearchService {
       options.organizationId,
     );
 
-    const batchSize = config.config.batchSize || 100;
+    const batchSize = config.config?.batchSize ?? 100;
 
     // Process in batches
     for (let i = 0; i < documents.length; i += batchSize) {
@@ -420,5 +534,17 @@ export class VectorSearchService {
     }
 
     return results;
+  }
+
+  /**
+   * Get configuration from ConfigService
+   *
+   * Retrieves vector search configuration from the application's ConfigService
+   * for system-wide use.
+   *
+   * @returns Vector search configuration object
+   */
+  getVectorSearchConfig(): Record<string, unknown> {
+    return this.configService.get('vectorSearch') ?? {};
   }
 }
