@@ -1,13 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { KnowledgeGraphService } from './knowledge-graph.service';
-import { GraphNode, NodeType } from './entities/graph-node.entity';
-import { GraphEdge, EdgeType } from './entities/graph-edge.entity';
+import { Node, NodeType } from './entities/node.entity';
+import { Edge } from './entities/edge.entity';
+import { RelationshipType } from '@/knowledge/enums/relationship-type.enum';
 
 describe('KnowledgeGraphService', () => {
   let service: KnowledgeGraphService;
 
-  const mockGraphNodeRepository = {
+  const mockNodeRepository = {
     create: jest.fn(),
     save: jest.fn(),
     findOne: jest.fn(),
@@ -15,29 +16,30 @@ describe('KnowledgeGraphService', () => {
     delete: jest.fn(),
   };
 
-  const mockGraphEdgeRepository = {
+  const mockEdgeRepository = {
     create: jest.fn(),
     save: jest.fn(),
     find: jest.fn(),
     delete: jest.fn(),
   };
 
-  const mockNode: Partial<GraphNode> = {
+  const mockNode: Partial<Node> = {
     id: 'node-123',
-    externalId: 'ext-123',
-    externalType: 'document',
+    name: 'Test Document',
+    type: NodeType.DOCUMENT,
     organizationId: 'org-123',
-    nodeType: NodeType.DOCUMENT,
-    label: 'Test Document',
+    description: 'A test document',
     properties: { title: 'Test Document' },
+    tags: ['test'],
+    isActive: true,
   };
 
-  const mockEdge: Partial<GraphEdge> = {
+  const mockEdge: Partial<Edge> = {
     id: 'edge-123',
     organizationId: 'org-123',
     sourceNodeId: 'node-123',
     targetNodeId: 'node-456',
-    edgeType: EdgeType.REFERENCES,
+    type: RelationshipType.REFERENCES,
     weight: 1.0,
     properties: { metadata: 'test' },
   };
@@ -47,12 +49,12 @@ describe('KnowledgeGraphService', () => {
       providers: [
         KnowledgeGraphService,
         {
-          provide: getRepositoryToken(GraphNode),
-          useValue: mockGraphNodeRepository,
+          provide: getRepositoryToken(Node),
+          useValue: mockNodeRepository,
         },
         {
-          provide: getRepositoryToken(GraphEdge),
-          useValue: mockGraphEdgeRepository,
+          provide: getRepositoryToken(Edge),
+          useValue: mockEdgeRepository,
         },
       ],
     }).compile();
@@ -69,61 +71,61 @@ describe('KnowledgeGraphService', () => {
 
   describe('createNode', () => {
     it('should create a new node', async () => {
-      const nodeData: Partial<GraphNode> = {
-        externalId: 'ext-123',
-        externalType: 'document',
+      const nodeData: Partial<Node> = {
+        name: 'Test Document',
+        type: NodeType.DOCUMENT,
         organizationId: 'org-123',
       };
 
-      mockGraphNodeRepository.create.mockReturnValue(mockNode);
-      mockGraphNodeRepository.save.mockResolvedValue(mockNode);
+      mockNodeRepository.create.mockReturnValue(mockNode);
+      mockNodeRepository.save.mockResolvedValue(mockNode);
 
       const result = await service.createNode(nodeData);
 
-      expect(mockGraphNodeRepository.create).toHaveBeenCalledWith(nodeData);
-      expect(mockGraphNodeRepository.save).toHaveBeenCalledWith(mockNode);
+      expect(mockNodeRepository.create).toHaveBeenCalledWith(nodeData);
+      expect(mockNodeRepository.save).toHaveBeenCalledWith(mockNode);
       expect(result).toEqual(mockNode);
     });
   });
 
   describe('createEdge', () => {
     it('should create a new edge', async () => {
-      const edgeData: Partial<GraphEdge> = {
+      const edgeData: Partial<Edge> = {
         organizationId: 'org-123',
         sourceNodeId: 'node-123',
         targetNodeId: 'node-456',
-        edgeType: EdgeType.REFERENCES,
+        type: RelationshipType.REFERENCES,
       };
 
-      mockGraphEdgeRepository.create.mockReturnValue(mockEdge);
-      mockGraphEdgeRepository.save.mockResolvedValue(mockEdge);
+      mockEdgeRepository.create.mockReturnValue(mockEdge);
+      mockEdgeRepository.save.mockResolvedValue(mockEdge);
 
       const result = await service.createEdge(edgeData);
 
-      expect(mockGraphEdgeRepository.create).toHaveBeenCalledWith(edgeData);
-      expect(mockGraphEdgeRepository.save).toHaveBeenCalledWith(mockEdge);
+      expect(mockEdgeRepository.create).toHaveBeenCalledWith(edgeData);
+      expect(mockEdgeRepository.save).toHaveBeenCalledWith(mockEdge);
       expect(result).toEqual(mockEdge);
     });
   });
 
   describe('findNodeById', () => {
     it('should return a node when found', async () => {
-      mockGraphNodeRepository.findOne.mockResolvedValue(mockNode);
+      mockNodeRepository.findOne.mockResolvedValue(mockNode);
 
       const result = await service.findNodeById('node-123');
 
-      expect(mockGraphNodeRepository.findOne).toHaveBeenCalledWith({
+      expect(mockNodeRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'node-123' },
       });
       expect(result).toEqual(mockNode);
     });
 
     it('should return null when node not found', async () => {
-      mockGraphNodeRepository.findOne.mockResolvedValue(null);
+      mockNodeRepository.findOne.mockResolvedValue(null);
 
       const result = await service.findNodeById('invalid-id');
 
-      expect(mockGraphNodeRepository.findOne).toHaveBeenCalledWith({
+      expect(mockNodeRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'invalid-id' },
       });
       expect(result).toBeNull();
@@ -133,11 +135,11 @@ describe('KnowledgeGraphService', () => {
   describe('findNodesByOrganization', () => {
     it('should return nodes for a specific organization', async () => {
       const nodes = [mockNode];
-      mockGraphNodeRepository.find.mockResolvedValue(nodes);
+      mockNodeRepository.find.mockResolvedValue(nodes);
 
       const result = await service.findNodesByOrganization('org-123');
 
-      expect(mockGraphNodeRepository.find).toHaveBeenCalledWith({
+      expect(mockNodeRepository.find).toHaveBeenCalledWith({
         where: { organizationId: 'org-123' },
         order: { createdAt: 'DESC' },
       });
@@ -145,7 +147,7 @@ describe('KnowledgeGraphService', () => {
     });
 
     it('should return empty array if no nodes found', async () => {
-      mockGraphNodeRepository.find.mockResolvedValue([]);
+      mockNodeRepository.find.mockResolvedValue([]);
 
       const result = await service.findNodesByOrganization('org-456');
 
@@ -156,11 +158,11 @@ describe('KnowledgeGraphService', () => {
   describe('findEdgesByNode', () => {
     it('should return edges for a specific node', async () => {
       const edges = [mockEdge];
-      mockGraphEdgeRepository.find.mockResolvedValue(edges);
+      mockEdgeRepository.find.mockResolvedValue(edges);
 
       const result = await service.findEdgesByNode('node-123');
 
-      expect(mockGraphEdgeRepository.find).toHaveBeenCalledWith({
+      expect(mockEdgeRepository.find).toHaveBeenCalledWith({
         where: [{ sourceNodeId: 'node-123' }, { targetNodeId: 'node-123' }],
         relations: ['sourceNode', 'targetNode'],
       });
@@ -168,7 +170,7 @@ describe('KnowledgeGraphService', () => {
     });
 
     it('should return empty array if no edges found', async () => {
-      mockGraphEdgeRepository.find.mockResolvedValue([]);
+      mockEdgeRepository.find.mockResolvedValue([]);
 
       const result = await service.findEdgesByNode('node-456');
 
@@ -178,21 +180,21 @@ describe('KnowledgeGraphService', () => {
 
   describe('deleteNode', () => {
     it('should delete a node', async () => {
-      mockGraphNodeRepository.delete.mockResolvedValue({ affected: 1 });
+      mockNodeRepository.delete.mockResolvedValue({ affected: 1 });
 
       await service.deleteNode('node-123');
 
-      expect(mockGraphNodeRepository.delete).toHaveBeenCalledWith('node-123');
+      expect(mockNodeRepository.delete).toHaveBeenCalledWith('node-123');
     });
   });
 
   describe('deleteEdge', () => {
     it('should delete an edge', async () => {
-      mockGraphEdgeRepository.delete.mockResolvedValue({ affected: 1 });
+      mockEdgeRepository.delete.mockResolvedValue({ affected: 1 });
 
       await service.deleteEdge('edge-123');
 
-      expect(mockGraphEdgeRepository.delete).toHaveBeenCalledWith('edge-123');
+      expect(mockEdgeRepository.delete).toHaveBeenCalledWith('edge-123');
     });
   });
 });
