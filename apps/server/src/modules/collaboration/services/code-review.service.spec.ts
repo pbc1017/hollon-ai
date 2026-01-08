@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
+import { DataSource } from 'typeorm';
 import { CodeReviewService } from './code-review.service';
 import {
   TaskPullRequest,
@@ -31,6 +32,7 @@ describe('CodeReviewService', () => {
   const mockTaskRepository = {
     findOne: jest.fn(),
     save: jest.fn(),
+    update: jest.fn(),
     createQueryBuilder: jest.fn(() => ({
       innerJoin: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -135,6 +137,25 @@ describe('CodeReviewService', () => {
             chat: jest.fn(),
           },
         },
+        {
+          provide: DataSource,
+          useValue: {
+            createQueryRunner: jest.fn(),
+            transaction: jest.fn((callback) =>
+              callback({
+                getRepository: (entity: any) => {
+                  if (entity === TaskPullRequest) {
+                    return mockPRRepository;
+                  }
+                  if (entity === Task) {
+                    return mockTaskRepository;
+                  }
+                  return {};
+                },
+              }),
+            ),
+          },
+        },
       ],
     }).compile();
 
@@ -183,11 +204,9 @@ describe('CodeReviewService', () => {
         authorHollonId: createDto.authorHollonId,
         status: PullRequestStatus.DRAFT,
       });
-      expect(mockTaskRepository.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: TaskStatus.IN_REVIEW,
-        }),
-      );
+      expect(mockTaskRepository.update).toHaveBeenCalledWith(createDto.taskId, {
+        status: TaskStatus.IN_REVIEW,
+      });
       expect(result.id).toBe('new-pr-id');
       expect(result.status).toBe(PullRequestStatus.DRAFT);
     });
