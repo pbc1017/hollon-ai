@@ -3,7 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { KnowledgeGraphService } from './knowledge-graph.service';
 import { Node, NodeType } from './entities/node.entity';
 import { Edge } from './entities/edge.entity';
-import { RelationshipType } from '@/knowledge/enums/relationship-type.enum';
+import { RelationshipType } from '../../knowledge/enums/relationship-type.enum';
 
 describe('KnowledgeGraphService', () => {
   let service: KnowledgeGraphService;
