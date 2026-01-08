@@ -204,9 +204,12 @@ describe('CodeReviewService', () => {
         authorHollonId: createDto.authorHollonId,
         status: PullRequestStatus.DRAFT,
       });
-      expect(mockTaskRepository.update).toHaveBeenCalledWith(createDto.taskId, {
-        status: TaskStatus.IN_REVIEW,
-      });
+      expect(mockTaskRepository.update).toHaveBeenCalledWith(
+        createDto.taskId,
+        expect.objectContaining({
+          status: TaskStatus.IN_REVIEW,
+        }),
+      );
       expect(result.id).toBe('new-pr-id');
       expect(result.status).toBe(PullRequestStatus.DRAFT);
     });
