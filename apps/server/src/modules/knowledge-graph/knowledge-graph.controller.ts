@@ -86,7 +86,14 @@ export class KnowledgeGraphController {
     @Query() query: NodeFilterQueryDto,
   ): Promise<PaginatedResponseDto<NodeResponseDto>> {
     try {
-      const { organizationId, types, tags, isActive, page = 1, limit = 20 } = query;
+      const {
+        organizationId,
+        types,
+        tags,
+        isActive,
+        page = 1,
+        limit = 20,
+      } = query;
 
       // Validate pagination parameters
       if (page < 1 || limit < 1 || limit > 100) {
@@ -99,7 +106,9 @@ export class KnowledgeGraphController {
       const queryBuilder = this.knowledgeGraphService.createNodeQuery();
 
       // Apply filters
-      queryBuilder.where('node.organizationId = :organizationId', { organizationId });
+      queryBuilder.where('node.organizationId = :organizationId', {
+        organizationId,
+      });
 
       if (types && types.length > 0) {
         queryBuilder.andWhere('node.type IN (:...types)', { types });
@@ -132,7 +141,9 @@ export class KnowledgeGraphController {
       if (error instanceof BadRequestException) {
         throw error;
       }
-      throw new BadRequestException(`Failed to retrieve nodes: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to retrieve nodes: ${error.message}`,
+      );
     }
   }
 
@@ -194,18 +205,24 @@ export class KnowledgeGraphController {
       const queryBuilder = this.knowledgeGraphService.createEdgeQuery();
 
       // Apply filters
-      queryBuilder.where('edge.organizationId = :organizationId', { organizationId });
+      queryBuilder.where('edge.organizationId = :organizationId', {
+        organizationId,
+      });
 
       if (types && types.length > 0) {
         queryBuilder.andWhere('edge.type IN (:...types)', { types });
       }
 
       if (sourceNodeId) {
-        queryBuilder.andWhere('edge.sourceNodeId = :sourceNodeId', { sourceNodeId });
+        queryBuilder.andWhere('edge.sourceNodeId = :sourceNodeId', {
+          sourceNodeId,
+        });
       }
 
       if (targetNodeId) {
-        queryBuilder.andWhere('edge.targetNodeId = :targetNodeId', { targetNodeId });
+        queryBuilder.andWhere('edge.targetNodeId = :targetNodeId', {
+          targetNodeId,
+        });
       }
 
       if (isActive !== undefined) {
@@ -224,14 +241,18 @@ export class KnowledgeGraphController {
         .take(limit)
         .getMany();
 
-      const edgeDtos = edges.map((edge) => RelationshipResponseDto.fromEntity(edge));
+      const edgeDtos = edges.map((edge) =>
+        RelationshipResponseDto.fromEntity(edge),
+      );
 
       return PaginatedResponseDto.create(edgeDtos, total, page, limit);
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
       }
-      throw new BadRequestException(`Failed to retrieve relationships: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to retrieve relationships: ${error.message}`,
+      );
     }
   }
 
@@ -268,7 +289,9 @@ export class KnowledgeGraphController {
     description: 'Invalid query parameters',
     type: ErrorResponseDto,
   })
-  async queryGraph(@Body() query: GraphQueryRequestDto): Promise<QueryResponseDto> {
+  async queryGraph(
+    @Body() query: GraphQueryRequestDto,
+  ): Promise<QueryResponseDto> {
     try {
       const {
         organizationId,
@@ -289,10 +312,14 @@ export class KnowledgeGraphController {
 
       // Query nodes
       const nodeQueryBuilder = this.knowledgeGraphService.createNodeQuery();
-      nodeQueryBuilder.where('node.organizationId = :organizationId', { organizationId });
+      nodeQueryBuilder.where('node.organizationId = :organizationId', {
+        organizationId,
+      });
 
       if (nodeTypes && nodeTypes.length > 0) {
-        nodeQueryBuilder.andWhere('node.type IN (:...nodeTypes)', { nodeTypes });
+        nodeQueryBuilder.andWhere('node.type IN (:...nodeTypes)', {
+          nodeTypes,
+        });
       }
 
       if (tags && tags.length > 0) {
@@ -302,7 +329,9 @@ export class KnowledgeGraphController {
       if (isActive !== undefined) {
         nodeQueryBuilder.andWhere('node.isActive = :isActive', { isActive });
       } else {
-        nodeQueryBuilder.andWhere('node.isActive = :isActive', { isActive: true });
+        nodeQueryBuilder.andWhere('node.isActive = :isActive', {
+          isActive: true,
+        });
       }
 
       const nodes = await nodeQueryBuilder
@@ -313,16 +342,22 @@ export class KnowledgeGraphController {
 
       // Query relationships
       const edgeQueryBuilder = this.knowledgeGraphService.createEdgeQuery();
-      edgeQueryBuilder.where('edge.organizationId = :organizationId', { organizationId });
+      edgeQueryBuilder.where('edge.organizationId = :organizationId', {
+        organizationId,
+      });
 
       if (relationshipTypes && relationshipTypes.length > 0) {
-        edgeQueryBuilder.andWhere('edge.type IN (:...relationshipTypes)', { relationshipTypes });
+        edgeQueryBuilder.andWhere('edge.type IN (:...relationshipTypes)', {
+          relationshipTypes,
+        });
       }
 
       if (isActive !== undefined) {
         edgeQueryBuilder.andWhere('edge.isActive = :isActive', { isActive });
       } else {
-        edgeQueryBuilder.andWhere('edge.isActive = :isActive', { isActive: true });
+        edgeQueryBuilder.andWhere('edge.isActive = :isActive', {
+          isActive: true,
+        });
       }
 
       const edges = await edgeQueryBuilder.getMany();
@@ -332,7 +367,9 @@ export class KnowledgeGraphController {
       if (error instanceof BadRequestException) {
         throw error;
       }
-      throw new BadRequestException(`Failed to execute query: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to execute query: ${error.message}`,
+      );
     }
   }
 
@@ -385,8 +422,14 @@ export class KnowledgeGraphController {
   ): Promise<SubgraphResponseDto> {
     try {
       // Validate node ID format
-      if (!id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-        throw new BadRequestException('Invalid node ID format. Must be a valid UUID.');
+      if (
+        !id.match(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+        )
+      ) {
+        throw new BadRequestException(
+          'Invalid node ID format. Must be a valid UUID.',
+        );
       }
 
       // Check if node exists
@@ -411,10 +454,15 @@ export class KnowledgeGraphController {
 
       return SubgraphResponseDto.create(nodes, edges, id, depth);
     } catch (error) {
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
         throw error;
       }
-      throw new BadRequestException(`Failed to extract subgraph: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to extract subgraph: ${error.message}`,
+      );
     }
   }
 }

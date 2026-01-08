@@ -287,7 +287,9 @@ export class SubgraphResponseDto {
   ): SubgraphResponseDto {
     return {
       nodes: nodes.map((node) => NodeResponseDto.fromEntity(node)),
-      relationships: edges.map((edge) => RelationshipResponseDto.fromEntity(edge)),
+      relationships: edges.map((edge) =>
+        RelationshipResponseDto.fromEntity(edge),
+      ),
       rootNodeId,
       depth,
     };
@@ -327,13 +329,12 @@ export class QueryResponseDto {
   /**
    * Create query response
    */
-  static create(
-    nodes: Node[],
-    relationships: Edge[],
-  ): QueryResponseDto {
+  static create(nodes: Node[], relationships: Edge[]): QueryResponseDto {
     return {
       nodes: nodes.map((node) => NodeResponseDto.fromEntity(node)),
-      relationships: relationships.map((edge) => RelationshipResponseDto.fromEntity(edge)),
+      relationships: relationships.map((edge) =>
+        RelationshipResponseDto.fromEntity(edge),
+      ),
       nodeCount: nodes.length,
       relationshipCount: relationships.length,
     };

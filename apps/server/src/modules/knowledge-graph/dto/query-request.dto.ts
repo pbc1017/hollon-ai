@@ -1,4 +1,13 @@
-import { IsUUID, IsOptional, IsArray, IsEnum, IsString, IsNumber, Min, Max } from 'class-validator';
+import {
+  IsUUID,
+  IsOptional,
+  IsArray,
+  IsEnum,
+  IsString,
+  IsNumber,
+  Min,
+  Max,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { NodeType } from '../entities/node.entity';
 import { RelationshipType } from '../../../knowledge/enums/relationship-type.enum';

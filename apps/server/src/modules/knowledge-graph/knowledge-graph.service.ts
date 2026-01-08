@@ -88,7 +88,9 @@ export class KnowledgeGraphService {
     const visited = new Set<string>();
     const nodes: Node[] = [];
     const edges: Edge[] = [];
-    const queue: Array<{ id: string; currentDepth: number }> = [{ id: nodeId, currentDepth: 0 }];
+    const queue: Array<{ id: string; currentDepth: number }> = [
+      { id: nodeId, currentDepth: 0 },
+    ];
 
     // BFS traversal
     while (queue.length > 0) {
@@ -115,14 +117,18 @@ export class KnowledgeGraphService {
       // Find connected edges
       let edgeQuery = this.edgeRepository
         .createQueryBuilder('edge')
-        .where('(edge.sourceNodeId = :nodeId OR edge.targetNodeId = :nodeId)', { nodeId: id });
+        .where('(edge.sourceNodeId = :nodeId OR edge.targetNodeId = :nodeId)', {
+          nodeId: id,
+        });
 
       if (includeActive) {
         edgeQuery = edgeQuery.andWhere('edge.isActive = true');
       }
 
       if (relationshipTypes && relationshipTypes.length > 0) {
-        edgeQuery = edgeQuery.andWhere('edge.type IN (:...types)', { types: relationshipTypes });
+        edgeQuery = edgeQuery.andWhere('edge.type IN (:...types)', {
+          types: relationshipTypes,
+        });
       }
 
       const connectedEdges = await edgeQuery.getMany();
