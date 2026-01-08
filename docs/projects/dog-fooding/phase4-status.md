@@ -31,6 +31,7 @@
 | TBD     | #29   | Transaction for PR record + task status update, Orphaned PR sync cron (5분 주기)                    |
 | TBD     | #37   | Call requestReview() when CI passes to update PR status from 'draft' to 'ready_for_review'          |
 | TBD     | #38   | Disable detectStuckTasks cron - was blocking tasks with PRs waiting for CI/review (40+ affected)    |
+| TBD     | #39   | Add post-checkout hook to prevent main repo pollution from Claude Code worktree navigation          |
 
 ---
 
@@ -1292,4 +1293,146 @@ try {
 
 ---
 
-**Last Updated**: 2026-01-07T13:40:00+09:00
+---
+
+### Issue #39: Main Repository Pollution via Claude Code Worktree Navigation
+
+**발견 시간**: 2026-01-08 21:00 KST
+
+**증상**:
+
+- Main 브랜치가 `feature/Senior-Backend-Developer-03ebe5df/task-c6069e3b` 등 feature 브랜치로 체크아웃됨
+- `git reflog`에서 여러 차례 feature 브랜치 체크아웃 기록 확인:
+  - `2026-01-08 12:57:54` - checkout to `feature/Senior-Backend-Developer-03ebe5df/task-c6069e3b`
+  - `2026-01-08 12:21:58` - checkout to `feature/DevOps-India/task-02fbbca5`
+  - `2026-01-08 06:15:13` - checkout to `feature/BackendDev-Delta/task-9b3f0ad2`
+
+**근본 원인**:
+
+1. **Claude Code (Brain Provider)가 `git checkout` 실행**
+   - Server 코드에는 `git checkout` 호출 없음 (검증 완료)
+   - Claude Code가 worktree에서 작업 중 `cd ../../../` 등으로 main repo로 이동
+   - Main repo에서 `git checkout <feature-branch>` 실행
+
+2. **Temporary Hollon의 worktree 정리 문제**
+   - Task `c6069e3b`: `workingDirectory: null`, `assignedHollonId: null`
+   - Temporary hollon이 삭제되면서 worktree 정보도 손실
+   - Brain Provider가 worktree 없이 main repo에서 실행
+
+**영향**:
+
+- Main repo가 예상치 않은 브랜치로 체크아웃되어 개발 환경 오염
+- 다른 worktree에서 작업 중인 hollon에 영향 가능
+- phase4-status.md에서 "절대 발생하면 안되는" 것으로 명시된 심각한 문제
+
+**해결 (Fix #39)**:
+
+#### Git Post-Checkout Hook 추가
+
+**파일**: `.husky/post-checkout`
+
+```bash
+#!/bin/bash
+# Fix #39: Prevent main repository pollution from worktree navigation
+
+PREV_HEAD=$1
+NEW_HEAD=$2
+BRANCH_CHECKOUT=$3  # 1 if branch checkout, 0 if file checkout
+
+# Only act on branch checkouts
+if [ "$BRANCH_CHECKOUT" != "1" ]; then
+    exit 0
+fi
+
+# Skip if we're already reverting (prevents infinite loop)
+if [ "$FIX39_REVERTING" = "1" ]; then
+    exit 0
+fi
+
+# Get the current branch name
+CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+if [ -z "$CURRENT_BRANCH" ]; then
+    exit 0
+fi
+
+# Get toplevel directory
+TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null)
+
+# Check if .git is a file (linked worktree) or directory (main repo)
+if [ -f "$TOPLEVEL/.git" ]; then
+    # This is a linked worktree - allow any checkout
+    exit 0
+fi
+
+# We're in the main worktree - check for feature branches
+if [[ "$CURRENT_BRANCH" == feature/* ]] || [[ "$CURRENT_BRANCH" == wt-hollon-* ]]; then
+    >&2 echo ""
+    >&2 echo "🚨 [Fix #39] BLOCKED: Main repository checkout to feature branch detected!"
+    >&2 echo "   Branch: $CURRENT_BRANCH"
+    >&2 echo "   This is likely caused by Claude Code navigating out of a worktree."
+    >&2 echo "   Reverting to 'main' branch..."
+    >&2 echo ""
+
+    # Log the event
+    LOG_FILE="$TOPLEVEL/.git/checkout-blocks.log"
+    echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") BLOCKED checkout to $CURRENT_BRANCH" >> "$LOG_FILE"
+
+    # Revert to main branch
+    FIX39_REVERTING=1 git checkout main >&2 2>&1
+
+    if [ $? -eq 0 ]; then
+        >&2 echo "✅ Successfully reverted to 'main' branch"
+    else
+        >&2 echo "❌ Failed to revert to 'main' - manual intervention required"
+    fi
+    exit 0
+fi
+
+# Allowed branches: main, master, develop
+case "$CURRENT_BRANCH" in
+    main|master|develop)
+        exit 0
+        ;;
+    *)
+        # Other branches - log warning but allow
+        LOG_FILE="$TOPLEVEL/.git/checkout-warnings.log"
+        echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") WARNING: checkout to $CURRENT_BRANCH" >> "$LOG_FILE"
+        exit 0
+        ;;
+esac
+```
+
+**구현 포인트**:
+
+1. **Husky 통합**: `.husky/post-checkout`에 위치 (git core.hooksPath가 `.husky/_`로 설정되어 있음)
+2. **Worktree 감지**: `.git`이 파일(worktree)인지 디렉토리(main repo)인지로 구분
+3. **패턴 차단**: `feature/*`, `wt-hollon-*` 브랜치가 main repo에서 체크아웃되면 자동 revert
+4. **무한 루프 방지**: `FIX39_REVERTING` 환경 변수로 revert 시 재귀 방지
+5. **로깅**: `.git/checkout-blocks.log`에 차단 이벤트 기록
+
+**테스트 결과**:
+
+```bash
+$ git checkout feature/fix39-test/task-final
+'feature/fix39-test/task-final' 브랜치로 전환합니다
+
+🚨 [Fix #39] BLOCKED: Main repository checkout to feature branch detected!
+   Branch: feature/fix39-test/task-final
+   This is likely caused by Claude Code navigating out of a worktree.
+   Reverting to 'main' branch...
+
+'main' 브랜치로 전환합니다
+✅ Successfully reverted to 'main' branch
+--- Final branch: main
+```
+
+**예상 효과**:
+
+1. Claude Code가 worktree에서 main repo로 이동 후 checkout 해도 자동 revert
+2. Main repo가 항상 main/master/develop 브랜치 유지
+3. 차단 이벤트 로깅으로 디버깅 가능
+
+**상태**: ✅ 수정 완료, 테스트 통과
+
+**Last Updated**: 2026-01-08T22:20:00+09:00

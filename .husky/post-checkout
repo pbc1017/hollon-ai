@@ -1,0 +1,77 @@
+#!/bin/bash
+# Fix #39: Prevent main repository pollution from worktree navigation
+#
+# This hook detects when the main repository is checked out to a feature branch
+# and immediately reverts it back to main. This protects against Claude Code
+# navigating out of worktrees and executing git checkout in the main repo.
+
+PREV_HEAD=$1
+NEW_HEAD=$2
+BRANCH_CHECKOUT=$3  # 1 if branch checkout, 0 if file checkout
+
+# Only act on branch checkouts
+if [ "$BRANCH_CHECKOUT" != "1" ]; then
+    exit 0
+fi
+
+# Skip if we're already reverting (prevents infinite loop)
+if [ "$FIX39_REVERTING" = "1" ]; then
+    exit 0
+fi
+
+# Get the current branch name
+CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+# If we couldn't get branch name, exit
+if [ -z "$CURRENT_BRANCH" ]; then
+    exit 0
+fi
+
+# Get toplevel directory
+TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null)
+
+# Check if .git is a file (linked worktree) or directory (main repo)
+if [ -f "$TOPLEVEL/.git" ]; then
+    # This is a linked worktree - allow any checkout
+    exit 0
+fi
+
+# We're in the main worktree - check for feature branches
+# Feature branches: feature/*, wt-hollon-* (NOT allowed in main repo)
+
+if [[ "$CURRENT_BRANCH" == feature/* ]] || [[ "$CURRENT_BRANCH" == wt-hollon-* ]]; then
+    # Write to stderr so it always shows
+    >&2 echo ""
+    >&2 echo "🚨 [Fix #39] BLOCKED: Main repository checkout to feature branch detected!"
+    >&2 echo "   Branch: $CURRENT_BRANCH"
+    >&2 echo "   This is likely caused by Claude Code navigating out of a worktree."
+    >&2 echo "   Reverting to 'main' branch..."
+    >&2 echo ""
+
+    # Log the event
+    LOG_FILE="$TOPLEVEL/.git/checkout-blocks.log"
+    echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") BLOCKED checkout to $CURRENT_BRANCH" >> "$LOG_FILE"
+
+    # Revert to main branch with environment variable to prevent loop
+    FIX39_REVERTING=1 git checkout main >&2 2>&1
+
+    if [ $? -eq 0 ]; then
+        >&2 echo "✅ Successfully reverted to 'main' branch"
+    else
+        >&2 echo "❌ Failed to revert to 'main' - manual intervention required"
+    fi
+    exit 0
+fi
+
+# Allowed branches: main, master, develop
+case "$CURRENT_BRANCH" in
+    main|master|develop)
+        exit 0
+        ;;
+    *)
+        # Other branches - log warning but allow
+        LOG_FILE="$TOPLEVEL/.git/checkout-warnings.log"
+        echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") WARNING: checkout to $CURRENT_BRANCH in main repo" >> "$LOG_FILE"
+        exit 0
+        ;;
+esac
