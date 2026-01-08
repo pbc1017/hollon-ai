@@ -120,9 +120,7 @@ export class VectorSearchConfigService {
   async validateConfig(config: VectorSearchConfig): Promise<void> {
     // Validate timeout
     if (config.timeoutSeconds < 5 || config.timeoutSeconds > 300) {
-      throw new BadRequestException(
-        'Timeout must be between 5-300 seconds',
-      );
+      throw new BadRequestException('Timeout must be between 5-300 seconds');
     }
 
     // Validate dimensions - common embedding dimensions
@@ -165,9 +163,7 @@ export class VectorSearchConfigService {
         maxLimit !== undefined &&
         defaultLimit > maxLimit
       ) {
-        throw new BadRequestException(
-          'Default limit cannot exceed max limit',
-        );
+        throw new BadRequestException('Default limit cannot exceed max limit');
       }
     }
 
@@ -236,20 +232,17 @@ export class VectorSearchConfigService {
       displayName: 'Default Vector Search Config',
       provider: 'openai',
       embeddingModel:
-        this.configService.get<string>(
-          'vectorSearch.embedding.model',
-        ) || 'text-embedding-3-small',
+        this.configService.get<string>('vectorSearch.embedding.model') ||
+        'text-embedding-3-small',
       dimensions:
-        this.configService.get<number>(
-          'vectorSearch.embedding.dimensions',
-        ) || 1536,
+        this.configService.get<number>('vectorSearch.embedding.dimensions') ||
+        1536,
       config: {
         apiKey: openaiApiKey,
         apiEndpoint: 'https://api.openai.com/v1',
         batchSize:
-          this.configService.get<number>(
-            'vectorSearch.embedding.batchSize',
-          ) || 100,
+          this.configService.get<number>('vectorSearch.embedding.batchSize') ||
+          100,
       },
       searchConfig: {
         similarityThreshold:
@@ -257,24 +250,19 @@ export class VectorSearchConfigService {
             'vectorSearch.search.defaultMinSimilarity',
           ) || 0.7,
         defaultLimit:
-          this.configService.get<number>(
-            'vectorSearch.search.defaultLimit',
-          ) || 10,
+          this.configService.get<number>('vectorSearch.search.defaultLimit') ||
+          10,
         maxLimit:
-          this.configService.get<number>(
-            'vectorSearch.search.maxLimit',
-          ) || 100,
+          this.configService.get<number>('vectorSearch.search.maxLimit') || 100,
         distanceMetric: 'cosine',
       },
       costPer1kTokensCents: 0.00002, // $0.0002 per 1K tokens for text-embedding-3-small
       timeoutSeconds:
-        this.configService.get<number>(
-          'vectorSearch.embedding.timeoutMs',
-        ) || 30000 / 1000,
+        this.configService.get<number>('vectorSearch.embedding.timeoutMs') ||
+        30000 / 1000,
       maxRetries:
-        this.configService.get<number>(
-          'vectorSearch.embedding.maxRetries',
-        ) || 3,
+        this.configService.get<number>('vectorSearch.embedding.maxRetries') ||
+        3,
       rateLimitConfig: {
         maxRequestsPerMinute: 60,
         maxTokensPerMinute: 1000000,
@@ -306,22 +294,19 @@ export class VectorSearchConfigService {
     config.displayName = 'System Default Vector Search Config';
     config.provider = 'openai';
     config.embeddingModel =
-      this.configService.get<string>(
-        'vectorSearch.embedding.model',
-      ) || 'text-embedding-3-small';
+      this.configService.get<string>('vectorSearch.embedding.model') ||
+      'text-embedding-3-small';
     config.dimensions =
-      this.configService.get<number>(
-        'vectorSearch.embedding.dimensions',
-      ) || 1536;
+      this.configService.get<number>('vectorSearch.embedding.dimensions') ||
+      1536;
     config.config = {
       apiKey:
         this.configService.get<string>('brain.openaiApiKey') ||
         process.env.OPENAI_API_KEY,
       apiEndpoint: 'https://api.openai.com/v1',
       batchSize:
-        this.configService.get<number>(
-          'vectorSearch.embedding.batchSize',
-        ) || 100,
+        this.configService.get<number>('vectorSearch.embedding.batchSize') ||
+        100,
     };
     config.searchConfig = {
       similarityThreshold:
@@ -329,13 +314,10 @@ export class VectorSearchConfigService {
           'vectorSearch.search.defaultMinSimilarity',
         ) || 0.7,
       defaultLimit:
-        this.configService.get<number>(
-          'vectorSearch.search.defaultLimit',
-        ) || 10,
+        this.configService.get<number>('vectorSearch.search.defaultLimit') ||
+        10,
       maxLimit:
-        this.configService.get<number>(
-          'vectorSearch.search.maxLimit',
-        ) || 100,
+        this.configService.get<number>('vectorSearch.search.maxLimit') || 100,
       distanceMetric: 'cosine',
     };
     config.costPer1kTokensCents = 0.00002;
