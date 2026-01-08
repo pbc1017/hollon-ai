@@ -399,8 +399,9 @@ describe('KnowledgeExtractionModule', () => {
   describe('Module Lifecycle', () => {
     it('should properly initialize all providers on module creation', () => {
       expect(module).toBeDefined();
-      expect(module.get<KnowledgeExtractionService>(KnowledgeExtractionService))
-        .toBeDefined();
+      expect(
+        module.get<KnowledgeExtractionService>(KnowledgeExtractionService),
+      ).toBeDefined();
     });
 
     it('should allow graceful module shutdown', async () => {
