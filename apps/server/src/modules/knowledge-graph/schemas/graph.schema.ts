@@ -91,14 +91,24 @@ export const NODE_TYPE_CONSTRAINTS = {
 export const EDGE_TYPE_CONSTRAINTS = {
   [RelationshipType.CREATED_BY]: {
     description: 'Represents creation relationship',
-    allowedSourceTypes: [NodeType.DOCUMENT, NodeType.CODE, NodeType.TASK, NodeType.CUSTOM],
+    allowedSourceTypes: [
+      NodeType.DOCUMENT,
+      NodeType.CODE,
+      NodeType.TASK,
+      NodeType.CUSTOM,
+    ],
     allowedTargetTypes: [NodeType.PERSON, NodeType.ORGANIZATION, NodeType.TOOL],
     directionality: 'directed',
     isWeighted: false,
   },
   [RelationshipType.BELONGS_TO]: {
     description: 'Represents membership or ownership',
-    allowedSourceTypes: [NodeType.PERSON, NodeType.TASK, NodeType.TEAM, NodeType.CUSTOM],
+    allowedSourceTypes: [
+      NodeType.PERSON,
+      NodeType.TASK,
+      NodeType.TEAM,
+      NodeType.CUSTOM,
+    ],
     allowedTargetTypes: [NodeType.ORGANIZATION, NodeType.TEAM, NodeType.GOAL],
     directionality: 'directed',
     isWeighted: true,
@@ -119,15 +129,30 @@ export const EDGE_TYPE_CONSTRAINTS = {
   },
   [RelationshipType.DEPENDS_ON]: {
     description: 'Represents dependency',
-    allowedSourceTypes: [NodeType.TASK, NodeType.GOAL, NodeType.CODE, NodeType.CUSTOM],
-    allowedTargetTypes: [NodeType.TASK, NodeType.GOAL, NodeType.CODE, NodeType.SKILL],
+    allowedSourceTypes: [
+      NodeType.TASK,
+      NodeType.GOAL,
+      NodeType.CODE,
+      NodeType.CUSTOM,
+    ],
+    allowedTargetTypes: [
+      NodeType.TASK,
+      NodeType.GOAL,
+      NodeType.CODE,
+      NodeType.SKILL,
+    ],
     directionality: 'directed',
     isWeighted: false,
   },
   [RelationshipType.REFERENCES]: {
     description: 'Represents reference relationship',
     allowedSourceTypes: [NodeType.DOCUMENT, NodeType.CODE, NodeType.CUSTOM],
-    allowedTargetTypes: [NodeType.DOCUMENT, NodeType.CODE, NodeType.CONCEPT, NodeType.TOOL],
+    allowedTargetTypes: [
+      NodeType.DOCUMENT,
+      NodeType.CODE,
+      NodeType.CONCEPT,
+      NodeType.TOOL,
+    ],
     directionality: 'directed',
     isWeighted: false,
   },
@@ -154,7 +179,12 @@ export const EDGE_TYPE_CONSTRAINTS = {
   },
   [RelationshipType.CHILD_OF]: {
     description: 'Represents parent-child relationship',
-    allowedSourceTypes: [NodeType.TASK, NodeType.GOAL, NodeType.CONCEPT, NodeType.CUSTOM],
+    allowedSourceTypes: [
+      NodeType.TASK,
+      NodeType.GOAL,
+      NodeType.CONCEPT,
+      NodeType.CUSTOM,
+    ],
     allowedTargetTypes: [NodeType.TASK, NodeType.GOAL, NodeType.CONCEPT],
     directionality: 'directed',
     isWeighted: false,
@@ -571,7 +601,12 @@ export const DATA_VALIDATION_RULES = {
 export const STORAGE_STRATEGIES = {
   persistent: {
     backend: 'PostgreSQL with TypeORM',
-    advantages: ['ACID compliance', 'Scalability', 'Full persistence', 'Multi-tenancy support'],
+    advantages: [
+      'ACID compliance',
+      'Scalability',
+      'Full persistence',
+      'Multi-tenancy support',
+    ],
     disadvantages: ['Slower than in-memory', 'Network latency'],
     bestFor: 'Production use, multi-tenant systems, large datasets',
     maxNodes: 'Millions',
@@ -589,7 +624,12 @@ export const STORAGE_STRATEGIES = {
   },
   hybrid: {
     backend: 'In-memory cache with PostgreSQL persistence',
-    advantages: ['Fast queries for hot data', 'Persistence', 'Scalability', 'Flexible'],
+    advantages: [
+      'Fast queries for hot data',
+      'Persistence',
+      'Scalability',
+      'Flexible',
+    ],
     disadvantages: ['Complexity', 'Sync overhead'],
     bestFor: 'Large datasets with frequent access patterns',
     maxNodes: 'Millions (PostgreSQL) + cache size',
