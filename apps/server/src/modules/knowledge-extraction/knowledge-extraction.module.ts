@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { KnowledgeItem } from './entities/knowledge-item.entity';
 import { KnowledgeExtractionService } from './services/knowledge-extraction.service';
+import { KnowledgeExtractionController } from './knowledge-extraction.controller';
 import { VectorSearchService } from './services/vector-search.service';
 
 /**
@@ -113,6 +114,11 @@ import { VectorSearchService } from './services/vector-search.service';
   imports: [
     // TypeORM entity registration for repository injection
     TypeOrmModule.forFeature([KnowledgeItem]),
+  ],
+  controllers: [
+    // REST API controller for knowledge extraction and management
+    // Provides endpoints for CRUD operations and querying knowledge items
+    KnowledgeExtractionController,
   ],
   providers: [
     // Core knowledge extraction and storage service
