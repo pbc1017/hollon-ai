@@ -10,11 +10,11 @@ import { Task, TaskStatus, TaskType } from '../task/entities/task.entity';
 import { Hollon } from '../hollon/entities/hollon.entity';
 import { Team } from '../team/entities/team.entity';
 import { Role } from '../role/entities/role.entity';
-import { BrainProviderService } from '../brain-provider/brain-provider.service';
 import {
   TaskPullRequest,
   PullRequestStatus,
 } from '../collaboration/entities/task-pull-request.entity';
+import { PlanningOrchestratorService } from './planning-orchestrator.service';
 
 const execAsync = promisify(exec);
 
@@ -53,7 +53,7 @@ export class PlanningService {
     private readonly roleRepo: Repository<Role>,
     @InjectRepository(TaskPullRequest)
     private readonly prRepo: Repository<TaskPullRequest>,
-    private readonly brainProviderService: BrainProviderService,
+    private readonly planningOrchestrator: PlanningOrchestratorService,
   ) {}
 
   /**
@@ -177,37 +177,44 @@ export class PlanningService {
       // Setup worktree
       await this.setupWorktree(worktreePath, planningTask);
 
-      // Build planning prompt
-      const prompt = this.buildPlanningPrompt(parentTask, planningTask);
-
-      // Execute Brain Provider
-      const result = await this.brainProviderService.executeWithTracking(
-        {
-          prompt,
-          context: {
-            hollonId: assignedHollon.id,
-            taskId: planningTask.id,
-            workingDirectory: worktreePath,
-          },
-          options: {
-            timeoutMs: 600000, // 10 minutes
-          },
-        },
-        {
-          organizationId: planningTask.organizationId,
-          hollonId: assignedHollon.id,
-          taskId: planningTask.id,
-        },
-      );
-
-      if (!result.success) {
-        throw new Error(result.output || 'Brain Provider execution failed');
-      }
-
       // Get the plan document path
       const teamName =
         (planningTask.metadata as { teamName?: string })?.teamName || 'general';
       const planPath = `docs/teams/${teamName}/plans/${parentTask.id.substring(0, 8)}-plan.md`;
+      const fullPlanPath = path.join(worktreePath, planPath);
+
+      // Phase 4.3: Use orchestrated planning with multiple specialists
+      this.logger.log(
+        'Starting orchestrated planning with multiple specialists...',
+      );
+      const orchestratedResult =
+        await this.planningOrchestrator.orchestratePlanning(
+          parentTask,
+          assignedHollon,
+          worktreePath,
+        );
+
+      if (!orchestratedResult.success) {
+        throw new Error(
+          orchestratedResult.error || 'Orchestrated planning failed',
+        );
+      }
+
+      // Write the aggregated plan to the file
+      await fs.mkdir(path.dirname(fullPlanPath), { recursive: true });
+      await fs.writeFile(
+        fullPlanPath,
+        orchestratedResult.aggregatedPlan || '',
+        'utf-8',
+      );
+      this.logger.log(`Plan document written to: ${planPath}`);
+
+      // Commit the plan document
+      await execAsync(`git add "${planPath}"`, { cwd: worktreePath });
+      await execAsync(
+        `git commit -m "docs: Add implementation plan for ${parentTask.title.substring(0, 50)}"`,
+        { cwd: worktreePath },
+      );
 
       // Create PR for the plan
       const prUrl = await this.createPlanningPR(
@@ -222,6 +229,20 @@ export class PlanningService {
         status: TaskStatus.IN_REVIEW,
         planDocumentPath: planPath,
         workingDirectory: worktreePath,
+        metadata: {
+          ...(planningTask.metadata || {}),
+          orchestrationResult: {
+            totalSpecialists: orchestratedResult.analyses.length,
+            successfulAnalyses: orchestratedResult.analyses.filter(
+              (a) => a.success,
+            ).length,
+            specialists: orchestratedResult.analyses.map((a) => ({
+              role: a.role,
+              success: a.success,
+              error: a.error,
+            })),
+          },
+        },
       });
 
       // Update parent task
@@ -247,99 +268,6 @@ export class PlanningService {
         error: err.message,
       };
     }
-  }
-
-  /**
-   * Build the prompt for planning
-   */
-  private buildPlanningPrompt(parentTask: Task, planningTask: Task): string {
-    const teamName =
-      (planningTask.metadata as { teamName?: string })?.teamName || 'general';
-    const planPath = `docs/teams/${teamName}/plans/${parentTask.id.substring(0, 8)}-plan.md`;
-
-    return `# Planning Task
-
-You are a PlanningSpecialist. Your job is to create a detailed implementation plan.
-
-## Task to Plan
-
-**Title**: ${parentTask.title}
-**Type**: ${parentTask.type}
-**Description**:
-${parentTask.description}
-
-## Your Mission
-
-1. **Analyze** the task requirements
-2. **Explore** the existing codebase to understand:
-   - Current architecture and patterns
-   - Files that need to be created or modified
-   - Dependencies and integrations required
-3. **Create** a detailed plan document at: \`${planPath}\`
-
-## Plan Document Structure
-
-Create the plan file with this structure:
-
-\`\`\`markdown
-# Plan: ${parentTask.title}
-
-## Task Information
-- **Task ID**: ${parentTask.id}
-- **Type**: ${parentTask.type}
-- **Created**: ${new Date().toISOString()}
-
-## Objective
-[Summarize what this task aims to achieve]
-
-## Analysis
-
-### Codebase Impact
-- **Files to create**: [list files]
-- **Files to modify**: [list files]
-- **Dependencies affected**: [list dependencies]
-
-### Technical Approach
-[Describe the implementation approach in detail]
-
-### Risks and Mitigations
-| Risk | Mitigation |
-|------|------------|
-| ... | ... |
-
-## Decomposition
-
-### Subtasks
-[For team_epics, list implementation tasks]
-[For implementation tasks, list sub-steps if needed]
-
-1. **[Subtask Title]**
-   - Assignee recommendation: [Role/skill needed]
-   - Description: ...
-   - Acceptance Criteria: ...
-
-### Dependencies
-[Describe task dependencies]
-
-## Success Criteria
-- [ ] [Criterion 1]
-- [ ] [Criterion 2]
-
----
-*Generated by: PlanningSpecialist*
-*Date: ${new Date().toISOString()}*
-*Status: PENDING_REVIEW*
-\`\`\`
-
-## Important Instructions
-
-1. Create the plan document at: \`${planPath}\`
-2. Ensure the parent directories exist (create \`docs/teams/${teamName}/plans/\` if needed)
-3. Commit the file with message: \`docs: Add implementation plan for ${parentTask.title.substring(0, 50)}\`
-4. DO NOT create actual implementation code - only the plan document
-
-Begin by exploring the codebase to understand the context, then create the plan document.
-`;
   }
 
   /**
