@@ -118,15 +118,10 @@ export class KnowledgeExtractionService {
   constructor(
     @InjectRepository(KnowledgeItem)
     private readonly knowledgeItemRepository: Repository<KnowledgeItem>,
-    // Future DI: Uncomment as integration phases are implemented
-    // Phase 3: Vector Search Integration
-    // @Inject(forwardRef(() => VectorSearchService))
-    // private readonly vectorSearchService?: VectorSearchService,
-    // Phase 4: Knowledge Graph Integration
-    // @Inject(forwardRef(() => KnowledgeGraphService))
-    // private readonly knowledgeGraphService?: KnowledgeGraphService,
-    // Phase 5: NLP and Brain Provider Integration
-    // private readonly brainProviderService?: BrainProviderService,
+    // Future phases (3-5) will inject additional services here:
+    // - VectorSearchService (Phase 3): Semantic search and embeddings
+    // - KnowledgeGraphService (Phase 4): Graph integration and traversal
+    // - BrainProviderService (Phase 5): NLP and entity extraction
   ) {}
 
   /**
