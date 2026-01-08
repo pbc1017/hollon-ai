@@ -109,7 +109,12 @@ export class GraphQueryService {
       }),
     ]);
 
-    return ShortestPathAlgorithm.findAllShortestPaths(sourceNode, nodes, edges, maxDepth);
+    return ShortestPathAlgorithm.findAllShortestPaths(
+      sourceNode,
+      nodes,
+      edges,
+      maxDepth,
+    );
   }
 
   /**
@@ -145,7 +150,13 @@ export class GraphQueryService {
       }),
     ]);
 
-    return GraphTraversal.findNeighborsByDepth(node, nodes, edges, depth, direction);
+    return GraphTraversal.findNeighborsByDepth(
+      node,
+      nodes,
+      edges,
+      depth,
+      direction,
+    );
   }
 
   /**
@@ -247,7 +258,8 @@ export class GraphQueryService {
     // Filter edges to only include those within the subgraph
     const subgraphEdges = allEdges.filter(
       (edge) =>
-        subgraphNodeIds.has(edge.sourceNodeId) && subgraphNodeIds.has(edge.targetNodeId),
+        subgraphNodeIds.has(edge.sourceNodeId) &&
+        subgraphNodeIds.has(edge.targetNodeId),
     );
 
     // Apply edge type filter if specified
@@ -258,7 +270,13 @@ export class GraphQueryService {
     return {
       nodes: traversedNodes,
       edges: filteredEdges,
-      metadata: this.generateMetadata(traversedNodes, filteredEdges, organizationId, rootNode.id, depth),
+      metadata: this.generateMetadata(
+        traversedNodes,
+        filteredEdges,
+        organizationId,
+        rootNode.id,
+        depth,
+      ),
     };
   }
 
@@ -323,7 +341,9 @@ export class GraphQueryService {
     // BFS with the filtered graph
     const visited = new Set<string>();
     const result: Node[] = [];
-    const queue: Array<{ id: string; depth: number }> = [{ id: nodeId, depth: 0 }];
+    const queue: Array<{ id: string; depth: number }> = [
+      { id: nodeId, depth: 0 },
+    ];
     visited.add(nodeId);
 
     const nodeMap = new Map<string, Node>();
@@ -384,8 +404,14 @@ export class GraphQueryService {
     organizationId: string,
   ): Promise<Node[]> {
     const [node1Neighbors, node2Neighbors] = await Promise.all([
-      this.queryNeighbors(nodeId1, organizationId, { maxDepth: 1, direction: 'out' }),
-      this.queryNeighbors(nodeId2, organizationId, { maxDepth: 1, direction: 'out' }),
+      this.queryNeighbors(nodeId1, organizationId, {
+        maxDepth: 1,
+        direction: 'out',
+      }),
+      this.queryNeighbors(nodeId2, organizationId, {
+        maxDepth: 1,
+        direction: 'out',
+      }),
     ]);
 
     const neighbors1 = new Set((node1Neighbors.get(1) || []).map((n) => n.id));
@@ -518,20 +544,26 @@ export class GraphQueryService {
     const edgeTypeDistribution: Record<string, number> = {};
 
     for (const node of nodes) {
-      nodeTypeDistribution[node.type] = (nodeTypeDistribution[node.type] || 0) + 1;
+      nodeTypeDistribution[node.type] =
+        (nodeTypeDistribution[node.type] || 0) + 1;
     }
 
     for (const edge of edges) {
-      edgeTypeDistribution[edge.type] = (edgeTypeDistribution[edge.type] || 0) + 1;
+      edgeTypeDistribution[edge.type] =
+        (edgeTypeDistribution[edge.type] || 0) + 1;
     }
 
-    const averageNodeDegree = nodes.length > 0 ? (edges.length * 2) / nodes.length : 0;
+    const averageNodeDegree =
+      nodes.length > 0 ? (edges.length * 2) / nodes.length : 0;
 
     return {
       nodeCount: nodes.length,
       edgeCount: edges.length,
       nodeTypeDistribution: nodeTypeDistribution as Record<NodeType, number>,
-      edgeTypeDistribution: edgeTypeDistribution as Record<RelationshipType, number>,
+      edgeTypeDistribution: edgeTypeDistribution as Record<
+        RelationshipType,
+        number
+      >,
       averageNodeDegree,
     };
   }
@@ -659,11 +691,13 @@ export class GraphQueryService {
     const edgeTypeDistribution: Record<string, number> = {};
 
     for (const node of nodes) {
-      nodeTypeDistribution[node.type] = (nodeTypeDistribution[node.type] || 0) + 1;
+      nodeTypeDistribution[node.type] =
+        (nodeTypeDistribution[node.type] || 0) + 1;
     }
 
     for (const edge of edges) {
-      edgeTypeDistribution[edge.type] = (edgeTypeDistribution[edge.type] || 0) + 1;
+      edgeTypeDistribution[edge.type] =
+        (edgeTypeDistribution[edge.type] || 0) + 1;
     }
 
     const now = new Date();
@@ -672,10 +706,19 @@ export class GraphQueryService {
       nodeCount: nodes.length,
       edgeCount: edges.length,
       organizationId,
-      createdAt: nodes.length > 0 ? Math.min(...nodes.map((n) => n.createdAt.getTime())) as any : now,
-      updatedAt: nodes.length > 0 ? Math.max(...nodes.map((n) => n.updatedAt.getTime())) as any : now,
+      createdAt:
+        nodes.length > 0
+          ? (Math.min(...nodes.map((n) => n.createdAt.getTime())) as any)
+          : now,
+      updatedAt:
+        nodes.length > 0
+          ? (Math.max(...nodes.map((n) => n.updatedAt.getTime())) as any)
+          : now,
       nodeTypeDistribution: nodeTypeDistribution as Record<NodeType, number>,
-      edgeTypeDistribution: edgeTypeDistribution as Record<RelationshipType, number>,
+      edgeTypeDistribution: edgeTypeDistribution as Record<
+        RelationshipType,
+        number
+      >,
       rootNodeId,
       maxDepth,
       schemaVersion: '1.0.0',

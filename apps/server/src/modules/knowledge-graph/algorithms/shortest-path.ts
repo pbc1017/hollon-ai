@@ -30,7 +30,10 @@ export class ShortestPathAlgorithm {
     maxDepth?: number,
   ): IGraphPath | null {
     // Build adjacency list with weights
-    const graph = new Map<string, Array<{ nodeId: string; weight: number; edge: Edge }>>();
+    const graph = new Map<
+      string,
+      Array<{ nodeId: string; weight: number; edge: Edge }>
+    >();
 
     // Initialize graph with all nodes
     for (const node of nodes) {
@@ -112,10 +115,14 @@ export class ShortestPathAlgorithm {
           if (newDist < currentDist) {
             distances.set(neighborId, newDist);
             const edgeToNeighbor = edges.find(
-              (e) => e.sourceNodeId === minNode && e.targetNodeId === neighborId,
+              (e) =>
+                e.sourceNodeId === minNode && e.targetNodeId === neighborId,
             );
             if (edgeToNeighbor) {
-              previousNodes.set(neighborId, { nodeId: minNode, edge: edgeToNeighbor });
+              previousNodes.set(neighborId, {
+                nodeId: minNode,
+                edge: edgeToNeighbor,
+              });
             }
             visitedDepths.set(neighborId, currentDepth + 1);
           }
@@ -141,7 +148,10 @@ export class ShortestPathAlgorithm {
     edges: Edge[],
     maxDepth?: number,
   ): Map<string, IGraphPath> {
-    const graph = new Map<string, Array<{ nodeId: string; weight: number; edge: Edge }>>();
+    const graph = new Map<
+      string,
+      Array<{ nodeId: string; weight: number; edge: Edge }>
+    >();
 
     // Initialize and build adjacency list
     for (const node of nodes) {
@@ -208,10 +218,14 @@ export class ShortestPathAlgorithm {
           if (newDist < currentDist) {
             distances.set(neighborId, newDist);
             const edgeToNeighbor = edges.find(
-              (e) => e.sourceNodeId === minNode && e.targetNodeId === neighborId,
+              (e) =>
+                e.sourceNodeId === minNode && e.targetNodeId === neighborId,
             );
             if (edgeToNeighbor) {
-              previousNodes.set(neighborId, { nodeId: minNode, edge: edgeToNeighbor });
+              previousNodes.set(neighborId, {
+                nodeId: minNode,
+                edge: edgeToNeighbor,
+              });
             }
             visitedDepths.set(neighborId, currentDepth + 1);
           }
@@ -291,7 +305,7 @@ export class ShortestPathAlgorithm {
       .map((id) => nodeMap.get(id))
       .filter((node): node is Node => node !== undefined);
 
-    const totalWeight = (distances.get(targetNode.id) || 0);
+    const totalWeight = distances.get(targetNode.id) || 0;
 
     return {
       nodes: pathNodes,
@@ -333,7 +347,10 @@ export class AStarAlgorithm {
     const h = heuristic || (() => 0);
 
     // Build adjacency list
-    const graph = new Map<string, Array<{ nodeId: string; weight: number; edge: Edge }>>();
+    const graph = new Map<
+      string,
+      Array<{ nodeId: string; weight: number; edge: Edge }>
+    >();
 
     for (const node of nodes) {
       if (!graph.has(node.id)) {

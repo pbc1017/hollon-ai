@@ -187,7 +187,10 @@ export class GraphTraversal {
     const neighbors: Node[] = [];
     const addedIds = new Set<string>();
 
-    if ((direction === 'out' || direction === 'both') && graph.has(`out:${nodeId}`)) {
+    if (
+      (direction === 'out' || direction === 'both') &&
+      graph.has(`out:${nodeId}`)
+    ) {
       const outgoing = graph.get(`out:${nodeId}`) || [];
       for (const { targetId } of outgoing) {
         if (!addedIds.has(targetId)) {
@@ -200,7 +203,10 @@ export class GraphTraversal {
       }
     }
 
-    if ((direction === 'in' || direction === 'both') && graph.has(`in:${nodeId}`)) {
+    if (
+      (direction === 'in' || direction === 'both') &&
+      graph.has(`in:${nodeId}`)
+    ) {
       const incoming = graph.get(`in:${nodeId}`) || [];
       for (const { targetId } of incoming) {
         if (!addedIds.has(targetId)) {
@@ -225,7 +231,10 @@ export class GraphTraversal {
     edges: Edge[],
     options: TraversalOptions,
   ): Map<string, Array<{ targetId: string; edgeType: RelationshipType }>> {
-    const graph = new Map<string, Array<{ targetId: string; edgeType: RelationshipType }>>();
+    const graph = new Map<
+      string,
+      Array<{ targetId: string; edgeType: RelationshipType }>
+    >();
 
     for (const edge of edges) {
       if (!edge.isActive) {
@@ -266,7 +275,10 @@ export class GraphTraversal {
    *
    * @private
    */
-  private static matchesNodeTypeFilter(node: Node, options: TraversalOptions): boolean {
+  private static matchesNodeTypeFilter(
+    node: Node,
+    options: TraversalOptions,
+  ): boolean {
     if (!options.nodeTypes || options.nodeTypes.length === 0) {
       return true;
     }
@@ -320,7 +332,12 @@ export class GraphTraversal {
       const nextLevel: string[] = [];
 
       for (const nodeId of currentLevel) {
-        const neighbors = this.getDirectNeighbors(nodeId, graph, direction, nodeMap);
+        const neighbors = this.getDirectNeighbors(
+          nodeId,
+          graph,
+          direction,
+          nodeMap,
+        );
 
         for (const neighbor of neighbors) {
           if (!visited.has(neighbor.id)) {
@@ -396,7 +413,10 @@ export class GraphTraversal {
       }
     }
 
-    if ((direction === 'in' || direction === 'both') && graph.has(`in:${nodeId}`)) {
+    if (
+      (direction === 'in' || direction === 'both') &&
+      graph.has(`in:${nodeId}`)
+    ) {
       const incoming = graph.get(`in:${nodeId}`) || [];
       for (const id of incoming) {
         neighborIds.add(id);
