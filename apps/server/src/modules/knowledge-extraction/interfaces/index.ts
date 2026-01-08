@@ -6,3 +6,5 @@
 
 export * from './extraction-types.interface';
 export * from './service-types.interface';
+export * from './knowledge-extraction-repository.interface';
+export * from './vector-search-repository.interface';

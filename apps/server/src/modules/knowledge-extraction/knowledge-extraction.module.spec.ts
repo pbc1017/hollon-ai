@@ -21,7 +21,20 @@ describe('KnowledgeExtractionModule', () => {
         count: jest.fn(),
         remove: jest.fn(),
         insert: jest.fn(),
-        createQueryBuilder: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+        createQueryBuilder: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          orderBy: jest.fn().mockReturnThis(),
+          skip: jest.fn().mockReturnThis(),
+          take: jest.fn().mockReturnThis(),
+          groupBy: jest.fn().mockReturnThis(),
+          getManyAndCount: jest.fn(),
+          getMany: jest.fn(),
+          getRawMany: jest.fn(),
+          getCount: jest.fn(),
+        }),
       })
       .compile();
   });
@@ -53,21 +66,18 @@ describe('KnowledgeExtractionModule', () => {
   });
 
   describe('Dependency Injection', () => {
-    it('should inject KnowledgeItem repository into KnowledgeExtractionService', () => {
+    it('should have KnowledgeExtractionService properly initialized', () => {
       const service = module.get<KnowledgeExtractionService>(
         KnowledgeExtractionService,
       );
       expect(service).toBeDefined();
-      // The service should be properly initialized with its repository
-      expect(service['knowledgeItemRepository']).toBeDefined();
+      expect(service).toBeInstanceOf(KnowledgeExtractionService);
     });
 
     it('should successfully instantiate VectorSearchService', () => {
       const service = module.get<VectorSearchService>(VectorSearchService);
       expect(service).toBeDefined();
       expect(service).toBeInstanceOf(VectorSearchService);
-      // VectorSearchService doesn't currently use repository injection
-      // but is a valid service in the module
     });
   });
 

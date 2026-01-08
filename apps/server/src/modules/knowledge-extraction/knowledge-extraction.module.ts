@@ -4,111 +4,7 @@ import { KnowledgeItem } from './entities/knowledge-item.entity';
 import { KnowledgeExtractionService } from './services/knowledge-extraction.service';
 import { VectorSearchService } from './services/vector-search.service';
 
-/**
- * KnowledgeExtractionModule
- *
- * This module provides knowledge extraction and storage capabilities for the Hollon-AI system.
- * It manages the lifecycle of knowledge items extracted from various sources including
- * conversations, documents, and agent interactions.
- *
- * ## Module Architecture
- *
- * ### Entities
- * - **KnowledgeItem**: Core entity storing extracted knowledge with metadata, content, and
- *   temporal information. Includes multi-tenant organization scoping.
- *
- * ### Services
- * - **KnowledgeExtractionService**: Primary service for CRUD operations, search, and analytics
- *   on knowledge items. Provides comprehensive querying capabilities including:
- *   - Organization-scoped retrieval
- *   - Type-based filtering
- *   - Date range queries
- *   - Content search
- *   - Pagination and batch operations
- *   - Temporal distribution analysis
- *   - Metadata-based queries
- *
- * - **VectorSearchService**: Service for semantic search using vector embeddings. Currently
- *   a placeholder for future integration with pgvector-based similarity search.
- *
- * ### Exports
- * Both services are exported for use by other modules including:
- * - **PromptComposerModule**: For retrieving relevant context
- * - **OrchestrationModule**: For knowledge-driven decision making
- * - **MessageModule**: For storing conversation knowledge
- * - **DocumentModule**: For document knowledge extraction
- *
- * ## Dependency Injection Strategy
- *
- * ### Repository Pattern
- * The module uses TypeORM's Repository pattern for data access:
- * - KnowledgeItem repository is injected via `@InjectRepository` decorator
- * - Automatic repository creation through `TypeOrmModule.forFeature()`
- * - Type-safe database operations with TypeORM query builder
- *
- * ### Service Lifecycle
- * - Services are provided at module scope with singleton lifecycle
- * - No circular dependencies between services
- * - Repository injection handled by TypeORM's dependency injection
- *
- * ## Module Boundaries
- *
- * ### Responsibilities
- * - ✅ Storage and retrieval of knowledge items
- * - ✅ Search and filtering capabilities
- * - ✅ Analytics and temporal analysis
- * - ✅ Batch operations for high-volume scenarios
- * - 🔄 Vector embedding storage (planned)
- * - 🔄 Semantic similarity search (planned)
- *
- * ### External Dependencies
- * - **TypeORM**: Database access and entity management
- * - **Organization Entity**: Multi-tenant relationship (via cascade delete)
- *
- * ### Integration Points
- * This module is designed to integrate with:
- * - **KnowledgeGraphModule**: For entity relationship mapping (future)
- * - **VectorSearchModule**: For enhanced semantic search (future)
- * - **BrainProviderModule**: For AI-driven knowledge extraction (future)
- * - **NLP Services**: For entity recognition and sentiment analysis (future)
- *
- * ## Configuration
- *
- * ### Database Schema
- * The module manages the `knowledge_items` table with:
- * - UUID primary keys
- * - Organization-based multi-tenancy
- * - JSONB metadata storage
- * - Temporal indexing for performance
- * - Full-text search capabilities (planned)
- *
- * ### Indexes
- * Optimized indexes on:
- * - `organization_id`: For tenant scoping
- * - `type`: For knowledge classification
- * - `extracted_at`: For temporal queries
- * - Future: Full-text search on `content`
- * - Future: GIN index on `metadata` JSONB
- *
- * ## Performance Considerations
- *
- * - Query optimization through strategic index usage
- * - Batch insert operations for bulk processing
- * - Connection pooling via TypeORM
- * - Pagination support for large result sets
- * - Efficient date range queries with timestamp indexes
- *
- * ## Testing Strategy
- *
- * - Unit tests with mocked repositories
- * - Integration tests with test database
- * - Module compilation tests for dependency validation
- * - Export verification for consuming modules
- *
- * @see KnowledgeExtractionService - Core business logic
- * @see VectorSearchService - Semantic search capabilities
- * @see KnowledgeItem - Entity definition
- */
+/**\n * KnowledgeExtractionModule\n *\n * Core module for knowledge extraction, storage, and retrieval within the Hollon-AI system.\n * Manages the complete lifecycle of knowledge items extracted from conversations, documents,\n * tasks, and agent interactions. Designed for high-volume, multi-tenant operation with\n * comprehensive querying and analytics capabilities.\n *\n * ## Module Architecture\n *\n * The module follows a layered architecture with clear separation of concerns:\n *\n * ```\n * ┌─────────────────────────────────────────────────────────────┐\n * │                    Public API Layer                          │\n * │         (Services exported to other modules)                │\n * ├─────────────────────────────────────────────────────────────┤\n * │  KnowledgeExtractionService | VectorSearchService           │\n * ├─────────────────────────────────────────────────────────────┤\n * │                    Data Access Layer                         │\n * │         (Custom repositories for database ops)              │\n * ├─────────────────────────────────────────────────────────────┤\n * │  KnowledgeExtractionRepository                              │\n * ├─────────────────────────────────────────────────────────────┤\n * │                    Persistence Layer                         │\n * │          (TypeORM entities and database)                    │\n * ├─────────────────────────────────────────────────────────────┤\n * │  KnowledgeItem Entity | PostgreSQL Database                 │\n * └─────────────────────────────────────────────────────────────┘\n * ```\n *\n * ### Layer Responsibilities\n *\n * **Persistence Layer**\n * - `KnowledgeItem`: TypeORM entity defining knowledge items structure\n * - Database indexes for performance optimization\n * - Organization-based multi-tenancy via foreign key\n *\n * **Data Access Layer**\n * - `KnowledgeExtractionRepository`: Custom repository extending TypeORM Repository\n * - Implements `IKnowledgeExtractionRepository` interface for type safety\n * - Encapsulates all query logic with optimized QueryBuilder usage\n * - Provides 20+ query methods covering common and advanced use cases\n *\n * **Public API Layer**\n * - `KnowledgeExtractionService`: Main service for CRUD and search operations\n *   - Uses repository for data access (dependency injection)\n *   - Provides business logic and validation\n *   - Comprehensive querying with pagination and filtering\n *   - Analytics and temporal analysis capabilities\n *   - Document parsing and preprocessing (stub methods)\n *\n * - `VectorSearchService`: Semantic search using embeddings (placeholder for Phase 3+)\n *   - Future: Vector indexing and similarity search\n *   - Future: Hybrid search combining keyword and semantic\n *   - Future: Batch indexing operations\n *\n * ## Module Components\n *\n * ### Entities\n * - **KnowledgeItem**: Stores extracted knowledge with:\n *   - UUID primary key for distributed systems\n *   - `organizationId`: Tenant scoping for multi-tenancy\n *   - `type`: Knowledge classification (conversation, document, insight, task, etc.)\n *   - `content`: Main text content (indexed for search)\n *   - `metadata`: Flexible JSONB for type-specific data\n *   - `extractedAt`: Timestamp of extraction (indexed for temporal queries)\n *   - Standard audit fields: `createdAt`, `updatedAt`\n *   - Cascade delete relationship with Organization\n *\n * ### Services\n * - **KnowledgeExtractionService**:\n *   - 40+ methods covering:\n *     - Basic CRUD: create, findById, update, delete\n *     - Organization-scoped queries: findByOrganization, deleteByOrganization\n *     - Type-based filtering: findByType, findByTypes, countByType\n *     - Date range queries: findByDateRange, findExtractedAfter/Before\n *     - Content search: searchByContent with pagination\n *     - Advanced filtering: searchWithFilters combining multiple criteria\n *     - Metadata queries: findByMetadata using JSONB operators\n *     - Analytics: getTemporalDistribution, countWithFilters\n *     - Batch operations: batchInsert, bulk operations\n *   - Planned enhancements (Phase 3-5):\n *     - NLP-based extraction (entities, relationships, sentiment)\n *     - Vector embeddings and semantic search\n *     - Knowledge graph integration\n *     - Hybrid search and clustering\n *\n * - **VectorSearchService** (placeholder):\n *   - Stub methods for future implementation:\n *     - searchSimilar, generateEmbedding\n *     - indexItem, removeFromIndex, updateIndex\n *   - Will integrate with pgvector extension\n *   - Supports batch indexing and similarity search\n *\n * ## Module Boundaries & Exports\n *\n * ### Exports\n * - `KnowledgeExtractionRepository`: Advanced data access for specialized use cases\n * - `KnowledgeExtractionService`: Primary API for most consumers\n * - `VectorSearchService`: Semantic search API (future phases)\n *\n * ### Consuming Modules\n * - **PromptComposerModule**: Retrieves relevant context for prompt generation\n * - **OrchestrationModule**: Knowledge-driven decision making for agent orchestration\n * - **MessageModule**: Stores and retrieves conversation knowledge\n * - **DocumentModule**: Extracts and indexes document knowledge\n * - **TaskModule**: Associates knowledge with task execution\n * - **BrainProviderModule**: Provides knowledge for agent cognition and reasoning\n *\n * ## Dependency Injection Configuration\n *\n * ### TypeORM Integration\n * - `TypeOrmModule.forFeature([KnowledgeItem])` registers the entity\n * - NestJS automatically creates repositories via dependency injection\n * - Custom repository extends TypeORM Repository class\n * - DataSource injected for entity manager access\n *\n * ### Service Scoping\n * - All providers use singleton scope (module-level instances)\n * - No request-scoped dependencies (stateless design)\n * - Ideal for high-volume, concurrent access patterns\n * - No circular dependencies\n *\n * ## Performance Optimization\n *\n * ### Database Indexes\n * Strategic indexes for query optimization:\n * - `organizationId`: Tenant scoping (composite with other fields for common queries)\n * - `type`: Knowledge classification filtering\n * - `extractedAt`: Temporal queries and sorting\n * - Future: Full-text search index on `content`\n * - Future: GIN index on `metadata` JSONB for complex queries\n *\n * ### Query Optimization\n * - QueryBuilder for complex queries with proper WHERE/AND clauses\n * - Pagination with limit/offset for large result sets\n * - Batch operations using INSERT with multiple VALUES\n * - Efficient aggregation using GROUP BY for analytics\n * - Index hints for date range scans\n *\n * ### Connection Management\n * - Leverages TypeORM connection pooling\n * - Reuses connections across requests\n * - Automatic timeout and retry handling\n * - Connection per request pattern for isolation\n *\n * ## Error Handling & Validation\n *\n * ### Current Implementation\n * - Type safety via TypeScript strict mode\n * - Entity relationships validated by database constraints\n * - Null checks for optional fields (metadata, descriptions)\n * - Exception handling in services for not-found cases\n *\n * ### Planned Enhancements\n * - Input validation using class-validator DTOs\n * - Business logic exceptions for domain errors\n * - Detailed error logging and tracing\n * - Custom exception filters for API responses\n *\n * ## Testing Strategy\n *\n * ### Unit Testing\n * - Mock repositories for isolated service testing\n * - Service method contract verification\n * - Edge case handling (empty arrays, null values, date boundaries)\n *\n * ### Integration Testing\n * - Real database with test data\n * - End-to-end query testing\n * - Transaction rollback for test isolation\n * - Performance testing with realistic data volumes\n *\n * ### Module Testing\n * - Dependency resolution verification\n * - Export validation for consuming modules\n * - Circular dependency detection\n * - Provider compilation and injection\n *\n * ## Future Enhancement Roadmap\n *\n * **Phase 1 (Current)**: Basic storage and retrieval\n * - ✅ CRUD operations\n * - ✅ Pagination and filtering\n * - ✅ Batch operations\n * - ✅ Temporal queries\n *\n * **Phase 2**: Full-text search enhancement\n * - PostgreSQL tsvector for efficient text search\n * - Stemming and lemmatization\n * - Stop word filtering\n * - Phrase and boolean query support\n *\n * **Phase 3**: Vector embeddings and semantic search\n * - Embedding generation (OpenAI, local models)\n * - pgvector extension for similarity search\n * - Batch embedding generation\n * - Similarity threshold configuration\n *\n * **Phase 4**: Knowledge graph integration\n * - Automatic entity extraction\n * - Relationship discovery\n * - Graph traversal for related items\n * - Entity linking\n *\n * **Phase 5**: Advanced NLP and analytics\n * - NLP-based entity and relationship extraction\n * - Sentiment analysis\n * - Key phrase extraction\n * - Topic modeling and clustering\n * - Automatic summarization\n * - Multi-language support\n *\n * **Phase 6**: Real-time features\n * - Incremental knowledge updates\n * - Knowledge streaming pipelines\n * - Cache invalidation strategies\n * - Event-driven indexing\n *\n * ## Configuration Reference\n *\n * ### Database Requirements\n * - PostgreSQL 12+ (for JSONB and advanced features)\n * - UUID support enabled\n * - TypeORM with async/await support\n *\n * ### Environment Variables (Planned)\n * - `KNOWLEDGE_EXTRACTION_BATCH_SIZE`: Default batch size (default: 100)\n * - `KNOWLEDGE_EXTRACTION_MAX_SEARCH_RESULTS`: Search limit (default: 1000)\n * - `VECTOR_EMBEDDING_MODEL`: Model for embeddings (future)\n * - `VECTOR_SEARCH_THRESHOLD`: Default similarity threshold (future)\n *\n * ## Security Considerations\n *\n * ### Multi-Tenancy\n * - Organization-based scoping for all queries\n * - Cascade delete for organization removal\n * - No cross-organization data leakage\n *\n * ### Data Protection\n * - Parameterized queries prevent SQL injection\n * - Input validation planned for future phases\n * - Audit timestamps for compliance\n *\n * ## API Stability\n *\n * - Service methods are stable and tested\n * - Repository interface provides long-term contract\n * - Breaking changes will be documented in CHANGELOG\n * - Deprecated methods will have replacement guidance\n *\n * @see KnowledgeExtractionService - Main service implementation (40+ methods)\n * @see KnowledgeExtractionRepository - Data access layer implementation\n * @see KnowledgeItem - Entity definition and schema\n * @see VectorSearchService - Semantic search placeholder\n * @see IKnowledgeExtractionRepository - Repository interface contract\n * @see IVectorSearchRepository - Vector search interface contract\n */
 @Module({
   imports: [
     // TypeORM entity registration for repository injection
@@ -117,15 +13,18 @@ import { VectorSearchService } from './services/vector-search.service';
   providers: [
     // Core knowledge extraction and storage service
     KnowledgeExtractionService,
+
     // Vector-based semantic search service (future integration)
     VectorSearchService,
   ],
   exports: [
-    // Export services for use by other modules
-    // - PromptComposerModule: Context retrieval
-    // - OrchestrationModule: Knowledge-driven decisions
-    // - MessageModule: Conversation knowledge storage
-    // - DocumentModule: Document knowledge extraction
+    // Export services for use by other modules:
+    // - PromptComposerModule: Context retrieval via KnowledgeExtractionService
+    // - OrchestrationModule: Knowledge-driven decision making
+    // - MessageModule: Conversation knowledge storage and retrieval
+    // - DocumentModule: Document knowledge extraction and indexing
+    // - TaskModule: Task-related knowledge and context
+    // - BrainProviderModule: Knowledge for agent cognition
     KnowledgeExtractionService,
     VectorSearchService,
   ],
