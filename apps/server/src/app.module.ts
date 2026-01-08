@@ -26,6 +26,7 @@ import { ConflictResolutionModule } from './modules/conflict-resolution/conflict
 import { GoalModule } from './modules/goal/goal.module';
 import { DddProvidersModule } from './modules/ddd-providers/ddd-providers.module';
 import { KnowledgeGraphModule } from './modules/knowledge-graph/knowledge-graph.module';
+import { KnowledgeExtractionModule } from './modules/knowledge-extraction/knowledge-extraction.module';
 import { PromptComposerModule } from './modules/prompt-composer/prompt-composer.module';
 
 @Module({
@@ -72,6 +73,7 @@ import { PromptComposerModule } from './modules/prompt-composer/prompt-composer.
     ConflictResolutionModule,
     GoalModule,
     KnowledgeGraphModule,
+    KnowledgeExtractionModule,
     PromptComposerModule,
 
     // ✅ DDD: Global Port Providers Module
