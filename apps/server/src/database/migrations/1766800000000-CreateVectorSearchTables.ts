@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateVectorSearchTables1766800000000
-  implements MigrationInterface
-{
+export class CreateVectorSearchTables1766800000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     /**
      * Create vector_search_configs table
@@ -164,7 +162,7 @@ export class CreateVectorSearchTables1766800000000
      * Uncomment when dataset reaches significant size (>10,000 vectors).
      */
     // await queryRunner.query(`
-    //   CREATE INDEX "IDX_vector_embeddings_hnsw" ON "vector_embeddings" 
+    //   CREATE INDEX "IDX_vector_embeddings_hnsw" ON "vector_embeddings"
     //   USING hnsw (embedding vector_cosine_ops)
     //   WITH (m = 16, ef_construction = 64)
     // `);
