@@ -84,9 +84,16 @@ export class EmbeddingDto {
   @IsNumber({}, { each: true })
   @ArrayMinSize(1024)
   @ArrayMaxSize(3072)
-  @IsValidEmbedding({ message: 'Embedding must contain only finite numbers (no NaN or Infinity)' })
-  @MatchesDimensions({ message: 'Embedding array length must match the dimensions field' })
-  @IsNormalizedEmbedding({ message: 'Embedding values should be normalized between -1 and 1 for optimal similarity search' })
+  @IsValidEmbedding({
+    message: 'Embedding must contain only finite numbers (no NaN or Infinity)',
+  })
+  @MatchesDimensions({
+    message: 'Embedding array length must match the dimensions field',
+  })
+  @IsNormalizedEmbedding({
+    message:
+      'Embedding values should be normalized between -1 and 1 for optimal similarity search',
+  })
   embedding: number[];
 
   /**

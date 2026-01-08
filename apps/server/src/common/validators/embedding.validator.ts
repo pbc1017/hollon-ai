@@ -10,9 +10,7 @@ import {
  * Validator constraint to ensure embedding dimensions match array length
  */
 @ValidatorConstraint({ name: 'matchesDimensions', async: false })
-export class MatchesDimensionsConstraint
-  implements ValidatorConstraintInterface
-{
+export class MatchesDimensionsConstraint implements ValidatorConstraintInterface {
   validate(embedding: number[], args: ValidationArguments): boolean {
     const object = args.object as Record<string, unknown>;
     const dimensions = object.dimensions;
@@ -41,9 +39,7 @@ export class MatchesDimensionsConstraint
  * Validator constraint to ensure all embedding values are valid numbers (no NaN, no Infinity)
  */
 @ValidatorConstraint({ name: 'isValidEmbedding', async: false })
-export class IsValidEmbeddingConstraint
-  implements ValidatorConstraintInterface
-{
+export class IsValidEmbeddingConstraint implements ValidatorConstraintInterface {
   validate(embedding: unknown[]): boolean {
     if (!embedding || !Array.isArray(embedding)) {
       return false;
@@ -72,9 +68,7 @@ export class IsValidEmbeddingConstraint
  * Validator constraint to ensure embedding values are normalized (between -1 and 1)
  */
 @ValidatorConstraint({ name: 'isNormalizedEmbedding', async: false })
-export class IsNormalizedEmbeddingConstraint
-  implements ValidatorConstraintInterface
-{
+export class IsNormalizedEmbeddingConstraint implements ValidatorConstraintInterface {
   validate(embedding: unknown[]): boolean {
     if (!embedding || !Array.isArray(embedding)) {
       return false;

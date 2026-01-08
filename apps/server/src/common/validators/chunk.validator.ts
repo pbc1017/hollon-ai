@@ -10,9 +10,7 @@ import {
  * Validator constraint to ensure chunkIndex is less than totalChunks
  */
 @ValidatorConstraint({ name: 'isValidChunkIndex', async: false })
-export class IsValidChunkIndexConstraint
-  implements ValidatorConstraintInterface
-{
+export class IsValidChunkIndexConstraint implements ValidatorConstraintInterface {
   validate(chunkIndex: number, args: ValidationArguments): boolean {
     const object = args.object as Record<string, unknown>;
     const totalChunks = object.totalChunks;
