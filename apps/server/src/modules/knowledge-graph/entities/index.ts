@@ -1,2 +1,2 @@
-export * from './graph-node.entity';
-export * from './graph-edge.entity';
+export * from './node.entity';
+export * from './edge.entity';
