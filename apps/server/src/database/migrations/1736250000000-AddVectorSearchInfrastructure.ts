@@ -27,9 +27,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * @see VectorEmbedding entity for embedding schema
  * @see VectorSearchService for usage examples
  */
-export class AddVectorSearchInfrastructure1736250000000
-  implements MigrationInterface
-{
+export class AddVectorSearchInfrastructure1736250000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // =========================================================================
     // Step 1: Create Enum Types
