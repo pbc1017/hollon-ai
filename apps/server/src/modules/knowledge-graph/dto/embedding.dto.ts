@@ -14,12 +14,20 @@ import {
   IsObject,
   ValidateNested,
   MaxLength,
+  IsISO8601,
+  IsUrl,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
   EmbeddingSourceType,
   EmbeddingModelType,
 } from '../../../entities/vector-embedding.entity';
+import {
+  MatchesDimensions,
+  IsValidEmbedding,
+  IsNormalizedEmbedding,
+  IsValidChunkIndex,
+} from '../../../common/validators';
 
 /**
  * DTO for creating and managing vector embeddings
@@ -76,6 +84,9 @@ export class EmbeddingDto {
   @IsNumber({}, { each: true })
   @ArrayMinSize(1024)
   @ArrayMaxSize(3072)
+  @IsValidEmbedding({ message: 'Embedding must contain only finite numbers (no NaN or Infinity)' })
+  @MatchesDimensions({ message: 'Embedding array length must match the dimensions field' })
+  @IsNormalizedEmbedding({ message: 'Embedding values should be normalized between -1 and 1 for optimal similarity search' })
   embedding: number[];
 
   /**
@@ -378,7 +389,7 @@ export class EmbeddingMetadataDto {
    * "2024-01-07T12:00:00Z"
    */
   @IsOptional()
-  @IsString()
+  @IsISO8601()
   processingTimestamp?: string;
 
   /**
@@ -394,6 +405,7 @@ export class EmbeddingMetadataDto {
   @IsOptional()
   @IsInt()
   @Min(0)
+  @IsValidChunkIndex({ message: 'chunkIndex must be less than totalChunks' })
   chunkIndex?: number;
 
   /**
@@ -436,7 +448,7 @@ export class EmbeddingMetadataDto {
    * "https://docs.example.com/page.html"
    */
   @IsOptional()
-  @IsString()
+  @IsUrl()
   sourceUrl?: string;
 
   /**
