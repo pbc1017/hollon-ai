@@ -1,51 +1,51 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { GraphNode } from './entities/graph-node.entity';
-import { GraphEdge } from './entities/graph-edge.entity';
+import { Node } from './entities/node.entity';
+import { Edge } from './entities/edge.entity';
 
 @Injectable()
 export class KnowledgeGraphService {
   constructor(
-    @InjectRepository(GraphNode)
-    private readonly graphNodeRepository: Repository<GraphNode>,
-    @InjectRepository(GraphEdge)
-    private readonly graphEdgeRepository: Repository<GraphEdge>,
+    @InjectRepository(Node)
+    private readonly nodeRepository: Repository<Node>,
+    @InjectRepository(Edge)
+    private readonly edgeRepository: Repository<Edge>,
   ) {}
 
-  async createNode(nodeData: Partial<GraphNode>): Promise<GraphNode> {
-    const node = this.graphNodeRepository.create(nodeData);
-    return this.graphNodeRepository.save(node);
+  async createNode(nodeData: Partial<Node>): Promise<Node> {
+    const node = this.nodeRepository.create(nodeData);
+    return this.nodeRepository.save(node);
   }
 
-  async createEdge(edgeData: Partial<GraphEdge>): Promise<GraphEdge> {
-    const edge = this.graphEdgeRepository.create(edgeData);
-    return this.graphEdgeRepository.save(edge);
+  async createEdge(edgeData: Partial<Edge>): Promise<Edge> {
+    const edge = this.edgeRepository.create(edgeData);
+    return this.edgeRepository.save(edge);
   }
 
-  async findNodeById(id: string): Promise<GraphNode | null> {
-    return this.graphNodeRepository.findOne({ where: { id } });
+  async findNodeById(id: string): Promise<Node | null> {
+    return this.nodeRepository.findOne({ where: { id } });
   }
 
-  async findNodesByOrganization(organizationId: string): Promise<GraphNode[]> {
-    return this.graphNodeRepository.find({
+  async findNodesByOrganization(organizationId: string): Promise<Node[]> {
+    return this.nodeRepository.find({
       where: { organizationId },
       order: { createdAt: 'DESC' },
     });
   }
 
-  async findEdgesByNode(nodeId: string): Promise<GraphEdge[]> {
-    return this.graphEdgeRepository.find({
+  async findEdgesByNode(nodeId: string): Promise<Edge[]> {
+    return this.edgeRepository.find({
       where: [{ sourceNodeId: nodeId }, { targetNodeId: nodeId }],
       relations: ['sourceNode', 'targetNode'],
     });
   }
 
   async deleteNode(id: string): Promise<void> {
-    await this.graphNodeRepository.delete(id);
+    await this.nodeRepository.delete(id);
   }
 
   async deleteEdge(id: string): Promise<void> {
-    await this.graphEdgeRepository.delete(id);
+    await this.edgeRepository.delete(id);
   }
 }
