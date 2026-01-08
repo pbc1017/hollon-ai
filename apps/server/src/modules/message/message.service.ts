@@ -29,7 +29,7 @@ export class MessageService {
     // Validate and sanitize inputs
     const sanitizedContent = this.sanitizeContent(dto.content);
     const validatedMetadata = this.validateMetadata(dto.metadata);
-    
+
     // Validate UUIDs
     this.validateOptionalUUID(dto.fromId, 'fromId');
     this.validateUUID(dto.toId, 'toId');
@@ -370,9 +370,7 @@ export class MessageService {
     const uuidRegex =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(id)) {
-      throw new BadRequestException(
-        `${fieldName} must be a valid UUID format`,
-      );
+      throw new BadRequestException(`${fieldName} must be a valid UUID format`);
     }
   }
 
@@ -500,9 +498,7 @@ export class MessageService {
     }
 
     if (!participant.type) {
-      throw new BadRequestException(
-        `${participantName} type is required`,
-      );
+      throw new BadRequestException(`${participantName} type is required`);
     }
 
     if (!participant.id) {
