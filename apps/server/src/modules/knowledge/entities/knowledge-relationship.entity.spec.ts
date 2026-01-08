@@ -404,7 +404,9 @@ describe('KnowledgeRelationship Entity', () => {
       relationship.source = sourceKnowledge;
 
       expect(relationship.source).toBe(sourceKnowledge);
-      expect(relationship.source.id).toBe('123e4567-e89b-12d3-a456-426614174005');
+      expect(relationship.source.id).toBe(
+        '123e4567-e89b-12d3-a456-426614174005',
+      );
     });
 
     it('should have source as Knowledge instance', () => {
@@ -423,7 +425,9 @@ describe('KnowledgeRelationship Entity', () => {
       relationship.target = targetKnowledge;
 
       expect(relationship.target).toBe(targetKnowledge);
-      expect(relationship.target.id).toBe('123e4567-e89b-12d3-a456-426614174006');
+      expect(relationship.target.id).toBe(
+        '123e4567-e89b-12d3-a456-426614174006',
+      );
     });
 
     it('should have target as Knowledge instance', () => {
