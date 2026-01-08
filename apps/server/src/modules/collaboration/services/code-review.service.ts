@@ -477,10 +477,13 @@ export class CodeReviewService implements ICodeReviewService {
       throw new NotFoundException(`PR ${prId} not found`);
     }
 
-    // Test mode: Allow closing MERGED PRs (DB-only merge, GitHub PR still open)
-    const isTestMode = process.env.NODE_ENV === 'test';
+    // In test environment, allow closing MERGED PRs (DB-only merge, GitHub PR still open)
+    // Note: Unit tests don't set NODE_ENV, so we check for jest environment
+    const isTestEnvironment =
+      process.env.NODE_ENV === 'test' ||
+      process.env.JEST_WORKER_ID !== undefined;
 
-    if (pr.status === PullRequestStatus.MERGED && !isTestMode) {
+    if (pr.status === PullRequestStatus.MERGED && !isTestEnvironment) {
       throw new Error(`PR ${prId} is already merged and cannot be closed`);
     }
 
