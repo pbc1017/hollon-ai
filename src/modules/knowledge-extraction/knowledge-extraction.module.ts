@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { KnowledgeItem } from './entities/knowledge-item.entity';
 import { KnowledgeExtractionService } from './knowledge-extraction.service';
 
 /**
@@ -72,18 +74,40 @@ import { KnowledgeExtractionService } from './knowledge-extraction.service';
  * @see KnowledgeExtractionService - Core extraction logic
  */
 @Module({
+  imports: [
+    // Register KnowledgeItem entity for repository injection
+    // This enables the KnowledgeExtractionService to use TypeORM Repository<KnowledgeItem>
+    // for database operations (CRUD, queries, transactions)
+    TypeOrmModule.forFeature([KnowledgeItem]),
+  ],
   providers: [
     // Core knowledge extraction service
+    // - Handles extraction of knowledge entities from various sources
+    // - Manages persistence of extracted knowledge via KnowledgeItem repository
+    // - Provides validation and normalization of extracted data
+    // - Lifecycle: Singleton (shared across application)
     KnowledgeExtractionService,
+
+    // Future services will be added here as the module grows:
+    // - EntityRecognitionService: NLP-based entity recognition
+    // - RelationshipExtractionService: Extract relationships between entities
+    // - MetadataEnrichmentService: Enhance extracted data with metadata
+    // - VectorEmbeddingService: Generate embeddings for semantic search
+    // - KnowledgeValidationService: Validate and score extracted knowledge
   ],
   exports: [
     // Export service for use by other modules
-    // - PromptComposerModule: Knowledge-driven composition
-    // - OrchestrationModule: Knowledge-driven decisions
-    // - MessageModule: Conversation knowledge storage
-    // - DocumentModule: Document knowledge extraction
-    // - KnowledgeGraphModule: Entity storage and retrieval
+    // - PromptComposerModule: Knowledge-driven prompt composition
+    // - OrchestrationModule: Knowledge-driven orchestration decisions
+    // - MessageModule: Conversation knowledge storage and retrieval
+    // - DocumentModule: Document knowledge extraction and indexing
+    // - KnowledgeGraphModule: Entity storage and graph construction
     KnowledgeExtractionService,
+
+    // Future exports (when services are implemented):
+    // - EntityRecognitionService
+    // - RelationshipExtractionService
+    // - MetadataEnrichmentService
   ],
 })
 export class KnowledgeExtractionModule {}

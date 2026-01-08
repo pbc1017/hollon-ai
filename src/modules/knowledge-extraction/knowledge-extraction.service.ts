@@ -1,4 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { KnowledgeItem } from './entities/knowledge-item.entity';
 
 /**
  * KnowledgeExtractionService
@@ -13,7 +16,10 @@ export class KnowledgeExtractionService {
    *
    * Initializes the KnowledgeExtractionService with dependencies.
    */
-  constructor() {}
+  constructor(
+    @InjectRepository(KnowledgeItem)
+    private readonly knowledgeItemRepository: Repository<KnowledgeItem>,
+  ) {}
 
   // Extraction Operations
 
