@@ -2,41 +2,43 @@ import {
   IsString,
   IsOptional,
   IsObject,
-  IsArray,
-  IsUUID,
-  MaxLength,
   ValidateNested,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class ContextVariable {
+export class PromptContextDto {
+  @IsOptional()
   @IsString()
-  @MaxLength(100)
-  key: string;
+  @MaxLength(5000)
+  systemContext?: string;
 
+  @IsOptional()
   @IsString()
-  value: string;
+  @MaxLength(5000)
+  userInput?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  knowledgeContext?: string;
+
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, any>;
 }
 
 export class ComposePromptDto {
-  @IsUUID()
-  organizationId: string;
+  @ValidateNested()
+  @Type(() => PromptContextDto)
+  context: PromptContextDto;
 
+  @IsOptional()
   @IsString()
   @MaxLength(100)
-  templateName: string;
+  templateName?: string;
 
   @IsOptional()
   @IsObject()
   variables?: Record<string, any>;
-
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ContextVariable)
-  contextVariables?: ContextVariable[];
-
-  @IsOptional()
-  @IsString()
-  additionalContext?: string;
 }

@@ -8,3 +8,6 @@ export * from './dto/update-node.dto';
 export * from './dto/create-edge.dto';
 export * from './dto/update-edge.dto';
 export * from './dto/pagination-query.dto';
+export * from './dto/graph.dto';
+export * from './dto/embedding.dto';
+export * from './interfaces';

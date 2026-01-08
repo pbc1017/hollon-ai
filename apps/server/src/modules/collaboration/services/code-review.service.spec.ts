@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { DataSource } from 'typeorm';
 import { CodeReviewService } from './code-review.service';
 import {
   TaskPullRequest,
@@ -30,6 +32,7 @@ describe('CodeReviewService', () => {
   const mockTaskRepository = {
     findOne: jest.fn(),
     save: jest.fn(),
+    update: jest.fn(),
     createQueryBuilder: jest.fn(() => ({
       innerJoin: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -122,14 +125,35 @@ describe('CodeReviewService', () => {
           useValue: mockMessageService,
         },
         {
+          provide: ModuleRef,
+          useValue: {
+            get: jest.fn(),
+          },
+        },
+        {
           provide: BrainProviderService,
           useValue: {
-            analyzeTask: jest.fn(),
-            generateCode: jest.fn(),
-            getProvider: jest.fn(),
-            getBrainProvider: jest.fn(),
-            executeTask: jest.fn(),
-            resolveConflicts: jest.fn(),
+            generate: jest.fn(),
+            chat: jest.fn(),
+            executeWithTracking: jest.fn(),
+          },
+        },
+        {
+          provide: DataSource,
+          useValue: {
+            transaction: jest.fn((callback) =>
+              callback({
+                getRepository: (entity: any) => {
+                  if (entity === TaskPullRequest) {
+                    return mockPRRepository;
+                  }
+                  if (entity === Task) {
+                    return mockTaskRepository;
+                  }
+                  return {};
+                },
+              }),
+            ),
           },
         },
       ],
@@ -161,10 +185,7 @@ describe('CodeReviewService', () => {
         ...createDto,
         status: PullRequestStatus.DRAFT,
       });
-      mockTaskRepository.save.mockResolvedValue({
-        ...mockTask,
-        status: TaskStatus.IN_REVIEW,
-      });
+      mockTaskRepository.update.mockResolvedValue({});
 
       const result = await service.createPullRequest(createDto);
 
@@ -180,7 +201,8 @@ describe('CodeReviewService', () => {
         authorHollonId: createDto.authorHollonId,
         status: PullRequestStatus.DRAFT,
       });
-      expect(mockTaskRepository.save).toHaveBeenCalledWith(
+      expect(mockTaskRepository.update).toHaveBeenCalledWith(
+        createDto.taskId,
         expect.objectContaining({
           status: TaskStatus.IN_REVIEW,
         }),
