@@ -135,12 +135,12 @@ describe('CodeReviewService', () => {
           useValue: {
             generate: jest.fn(),
             chat: jest.fn(),
+            executeWithTracking: jest.fn(),
           },
         },
         {
           provide: DataSource,
           useValue: {
-            createQueryRunner: jest.fn(),
             transaction: jest.fn((callback) =>
               callback({
                 getRepository: (entity: any) => {
@@ -185,10 +185,7 @@ describe('CodeReviewService', () => {
         ...createDto,
         status: PullRequestStatus.DRAFT,
       });
-      mockTaskRepository.save.mockResolvedValue({
-        ...mockTask,
-        status: TaskStatus.IN_REVIEW,
-      });
+      mockTaskRepository.update.mockResolvedValue({});
 
       const result = await service.createPullRequest(createDto);
 
@@ -204,9 +201,12 @@ describe('CodeReviewService', () => {
         authorHollonId: createDto.authorHollonId,
         status: PullRequestStatus.DRAFT,
       });
-      expect(mockTaskRepository.update).toHaveBeenCalledWith(createDto.taskId, {
-        status: TaskStatus.IN_REVIEW,
-      });
+      expect(mockTaskRepository.update).toHaveBeenCalledWith(
+        createDto.taskId,
+        expect.objectContaining({
+          status: TaskStatus.IN_REVIEW,
+        }),
+      );
       expect(result.id).toBe('new-pr-id');
       expect(result.status).toBe(PullRequestStatus.DRAFT);
     });
