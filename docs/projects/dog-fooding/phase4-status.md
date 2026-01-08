@@ -29,6 +29,8 @@
 | 0c5412b | #27.4 | Merge-time conflict detection + manager re-review on success (second timing point)                  |
 | cba3454 | #28   | Handle uncommitted changes before rebase in conflict resolution (stash/pop workflow)                |
 | TBD     | #29   | Transaction for PR record + task status update, Orphaned PR sync cron (5분 주기)                    |
+| TBD     | #37   | Call requestReview() when CI passes to update PR status from 'draft' to 'ready_for_review'          |
+| TBD     | #38   | Disable detectStuckTasks cron - was blocking tasks with PRs waiting for CI/review (40+ affected)    |
 
 ---
 
@@ -83,7 +85,33 @@
 
 ---
 
-## Current Status (2026-01-07 13:40 KST)
+## Current Status (2026-01-08 17:20 KST)
+
+| Metric                 | Count |
+| ---------------------- | ----- |
+| Open PRs               | 34    |
+| Tasks completed        | 199   |
+| Tasks in_progress      | 211   |
+| Tasks ready_for_review | 8     |
+| Tasks in_review        | 3     |
+| Tasks blocked          | 309   |
+
+### Fix #38 적용 결과
+
+**문제**: `detectStuckTasks` cron이 2시간 이상 IN_PROGRESS인 task를 BLOCKED로 변경
+
+- PR 생성 후 CI/리뷰 대기 중인 task도 blocked됨
+- 40+ tasks가 잘못 blocked되어 워크플로우 중단
+
+**해결**:
+
+1. `detectStuckTasks` cron 비활성화
+2. 197개 task 복구 (blocked → in_progress)
+3. CI 통과 PR 8개의 task를 ready_for_review로 수정
+
+---
+
+## Previous Status (2026-01-07 13:40 KST)
 
 | Metric               | Count |
 | -------------------- | ----- |
@@ -1155,6 +1183,83 @@ curl -X PATCH "http://localhost:3001/api/tasks/{task_id}" \
    ```
 
 **상태**: ✅ 수동 해결 완료 + 영구적 수정 구현 완료
+
+---
+
+### Issue #37: PRs Stuck in Draft Status - requestReview Not Called After CI Pass
+
+**발견 시간**: 2026-01-08 KST
+
+**증상**:
+
+- 94개 PR 머지됨, 그러나 45개 PR이 `draft` 상태로 stuck
+- PR이 생성되고 CI가 통과해도 `ready_for_review` 상태로 전환되지 않음
+- autoManagerReview cron이 `ready_for_review` 상태의 PR만 처리하므로 review 진행 불가
+
+**근본 원인**:
+
+1. **Fix #21에서 `_requestCodeReview()` deprecated** (commit e3b9e9c)
+   - 변경 이유: "Review requests now handled by autoCheckPRCI Cron after CI passes"
+   - 그러나 autoCheckPRCI는 `Task.status`만 READY_FOR_REVIEW로 변경
+   - **`PR.status`는 여전히 `draft`로 유지됨**
+
+2. **누락된 로직**:
+   - Task 상태: ✅ `IN_REVIEW` → `READY_FOR_REVIEW` (정상 작동)
+   - PR 상태: ❌ `draft` → `ready_for_review` (호출 안 됨)
+
+**영향받는 코드**:
+
+```typescript
+// goal-automation.listener.ts (Before Fix #37)
+// CI 통과 - READY_FOR_REVIEW로 전환
+task.status = TaskStatus.READY_FOR_REVIEW;
+
+// Fix #24: Set reviewer_hollon_id
+if (task.assignedHollon?.managerId) {
+  task.reviewerHollonId = task.assignedHollon.managerId;
+}
+
+await this.taskRepo.save(task);
+// ❌ codeReviewService.requestReview(pr.id) 호출 없음!
+```
+
+**해결 (Fix #37)**:
+
+```typescript
+// goal-automation.listener.ts (After Fix #37)
+await this.taskRepo.save(task);
+
+// Fix #37: Update PR status from 'draft' to 'ready_for_review' and assign reviewer
+try {
+  await this.codeReviewService.requestReview(pr.id);
+  this.logger.log(
+    `✅ Fix #37: PR #${pr.prNumber} status updated to ready_for_review`,
+  );
+} catch (reviewError) {
+  this.logger.error(
+    `Failed to request review for PR #${pr.prNumber}: ${(reviewError as Error).message}`,
+  );
+}
+```
+
+**변경 파일**:
+
+1. **goal-automation.listener.ts**:
+   - Import 추가: `CodeReviewService`
+   - Constructor에 `codeReviewService` injection 추가
+   - CI 통과 시 `requestReview()` 호출 추가 (2곳)
+
+2. **goal.module.ts**:
+   - `CollaborationModule` import 추가 (forwardRef)
+
+**예상 효과**:
+
+| Metric              | Before | After (예상)      |
+| ------------------- | ------ | ----------------- |
+| draft 상태 PR       | 45     | 0 (자동 전환)     |
+| ready_for_review PR | 3      | 45+ (review 가능) |
+
+**상태**: ✅ 수정 완료 (빌드 성공), 서버 재시작 후 테스트 필요
 
 ---
 

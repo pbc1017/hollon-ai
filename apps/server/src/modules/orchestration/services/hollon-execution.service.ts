@@ -42,8 +42,12 @@ export class HollonExecutionService {
   /**
    * 매 30분마다 Stuck Task 감지 및 처리
    * Phase 3.7: 2시간 이상 IN_PROGRESS 상태인 Task를 BLOCKED로 변경
+   *
+   * Fix #38: Disabled - This was blocking tasks with PRs waiting for CI/review.
+   * Tasks are not "stuck" when waiting for external processes like CI or code review.
+   * The 2-hour timeout caused 40+ tasks to be incorrectly blocked, breaking the workflow.
    */
-  @Cron(CronExpression.EVERY_30_MINUTES)
+  // @Cron(CronExpression.EVERY_30_MINUTES) // Fix #38: Disabled
   async detectStuckTasks(): Promise<void> {
     try {
       this.logger.debug('Checking for stuck tasks...');

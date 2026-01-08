@@ -16,6 +16,7 @@ import { TaskService } from '../../task/task.service';
 import { Hollon } from '../../hollon/entities/hollon.entity';
 import { Team } from '../../team/entities/team.entity';
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
+import { CodeReviewService } from '../../collaboration/services/code-review.service';
 
 const execAsync = promisify(exec);
 
@@ -55,6 +56,7 @@ export class GoalAutomationListener {
     private readonly hollonOrchestratorService: HollonOrchestratorService,
     private readonly taskService: TaskService,
     private readonly brainProvider: BrainProviderService,
+    private readonly codeReviewService: CodeReviewService,
   ) {}
 
   /**
@@ -1124,6 +1126,20 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
 
               await this.taskRepo.save(task);
 
+              // Fix #37: Update PR status from 'draft' to 'ready_for_review' and assign reviewer
+              // This was missing after Fix #21 deprecated _requestCodeReview, causing 45+ PRs to be stuck in draft
+              try {
+                await this.codeReviewService.requestReview(pr.id);
+                this.logger.log(
+                  `✅ Fix #37: PR #${pr.prNumber} status updated to ready_for_review with reviewer assigned`,
+                );
+              } catch (reviewError) {
+                this.logger.error(
+                  `Failed to request review for PR #${pr.prNumber}: ${(reviewError as Error).message}`,
+                );
+                // Continue - task is already READY_FOR_REVIEW, PR status update is non-blocking
+              }
+
               this.logger.log(
                 `Task ${task.id} is now ready for manager review`,
               );
@@ -1147,6 +1163,18 @@ ${currentRetryCount + 1 < maxRetries ? `You have ${maxRetries - currentRetryCoun
               }
 
               await this.taskRepo.save(task);
+
+              // Fix #37: Also update PR status when no CI checks configured
+              try {
+                await this.codeReviewService.requestReview(pr.id);
+                this.logger.log(
+                  `✅ Fix #37: PR #${pr.prNumber} status updated to ready_for_review (no CI)`,
+                );
+              } catch (reviewError) {
+                this.logger.error(
+                  `Failed to request review for PR #${pr.prNumber}: ${(reviewError as Error).message}`,
+                );
+              }
             } else {
               this.logger.error(
                 `Failed to check CI status for PR #${pr.prNumber}: ${err.message}`,

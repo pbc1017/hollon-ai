@@ -17,6 +17,7 @@ import { TaskPullRequest } from '../collaboration/entities/task-pull-request.ent
 import { BrainProviderModule } from '../brain-provider/brain-provider.module';
 import { TaskModule } from '../task/task.module';
 import { OrchestrationModule } from '../orchestration/orchestration.module';
+import { CollaborationModule } from '../collaboration/collaboration.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { OrchestrationModule } from '../orchestration/orchestration.module';
     BrainProviderModule,
     TaskModule,
     forwardRef(() => OrchestrationModule), // For TaskExecutionService
+    forwardRef(() => CollaborationModule), // Fix #37: For CodeReviewService.requestReview()
   ],
   controllers: [GoalController],
   providers: [
