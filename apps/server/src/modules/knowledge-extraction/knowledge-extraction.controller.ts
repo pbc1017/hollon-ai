@@ -111,9 +111,7 @@ export class KnowledgeExtractionController {
 
       // Validate pagination values are numbers
       if (isNaN(parsedPage) || isNaN(parsedLimit)) {
-        throw new BadRequestException(
-          'page and limit must be valid numbers',
-        );
+        throw new BadRequestException('page and limit must be valid numbers');
       }
 
       // Parse optional filters
@@ -208,9 +206,7 @@ export class KnowledgeExtractionController {
       );
 
       if (!result) {
-        throw new NotFoundException(
-          `Knowledge item with ID ${id} not found`,
-        );
+        throw new NotFoundException(`Knowledge item with ID ${id} not found`);
       }
 
       return result;
@@ -248,9 +244,7 @@ export class KnowledgeExtractionController {
       const deleted = await this.knowledgeExtractionService.delete(id);
 
       if (!deleted) {
-        throw new NotFoundException(
-          `Knowledge item with ID ${id} not found`,
-        );
+        throw new NotFoundException(`Knowledge item with ID ${id} not found`);
       }
     } catch (error) {
       if (
