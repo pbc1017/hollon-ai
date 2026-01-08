@@ -17,6 +17,7 @@ import { Hollon } from '../../hollon/entities/hollon.entity';
 import { Team } from '../../team/entities/team.entity';
 import { BrainProviderService } from '../../brain-provider/brain-provider.service';
 import { CodeReviewService } from '../../collaboration/services/code-review.service';
+import { PlanningService } from '../../planning/planning.service';
 
 const execAsync = promisify(exec);
 
@@ -57,6 +58,7 @@ export class GoalAutomationListener {
     private readonly taskService: TaskService,
     private readonly brainProvider: BrainProviderService,
     private readonly codeReviewService: CodeReviewService,
+    private readonly planningService: PlanningService,
   ) {}
 
   /**
@@ -255,6 +257,7 @@ export class GoalAutomationListener {
       this.logger.debug('Checking for team epics that need decomposition...');
 
       // PENDING/READY 상태의 team_epic 태스크 찾기
+      // Phase 4.2: needsPlanning=true인 태스크는 Planning 완료 후에만 분해
       const teamEpics = await this.taskRepo
         .createQueryBuilder('task')
         .where('task.type = :type', { type: 'team_epic' })
@@ -262,6 +265,7 @@ export class GoalAutomationListener {
           statuses: [TaskStatus.PENDING, TaskStatus.READY],
         })
         .andWhere('task.assignedTeamId IS NOT NULL')
+        .andWhere('(task.needsPlanning = false OR task.needsPlanning IS NULL)') // Phase 4.2: Only decompose after planning is done
         .leftJoinAndSelect('task.assignedTeam', 'team')
         .leftJoinAndSelect('team.manager', 'manager')
         .take(5) // 한 번에 최대 5개까지만 처리
@@ -2204,6 +2208,173 @@ After resolving all conflicts, the files will be automatically staged for commit
         `Failed to update PR branch: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
       return false;
+    }
+  }
+
+  // ========================================
+  // Phase 4.2: Planning Workflow Automation
+  // ========================================
+
+  /**
+   * Planning Step 1: Create Planning Tasks for Team Epics
+   * Team Epic이 생성되면 자동으로 Planning Task 생성
+   *
+   * 새로운 워크플로우:
+   * Goal → Team Epic (needsPlanning=true) → Planning Task → Plan PR → Human Review → Approved → Decompose
+   */
+  @Cron('*/1 * * * *') // 1분마다
+  async autoCreatePlanningTasks(): Promise<void> {
+    try {
+      this.logger.debug('[Planning] Checking for tasks that need planning...');
+
+      // needsPlanning=true이고 planningTaskId가 없는 태스크 찾기
+      const tasksNeedingPlanning =
+        await this.planningService.findTasksNeedingPlanning(5);
+
+      if (tasksNeedingPlanning.length === 0) {
+        this.logger.debug('[Planning] No tasks need planning');
+        return;
+      }
+
+      this.logger.log(
+        `[Planning] Found ${tasksNeedingPlanning.length} tasks needing planning`,
+      );
+
+      for (const task of tasksNeedingPlanning) {
+        try {
+          this.logger.log(
+            `[Planning] Creating planning task for: ${task.title} (${task.id})`,
+          );
+
+          // Planning Task 생성
+          const planningTask =
+            await this.planningService.createPlanningTask(task);
+
+          this.logger.log(
+            `[Planning] ✅ Created planning task: ${planningTask.id}`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `[Planning] Failed to create planning task for ${task.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `[Planning] autoCreatePlanningTasks failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+  }
+
+  /**
+   * Planning Step 2: Execute Planning Tasks
+   * PENDING/READY 상태의 Planning Task를 실행하여 계획 문서 작성 및 PR 생성
+   */
+  @Cron('*/1 * * * *') // 1분마다
+  async autoExecutePlanningTasks(): Promise<void> {
+    try {
+      this.logger.debug('[Planning] Checking for planning tasks to execute...');
+
+      // PENDING 또는 READY 상태의 Planning Task 찾기
+      const planningTasks = await this.taskRepo
+        .createQueryBuilder('task')
+        .where('task.type = :type', { type: TaskType.PLANNING })
+        .andWhere('task.status IN (:...statuses)', {
+          statuses: [TaskStatus.PENDING, TaskStatus.READY],
+        })
+        .leftJoinAndSelect('task.parentTask', 'parentTask')
+        .take(3) // 한 번에 최대 3개 처리
+        .getMany();
+
+      if (planningTasks.length === 0) {
+        this.logger.debug('[Planning] No planning tasks to execute');
+        return;
+      }
+
+      this.logger.log(
+        `[Planning] Found ${planningTasks.length} planning tasks to execute`,
+      );
+
+      for (const planningTask of planningTasks) {
+        try {
+          this.logger.log(
+            `[Planning] Executing planning task: ${planningTask.id}`,
+          );
+
+          // Mark as in progress
+          await this.taskRepo.update(planningTask.id, {
+            status: TaskStatus.IN_PROGRESS,
+            startedAt: new Date(),
+          });
+
+          // Execute planning
+          const result =
+            await this.planningService.executePlanning(planningTask);
+
+          if (result.success) {
+            this.logger.log(
+              `[Planning] ✅ Planning completed: ${result.planPath}, PR: ${result.prUrl}`,
+            );
+          } else {
+            this.logger.error(`[Planning] ❌ Planning failed: ${result.error}`);
+            await this.taskRepo.update(planningTask.id, {
+              status: TaskStatus.READY, // Retry later
+              errorMessage: result.error,
+            });
+          }
+        } catch (error) {
+          this.logger.error(
+            `[Planning] Failed to execute planning task ${planningTask.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
+          await this.taskRepo.update(planningTask.id, {
+            status: TaskStatus.READY,
+            errorMessage:
+              error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `[Planning] autoExecutePlanningTasks failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+  }
+
+  /**
+   * Planning Step 3: Check Planning PR Reviews
+   * IN_REVIEW 상태의 Planning Task PR 상태를 확인하고 승인/거절 처리
+   */
+  @Cron('*/1 * * * *') // 1분마다
+  async autoCheckPlanningPRs(): Promise<void> {
+    try {
+      this.logger.debug('[Planning] Checking planning PR review status...');
+
+      // IN_REVIEW 상태의 Planning Task 찾기
+      const planningTasks =
+        await this.planningService.findPlanningTasksPendingReview(10);
+
+      if (planningTasks.length === 0) {
+        this.logger.debug('[Planning] No planning PRs pending review');
+        return;
+      }
+
+      this.logger.log(
+        `[Planning] Found ${planningTasks.length} planning PRs to check`,
+      );
+
+      for (const planningTask of planningTasks) {
+        try {
+          await this.planningService.handlePlanningPRReview(planningTask);
+        } catch (error) {
+          this.logger.error(
+            `[Planning] Failed to check PR review for ${planningTask.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `[Planning] autoCheckPlanningPRs failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 }

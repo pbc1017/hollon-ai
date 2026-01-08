@@ -28,6 +28,7 @@ import { DddProvidersModule } from './modules/ddd-providers/ddd-providers.module
 import { KnowledgeGraphModule } from './modules/knowledge-graph/knowledge-graph.module';
 import { KnowledgeExtractionModule } from './modules/knowledge-extraction/knowledge-extraction.module';
 import { PromptComposerModule } from './modules/prompt-composer/prompt-composer.module';
+import { PlanningModule } from './modules/planning/planning.module';
 
 @Module({
   imports: [
@@ -75,6 +76,7 @@ import { PromptComposerModule } from './modules/prompt-composer/prompt-composer.
     KnowledgeGraphModule,
     KnowledgeExtractionModule,
     PromptComposerModule,
+    PlanningModule,
 
     // ✅ DDD: Global Port Providers Module
     DddProvidersModule,
