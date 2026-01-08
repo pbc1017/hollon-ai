@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { KnowledgeItem } from './entities/knowledge-item.entity';
 import { KnowledgeExtractionService } from './services/knowledge-extraction.service';
 import { VectorSearchService } from './services/vector-search.service';
+import { ConversationMessageTextExtractionService } from './services/conversation-message-text-extraction.service';
 
 /**
  * KnowledgeExtractionModule
@@ -119,6 +120,8 @@ import { VectorSearchService } from './services/vector-search.service';
     KnowledgeExtractionService,
     // Vector-based semantic search service (future integration)
     VectorSearchService,
+    // Conversation message text extraction service
+    ConversationMessageTextExtractionService,
   ],
   exports: [
     // Export services for use by other modules
@@ -128,6 +131,7 @@ import { VectorSearchService } from './services/vector-search.service';
     // - DocumentModule: Document knowledge extraction
     KnowledgeExtractionService,
     VectorSearchService,
+    ConversationMessageTextExtractionService,
   ],
 })
 export class KnowledgeExtractionModule {}
