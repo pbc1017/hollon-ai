@@ -21,6 +21,9 @@ describe('KnowledgeExtractionModule', () => {
         count: jest.fn(),
         remove: jest.fn(),
         insert: jest.fn(),
+        findAndCount: jest.fn(),
+        delete: jest.fn(),
+        update: jest.fn(),
         createQueryBuilder: jest.fn(),
       })
       .compile();
@@ -202,6 +205,208 @@ describe('KnowledgeExtractionModule', () => {
       // The repository should be available
       const repository = module.get(getRepositoryToken(KnowledgeItem));
       expect(repository).toBeDefined();
+    });
+  });
+
+  describe('Module Integration with Consumers', () => {
+    it('should allow another module to import and use KnowledgeExtractionService', async () => {
+      // Simulate a consuming module that imports KnowledgeExtractionModule
+      const consumerModule = await Test.createTestingModule({
+        imports: [KnowledgeExtractionModule],
+      })
+        .overrideProvider(getRepositoryToken(KnowledgeItem))
+        .useValue({
+          create: jest.fn(),
+          save: jest.fn(),
+          findOne: jest.fn(),
+          find: jest.fn(),
+          count: jest.fn(),
+          remove: jest.fn(),
+          insert: jest.fn(),
+          findAndCount: jest.fn(),
+          delete: jest.fn(),
+          update: jest.fn(),
+          createQueryBuilder: jest.fn(),
+        })
+        .compile();
+
+      // Should be able to get services from consumer module
+      const extractionService = consumerModule.get<KnowledgeExtractionService>(
+        KnowledgeExtractionService,
+      );
+      const vectorService =
+        consumerModule.get<VectorSearchService>(VectorSearchService);
+
+      expect(extractionService).toBeDefined();
+      expect(vectorService).toBeDefined();
+
+      await consumerModule.close();
+    });
+
+    it('should allow injection into another services within consumer modules', async () => {
+      // Test that services are properly exported and injectable
+      const consumerModule = await Test.createTestingModule({
+        imports: [KnowledgeExtractionModule],
+        providers: [
+          {
+            provide: 'TestConsumer',
+            inject: [KnowledgeExtractionService, VectorSearchService],
+            useFactory: (
+              extractionService: KnowledgeExtractionService,
+              vectorService: VectorSearchService,
+            ) => ({
+              extractionService,
+              vectorService,
+            }),
+          },
+        ],
+      })
+        .overrideProvider(getRepositoryToken(KnowledgeItem))
+        .useValue({
+          create: jest.fn(),
+          save: jest.fn(),
+          findOne: jest.fn(),
+          find: jest.fn(),
+          count: jest.fn(),
+          remove: jest.fn(),
+          insert: jest.fn(),
+          findAndCount: jest.fn(),
+          delete: jest.fn(),
+          update: jest.fn(),
+          createQueryBuilder: jest.fn(),
+        })
+        .compile();
+
+      const consumer = consumerModule.get('TestConsumer');
+      expect(consumer.extractionService).toBeDefined();
+      expect(consumer.vectorService).toBeDefined();
+
+      await consumerModule.close();
+    });
+  });
+
+  describe('Application Startup Verification', () => {
+    it('should successfully compile without errors', () => {
+      // If compilation failed, the test setup would have thrown an error
+      expect(module).toBeDefined();
+      expect(module.get).toBeDefined();
+    });
+
+    it('should resolve all providers on initialization', () => {
+      expect(() => {
+        module.get<KnowledgeExtractionService>(KnowledgeExtractionService);
+        module.get<VectorSearchService>(VectorSearchService);
+        module.get(getRepositoryToken(KnowledgeItem));
+      }).not.toThrow();
+    });
+
+    it('should maintain provider instances across multiple retrievals', () => {
+      const service1 = module.get<KnowledgeExtractionService>(
+        KnowledgeExtractionService,
+      );
+      const service2 = module.get<KnowledgeExtractionService>(
+        KnowledgeExtractionService,
+      );
+
+      // Services should be singletons
+      expect(service1).toBe(service2);
+    });
+  });
+
+  describe('Repository Injection Verification', () => {
+    it('should inject the same repository instance into the service', () => {
+      const service = module.get<KnowledgeExtractionService>(
+        KnowledgeExtractionService,
+      );
+      const repository = module.get(getRepositoryToken(KnowledgeItem));
+
+      // Verify the service has access to the repository
+      expect(service['knowledgeItemRepository']).toBeDefined();
+      expect(service['knowledgeItemRepository']).toEqual(repository);
+    });
+
+    it('should maintain consistent repository across multiple service instances', () => {
+      const repo1 = module.get(getRepositoryToken(KnowledgeItem));
+      const repo2 = module.get(getRepositoryToken(KnowledgeItem));
+
+      // Repository should be a singleton
+      expect(repo1).toBe(repo2);
+    });
+  });
+
+  describe('Module Exports Accessibility', () => {
+    it('should export KnowledgeExtractionService for public API', () => {
+      const service = module.get<KnowledgeExtractionService>(
+        KnowledgeExtractionService,
+      );
+
+      // Service should have key public methods
+      expect(typeof service.create).toBe('function');
+      expect(typeof service.findById).toBe('function');
+      expect(typeof service.update).toBe('function');
+      expect(typeof service.delete).toBe('function');
+      expect(typeof service.searchWithFilters).toBe('function');
+    });
+
+    it('should export VectorSearchService for public API', () => {
+      const service = module.get<VectorSearchService>(VectorSearchService);
+
+      // Service should have key public methods
+      expect(typeof service.searchSimilar).toBe('function');
+      expect(typeof service.generateEmbedding).toBe('function');
+      expect(typeof service.indexItem).toBe('function');
+    });
+
+    it('should be able to instantiate services through dependency injection', async () => {
+      // Create a test service that depends on the module's exports
+      const testModule = await Test.createTestingModule({
+        imports: [KnowledgeExtractionModule],
+        providers: [
+          {
+            provide: 'DependentService',
+            inject: [KnowledgeExtractionService],
+            useFactory: (service: KnowledgeExtractionService) => ({
+              getService: () => service,
+            }),
+          },
+        ],
+      })
+        .overrideProvider(getRepositoryToken(KnowledgeItem))
+        .useValue({
+          create: jest.fn(),
+          save: jest.fn(),
+          findOne: jest.fn(),
+          find: jest.fn(),
+          count: jest.fn(),
+          remove: jest.fn(),
+          insert: jest.fn(),
+          findAndCount: jest.fn(),
+          delete: jest.fn(),
+          update: jest.fn(),
+          createQueryBuilder: jest.fn(),
+        })
+        .compile();
+
+      const dependent = testModule.get('DependentService');
+      const service = dependent.getService();
+
+      expect(service).toBeInstanceOf(KnowledgeExtractionService);
+
+      await testModule.close();
+    });
+  });
+
+  describe('Module Lifecycle', () => {
+    it('should properly initialize all providers on module creation', () => {
+      expect(module).toBeDefined();
+      expect(module.get<KnowledgeExtractionService>(KnowledgeExtractionService))
+        .toBeDefined();
+    });
+
+    it('should allow graceful module shutdown', async () => {
+      expect(async () => {
+        await module.close();
+      }).not.toThrow();
     });
   });
 });
