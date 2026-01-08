@@ -8,6 +8,7 @@ import {
 } from '../../entities/vector-embedding.entity';
 import { VectorSearchConfigService } from './services/vector-search-config.service';
 import { VectorSearchConfig } from './entities/vector-search-config.entity';
+import { EmbeddingApiClientService } from './services/embedding-api-client.service';
 
 /**
  * Search result interface
@@ -67,6 +68,7 @@ export class VectorSearchService {
     @InjectRepository(VectorEmbedding)
     private readonly embeddingRepo: Repository<VectorEmbedding>,
     private readonly vectorConfigService: VectorSearchConfigService,
+    private readonly embeddingClient: EmbeddingApiClientService,
   ) {}
 
   /**
@@ -306,41 +308,29 @@ export class VectorSearchService {
     text: string,
     config: VectorSearchConfig,
   ): Promise<number[]> {
-    // TODO: Implement actual API call to embedding provider
-    // For now, return a placeholder implementation
-
     this.logger.debug(
       `Generating embedding for text (${text.length} chars) using ${config.embeddingModel}`,
     );
 
-    if (config.provider === 'openai') {
-      return await this.generateOpenAIEmbedding(text, config);
+    // Validate API key for external providers
+    if (
+      (config.provider === 'openai' || config.provider === 'cohere') &&
+      !config.apiKey
+    ) {
+      throw new Error(
+        `API key is required for ${config.provider} embedding provider`,
+      );
     }
 
-    throw new Error(`Unsupported provider: ${config.provider}`);
-  }
-
-  /**
-   * Generate embedding using OpenAI API
-   *
-   * @param text - Text to embed
-   * @param config - Configuration with API key and model
-   * @returns Embedding vector
-   * @private
-   */
-  private async generateOpenAIEmbedding(
-    _text: string,
-    config: VectorSearchConfig,
-  ): Promise<number[]> {
-    // TODO: Implement actual OpenAI API call
-    // This is a placeholder that should be implemented when integrating with OpenAI SDK
-
-    this.logger.warn(
-      'OpenAI embedding generation not yet implemented - returning placeholder',
+    // Use the embedding API client with retry logic and rate limiting
+    return await this.embeddingClient.generateEmbedding(
+      text,
+      config.provider,
+      config.embeddingModel,
+      config.apiKey || '',
+      config.dimensions,
+      config.config.timeoutMs,
     );
-
-    // Return placeholder vector of correct dimensions
-    return new Array(config.dimensions).fill(0);
   }
 
   /**

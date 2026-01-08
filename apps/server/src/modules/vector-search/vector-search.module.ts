@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { VectorSearchService } from './vector-search.service';
 import { VectorSearchConfigService } from './services/vector-search-config.service';
+import { EmbeddingApiClientService } from './services/embedding-api-client.service';
 import { VectorSearchConfig } from './entities/vector-search-config.entity';
 import { VectorEmbedding } from '../../entities/vector-embedding.entity';
 
@@ -41,7 +42,15 @@ import { VectorEmbedding } from '../../entities/vector-embedding.entity';
     TypeOrmModule.forFeature([VectorSearchConfig, VectorEmbedding]),
     ConfigModule,
   ],
-  providers: [VectorSearchService, VectorSearchConfigService],
-  exports: [VectorSearchService, VectorSearchConfigService],
+  providers: [
+    VectorSearchService,
+    VectorSearchConfigService,
+    EmbeddingApiClientService,
+  ],
+  exports: [
+    VectorSearchService,
+    VectorSearchConfigService,
+    EmbeddingApiClientService,
+  ],
 })
 export class VectorSearchModule {}
