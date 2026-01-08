@@ -521,6 +521,104 @@ export interface IGraphConfiguration {
 }
 
 /**
+ * Query Optimization Metadata Interface
+ *
+ * Contains metadata about query optimization and performance characteristics.
+ */
+export interface IQueryOptimizationMetadata {
+  /** Indexes that could be used for this query */
+  recommendedIndexes: string[];
+  /** Estimated query execution time in milliseconds */
+  estimatedExecutionTime: number;
+  /** Estimated number of rows to be scanned */
+  estimatedRowCount: number;
+  /** Query plan explanation */
+  queryPlan?: string;
+  /** Performance warnings or suggestions */
+  optimizationHints: string[];
+}
+
+/**
+ * Index Definition Interface
+ *
+ * Defines an index for optimization purposes.
+ */
+export interface IIndexDefinition {
+  /** Name of the index */
+  name: string;
+  /** Columns included in the index */
+  columns: string[];
+  /** Index type (B-tree, Hash, GIN, GIST, etc.) */
+  indexType?: 'B-tree' | 'Hash' | 'GIN' | 'GIST' | 'BRIN';
+  /** Whether this is a unique index */
+  isUnique?: boolean;
+  /** Whether this is a partial index */
+  whereClause?: string;
+  /** Priority for index maintenance */
+  priority?: 'critical' | 'high' | 'medium' | 'low';
+}
+
+/**
+ * Storage Backend Interface
+ *
+ * Provides abstraction for different storage backends.
+ */
+export interface IStorageBackend {
+  /** Name of the storage backend */
+  name: string;
+  /** Check if backend is connected and healthy */
+  isHealthy(): Promise<boolean>;
+  /** Get backend statistics */
+  getStatistics(): Promise<Record<string, any>>;
+  /** Get current backend capacity */
+  getCapacity(): Promise<{ used: number; available: number; total: number }>;
+}
+
+/**
+ * Query Cache Interface
+ *
+ * Provides caching mechanism for frequently executed queries.
+ */
+export interface IQueryCache {
+  /** Cache a query result */
+  set(key: string, value: IGraphQueryResult, ttlMs?: number): Promise<void>;
+  /** Retrieve a cached query result */
+  get(key: string): Promise<IGraphQueryResult | null>;
+  /** Invalidate a specific cache entry */
+  invalidate(key: string): Promise<void>;
+  /** Clear all cache entries */
+  clear(): Promise<void>;
+  /** Get cache statistics */
+  getStats(): Promise<{ hits: number; misses: number; size: number }>;
+}
+
+/**
+ * Graph Statistics Interface
+ *
+ * Contains statistical information about the graph.
+ */
+export interface IGraphStatistics {
+  /** Total number of nodes */
+  totalNodes: number;
+  /** Total number of edges */
+  totalEdges: number;
+  /** Node distribution by type */
+  nodeTypeDistribution: Map<NodeType, number>;
+  /** Edge distribution by type */
+  edgeTypeDistribution: Map<RelationshipType, number>;
+  /** Average node degree */
+  averageNodeDegree: number;
+  /** Maximum node degree */
+  maxNodeDegree: number;
+  /** Density of the graph */
+  density: number;
+  /** Connected components in the graph */
+  connectedComponents: number;
+  /** Last update timestamp */
+  lastUpdated: Date;
+}
+
+/**
  * Graph Service Interface
  *
  * Main interface for the knowledge graph service.
@@ -573,6 +671,12 @@ export interface IGraphService {
 
   /** Register integration point */
   registerIntegration(integration: IGraphIntegrationPoint): Promise<void>;
+
+  /** Get graph statistics */
+  getStatistics(organizationId: string): Promise<IGraphStatistics>;
+
+  /** Analyze and optimize a query before execution */
+  analyzeQuery(query: IGraphQuery): Promise<IQueryOptimizationMetadata>;
 
   /** Health check */
   healthCheck(): Promise<boolean>;
