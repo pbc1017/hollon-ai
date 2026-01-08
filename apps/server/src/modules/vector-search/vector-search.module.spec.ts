@@ -82,10 +82,9 @@ describe('VectorSearchModule', () => {
         ],
       }).compile();
 
-      const testProvider =
-        importingModule.get<{ vectorSearch: VectorSearchService }>(
-          'TEST_PROVIDER',
-        );
+      const testProvider = importingModule.get<{
+        vectorSearch: VectorSearchService;
+      }>('TEST_PROVIDER');
 
       expect(testProvider.vectorSearch).toBeDefined();
       expect(testProvider.vectorSearch).toBeInstanceOf(VectorSearchService);
