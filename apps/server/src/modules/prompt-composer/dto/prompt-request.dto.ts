@@ -230,7 +230,9 @@ export class DirectPromptRequestDto {
 /**
  * Union type for prompt requests
  */
-export type PromptRequestDto = TemplatePromptRequestDto | DirectPromptRequestDto;
+export type PromptRequestDto =
+  | TemplatePromptRequestDto
+  | DirectPromptRequestDto;
 
 /**
  * DTO for batch prompt composition request
