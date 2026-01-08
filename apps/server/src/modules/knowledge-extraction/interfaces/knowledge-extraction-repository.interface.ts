@@ -33,19 +33,54 @@ export interface IKnowledgeExtractionRepository {
   create(data: Partial<KnowledgeItem>): Promise<KnowledgeItem>;
   findById(id: string): Promise<KnowledgeItem | null>;
   findAll(organizationId: string): Promise<KnowledgeItem[]>;
-  findAllPaginated(options: KnowledgeExtractionQueryOptions): Promise<PaginatedKnowledgeExtractionResult>;
-  update(id: string, data: Partial<KnowledgeItem>): Promise<KnowledgeItem | null>;
+  findAllPaginated(
+    options: KnowledgeExtractionQueryOptions,
+  ): Promise<PaginatedKnowledgeExtractionResult>;
+  update(
+    id: string,
+    data: Partial<KnowledgeItem>,
+  ): Promise<KnowledgeItem | null>;
   delete(id: string): Promise<boolean>;
   findByType(organizationId: string, type: string): Promise<KnowledgeItem[]>;
-  findByTypes(organizationId: string, types: string[]): Promise<KnowledgeItem[]>;
-  searchByContent(organizationId: string, searchText: string): Promise<KnowledgeItem[]>;
-  searchByContentPaginated(organizationId: string, searchText: string, options: KnowledgeExtractionQueryOptions): Promise<PaginatedKnowledgeExtractionResult>;
-  findByDateRange(organizationId: string, startDate: Date, endDate: Date): Promise<KnowledgeItem[]>;
-  findByTypeAndDateRange(organizationId: string, type: string, startDate: Date, endDate: Date): Promise<KnowledgeItem[]>;
-  findByMetadata(organizationId: string, metadataQuery: Record<string, unknown>): Promise<KnowledgeItem[]>;
+  findByTypes(
+    organizationId: string,
+    types: string[],
+  ): Promise<KnowledgeItem[]>;
+  searchByContent(
+    organizationId: string,
+    searchText: string,
+  ): Promise<KnowledgeItem[]>;
+  searchByContentPaginated(
+    organizationId: string,
+    searchText: string,
+    options: KnowledgeExtractionQueryOptions,
+  ): Promise<PaginatedKnowledgeExtractionResult>;
+  findByDateRange(
+    organizationId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<KnowledgeItem[]>;
+  findByTypeAndDateRange(
+    organizationId: string,
+    type: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<KnowledgeItem[]>;
+  findByMetadata(
+    organizationId: string,
+    metadataQuery: Record<string, unknown>,
+  ): Promise<KnowledgeItem[]>;
   findRecent(organizationId: string, limit?: number): Promise<KnowledgeItem[]>;
-  findExtractedAfter(organizationId: string, afterDate: Date, limit?: number): Promise<KnowledgeItem[]>;
-  findExtractedBefore(organizationId: string, beforeDate: Date, limit?: number): Promise<KnowledgeItem[]>;
+  findExtractedAfter(
+    organizationId: string,
+    afterDate: Date,
+    limit?: number,
+  ): Promise<KnowledgeItem[]>;
+  findExtractedBefore(
+    organizationId: string,
+    beforeDate: Date,
+    limit?: number,
+  ): Promise<KnowledgeItem[]>;
   count(organizationId: string): Promise<number>;
   countByType(organizationId: string): Promise<Record<string, number>>;
   getUniqueTypes(organizationId: string): Promise<string[]>;
