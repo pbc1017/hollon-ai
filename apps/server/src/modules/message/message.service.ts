@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Message } from './entities/message.entity';
@@ -22,6 +26,27 @@ export class MessageService {
    * Send a message
    */
   async send(dto: SendMessageDto): Promise<Message> {
+    // Validate and sanitize inputs
+    const sanitizedContent = this.sanitizeContent(dto.content);
+    const validatedMetadata = this.validateMetadata(dto.metadata);
+    
+    // Validate UUIDs
+    this.validateOptionalUUID(dto.fromId, 'fromId');
+    this.validateUUID(dto.toId, 'toId');
+    this.validateOptionalUUID(dto.repliedToId, 'repliedToId');
+
+    // Validate repliedToId exists if provided
+    if (dto.repliedToId) {
+      const repliedToMessage = await this.messageRepo.findOne({
+        where: { id: dto.repliedToId },
+      });
+      if (!repliedToMessage) {
+        throw new BadRequestException(
+          `Replied-to message with ID ${dto.repliedToId} not found`,
+        );
+      }
+    }
+
     // Create message
     const message = this.messageRepo.create({
       fromType: dto.fromType,
@@ -29,8 +54,8 @@ export class MessageService {
       toType: dto.toType,
       toId: dto.toId,
       messageType: dto.messageType,
-      content: dto.content,
-      metadata: dto.metadata ?? {},
+      content: sanitizedContent,
+      metadata: validatedMetadata,
       requiresResponse: dto.requiresResponse ?? false,
       repliedToId: dto.repliedToId ?? null,
     });
@@ -57,6 +82,15 @@ export class MessageService {
     participantId: string,
     options?: InboxOptions,
   ): Promise<Message[]> {
+    // Validate participant ID
+    this.validateUUID(participantId, 'participantId');
+
+    // Validate pagination parameters
+    const { limit, offset } = this.validatePaginationParams({
+      limit: options?.limit,
+      offset: options?.offset,
+    });
+
     const queryBuilder = this.messageRepo
       .createQueryBuilder('message')
       .where('message.to_type = :toType', { toType: participantType })
@@ -70,9 +104,6 @@ export class MessageService {
     if (options?.requiresResponse) {
       queryBuilder.andWhere('message.requires_response = true');
     }
-
-    const limit = options?.limit ?? 50;
-    const offset = options?.offset ?? 0;
 
     queryBuilder.skip(offset).take(limit);
 
@@ -127,6 +158,20 @@ export class MessageService {
     limit?: number;
     offset?: number;
   }): Promise<Message[]> {
+    // Validate pagination parameters
+    const { limit, offset } = this.validatePaginationParams({
+      limit: filters?.limit,
+      offset: filters?.offset,
+    });
+
+    // Validate UUIDs if provided
+    if (filters?.fromId) {
+      this.validateOptionalUUID(filters.fromId, 'fromId');
+    }
+    if (filters?.toId) {
+      this.validateOptionalUUID(filters.toId, 'toId');
+    }
+
     const queryBuilder = this.messageRepo.createQueryBuilder('message');
 
     if (filters?.fromType) {
@@ -165,9 +210,6 @@ export class MessageService {
       });
     }
 
-    const limit = filters?.limit ?? 50;
-    const offset = filters?.offset ?? 0;
-
     return queryBuilder
       .orderBy('message.created_at', 'DESC')
       .skip(offset)
@@ -187,11 +229,15 @@ export class MessageService {
     const message = await this.findOne(id);
 
     if (updates.content !== undefined) {
-      message.content = updates.content;
+      // Validate and sanitize content
+      const sanitizedContent = this.sanitizeContent(updates.content);
+      message.content = sanitizedContent;
     }
 
     if (updates.metadata !== undefined) {
-      message.metadata = updates.metadata;
+      // Validate metadata
+      const validatedMetadata = this.validateMetadata(updates.metadata);
+      message.metadata = validatedMetadata;
     }
 
     if (updates.requiresResponse !== undefined) {
@@ -217,6 +263,13 @@ export class MessageService {
     participant2: Participant,
     limit: number = 50,
   ): Promise<Message[]> {
+    // Validate participants
+    this.validateParticipant(participant1, 'participant1');
+    this.validateParticipant(participant2, 'participant2');
+
+    // Validate limit
+    const validatedLimit = Math.min(Math.max(1, Math.floor(limit) || 50), 1000);
+
     // Find conversation
     const conversation = await this.findConversation(
       participant1,
@@ -235,7 +288,7 @@ export class MessageService {
         conversationId: conversation.id,
       })
       .orderBy('history.created_at', 'DESC')
-      .take(limit)
+      .take(validatedLimit)
       .getMany();
 
     return history.map((h) => h.message).reverse();
@@ -304,5 +357,158 @@ export class MessageService {
         },
       )
       .getOne();
+  }
+
+  /**
+   * Validate UUID format
+   */
+  private validateUUID(id: string | undefined | null, fieldName: string): void {
+    if (!id) {
+      throw new BadRequestException(`${fieldName} is required`);
+    }
+
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      throw new BadRequestException(
+        `${fieldName} must be a valid UUID format`,
+      );
+    }
+  }
+
+  /**
+   * Validate optional UUID format
+   */
+  private validateOptionalUUID(
+    id: string | undefined | null,
+    fieldName: string,
+  ): void {
+    if (id && id.trim()) {
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(id)) {
+        throw new BadRequestException(
+          `${fieldName} must be a valid UUID format`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Sanitize content by removing control characters and normalizing whitespace
+   */
+  private sanitizeContent(content: string | undefined | null): string {
+    if (!content) {
+      throw new BadRequestException('Content cannot be empty or null');
+    }
+
+    if (typeof content !== 'string') {
+      throw new BadRequestException('Content must be a string');
+    }
+
+    // Remove control characters except newlines, tabs, and carriage returns
+    // eslint-disable-next-line no-control-regex
+    let sanitized = content.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+
+    // Trim leading/trailing whitespace
+    sanitized = sanitized.trim();
+
+    if (sanitized.length === 0) {
+      throw new BadRequestException(
+        'Content cannot be empty after sanitization',
+      );
+    }
+
+    // Enforce maximum content length (1MB)
+    const maxLength = 1024 * 1024;
+    if (sanitized.length > maxLength) {
+      throw new BadRequestException(
+        `Content exceeds maximum length of ${maxLength} characters`,
+      );
+    }
+
+    return sanitized;
+  }
+
+  /**
+   * Validate and sanitize metadata object
+   */
+  private validateMetadata(
+    metadata: Record<string, unknown> | undefined | null,
+  ): Record<string, unknown> {
+    if (!metadata) {
+      return {};
+    }
+
+    if (typeof metadata !== 'object' || Array.isArray(metadata)) {
+      throw new BadRequestException('Metadata must be a valid object');
+    }
+
+    try {
+      // Validate JSON serializability
+      JSON.stringify(metadata);
+    } catch {
+      throw new BadRequestException(
+        'Metadata must be a JSON-serializable object',
+      );
+    }
+
+    return metadata;
+  }
+
+  /**
+   * Validate pagination parameters
+   */
+  private validatePaginationParams(params: {
+    limit?: number;
+    offset?: number;
+  }): { limit: number; offset: number } {
+    let limit = params.limit ?? 50;
+    let offset = params.offset ?? 0;
+
+    // Validate and sanitize limit
+    if (typeof limit !== 'number' || !Number.isInteger(limit)) {
+      throw new BadRequestException('Limit must be an integer');
+    }
+    if (limit < 1) {
+      throw new BadRequestException('Limit must be at least 1');
+    }
+    if (limit > 1000) {
+      throw new BadRequestException('Limit cannot exceed 1000');
+    }
+
+    // Validate and sanitize offset
+    if (typeof offset !== 'number' || !Number.isInteger(offset)) {
+      throw new BadRequestException('Offset must be an integer');
+    }
+    if (offset < 0) {
+      throw new BadRequestException('Offset cannot be negative');
+    }
+
+    return { limit, offset };
+  }
+
+  /**
+   * Validate participant data
+   */
+  private validateParticipant(
+    participant: Participant | undefined | null,
+    participantName: string,
+  ): void {
+    if (!participant) {
+      throw new BadRequestException(`${participantName} is required`);
+    }
+
+    if (!participant.type) {
+      throw new BadRequestException(
+        `${participantName} type is required`,
+      );
+    }
+
+    if (!participant.id) {
+      throw new BadRequestException(`${participantName} ID is required`);
+    }
+
+    this.validateUUID(participant.id, `${participantName} ID`);
   }
 }
